@@ -34,4 +34,4 @@ Pre-build. No app code exists yet. First milestone: a blank page that loads in a
 
 ## Commands
 - Run: (to be added when the app exists)
-- Test: (to be added when tests exist)
+- Test: node --test

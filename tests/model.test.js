@@ -172,6 +172,7 @@ test("createWorkSet: 0 means bodyweight, and restSeconds 0 is allowed", () => {
 test("createWorkSet: invalid reps", () => {
   assert.throws(() => createWorkSet({ ...validSet, reps: 0 }), /reps must be an integer >= 1/);
   assert.throws(() => createWorkSet({ ...validSet, reps: -3 }), /reps/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: 1.5 }), /reps/);
   assert.throws(() => createWorkSet({ ...validSet, reps: 2.5 }), /reps/);
   assert.throws(() => createWorkSet({ ...validSet, reps: "5" }), /reps/);
   assert.throws(() => createWorkSet({ ...validSet, reps: NaN }), /reps/);
@@ -190,6 +191,8 @@ test("createWorkSet: invalid weightValue", () => {
 test("createWorkSet: invalid weightUnit", () => {
   assert.throws(() => createWorkSet({ ...validSet, weightUnit: "kgs" }), /weightUnit must be "kg" or "lb"/);
   assert.throws(() => createWorkSet({ ...validSet, weightUnit: "KG" }), /weightUnit/);
+  assert.throws(() => createWorkSet({ ...validSet, weightUnit: "LB" }), /weightUnit/);
+  assert.throws(() => createWorkSet({ ...validSet, weightUnit: "lbs" }), /weightUnit/);
   assert.throws(() => createWorkSet({ ...validSet, weightUnit: undefined }), /weightUnit/);
 });
 
@@ -213,7 +216,8 @@ const close = (actual, expected, tolerance = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} is not within ${tolerance} of ${expected}`);
 
 test("convertWeight: known values", () => {
-  close(convertWeight(1, "lb", "kg"), 0.45359237);
+  close(convertWeight(1, "lb", "kg"), 0.45359237, 1e-12);
+  close(convertWeight(1, "kg", "lb"), 1 / 0.45359237, 1e-9);
   close(convertWeight(100, "kg", "lb"), 220.46226218, 1e-6);
   close(convertWeight(135, "lb", "kg"), 61.2349, 1e-4);
 });
