@@ -3,7 +3,7 @@
 //   { logger, backup, downloadBlob, readFileAsText, requestPersistentStorage }
 
 import { h, button } from "./dom.js";
-import { renderLogView, freshLogState } from "./log-view.js";
+import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
 import { renderBackupView, freshBackupState } from "./backup-view.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
