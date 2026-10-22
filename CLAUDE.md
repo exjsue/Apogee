@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-Domain model implemented and tested (src/domain/model.js, node --test). No storage, UI, or app page yet.
+Domain model (src/domain/model.js) and storage layer (src/storage/) implemented; node --test passes. The IndexedDB adapter still needs its browser test run (tests/browser/index.html). No export/import, UI, or app page yet.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -35,3 +35,4 @@ Domain model implemented and tested (src/domain/model.js, node --test). No stora
 ## Commands
 - Run: (to be added when the app exists)
 - Test: node --test
+- Browser tests (IndexedDB adapter): node tools/serve.js, then open http://127.0.0.1:8080/tests/browser/index.html
