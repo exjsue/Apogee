@@ -18,6 +18,7 @@ import {
   RECORD_FIELDS,
 } from "../src/backup/backup.js";
 import { EXERCISE, makeDetails, rawCounts, failAfter } from "./store-rules.js";
+import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
 
 export const NOW = "2026-10-22T12:00:00.000Z";
 const DATA_STORES = ["exercises", "workouts", "entries", "sets"];
@@ -77,7 +78,7 @@ export function fileOf(parts = {}, overrides = {}) {
 export function incomingFile() {
   const d = makeDetails("b1", 1, 2);
   return fileOf({
-    exercises: [createExercise({ id: "ex-row", name: "Row" })],
+    exercises: [createExercise({ id: "ex-row", name: "Row", primaryMuscles: ["lats"] })],
     workouts: [d.workout],
     entries: d.entries.map((entry) => ({ ...entry, exerciseId: "ex-row" })),
     sets: d.sets,
@@ -198,9 +199,23 @@ rule("export: exportForDownload gives a blob, a dated filename and the same text
   assert.equal(parse(text).exportedAt, NOW);
 });
 
+rule("export: seeded exercises are ordinary records, exported and restored by import", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, backup } = await openBackup(ctx);
+  await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
+  const text = await backup.exportToText({ now: NOW });
+  const exercises = parse(text).data.exercises;
+  assert.equal(exercises.length, SEED_EXERCISES.length);
+  assert.ok(exercises.every((exercise) => exercise.id.startsWith("seed-") && exercise.isCustom === false));
+  await wipe(adapter);
+  await backup.importFromText(text, { confirmReplace: true });
+  assert.deepEqual(await store.getExercise("seed-barbell-bench-press"), SEED_EXERCISES[0]);
+  assert.equal(await snapshot(backup), text);
+});
+
 rule("the record field lists match what the domain model produces", async ({ assert }) => {
   const samples = {
-    exercises: createExercise({ id: "x", name: "n" }),
+    exercises: createExercise({ id: "x", name: "n", primaryMuscles: ["abs"] }),
     workouts: createWorkout({ id: "x", startedAt: NOW }),
     entries: createWorkoutEntry({ id: "x", workoutId: "w", exerciseId: "e", order: 0 }),
     sets: createWorkSet({ id: "x", entryId: "e", order: 0, reps: 1, weightValue: 0, weightUnit: "kg" }),
@@ -241,6 +256,14 @@ rule("import: ids and timestamps survive a round trip unchanged", async (ctx) =>
   assert.equal(w2.startedAt, "2026-10-21T09:30:15.789Z");
   assert.equal(w2.endedAt, "2026-10-21T10:45:00.123Z");
   assert.equal((await store.getSet("w2-e0-s0")).completedAt, "2026-10-21T09:35:00.456Z");
+});
+
+rule("currentCounts reports how many records of each type are stored", async (ctx) => {
+  const { assert } = ctx;
+  const { store, backup } = await openBackup(ctx);
+  assert.deepEqual(await backup.currentCounts(), { exercises: 0, workouts: 0, entries: 0, sets: 0 });
+  await seedFull(store);
+  assert.deepEqual(await backup.currentCounts(), { exercises: 2, workouts: 2, entries: 3, sets: 8 });
 });
 
 rule("import: replaces a non-empty database, nothing is merged", async (ctx) => {
@@ -524,7 +547,7 @@ rule("import: ids named like Object.prototype members are ordinary ids and survi
   const { assert } = ctx;
   const { adapter, backup } = await openBackup(ctx);
   const file = fileOf({
-    exercises: [createExercise({ id: "__proto__", name: "Odd ids" })],
+    exercises: [createExercise({ id: "__proto__", name: "Odd ids", primaryMuscles: ["abs"] })],
     workouts: [createWorkout({ id: "constructor", startedAt: NOW })],
     entries: [createWorkoutEntry({ id: "toString", workoutId: "constructor", exerciseId: "__proto__", order: 0 })],
     sets: [createWorkSet({ id: "hasOwnProperty", entryId: "toString", order: 0, reps: 1, weightValue: 0, weightUnit: "kg" })],
@@ -547,7 +570,9 @@ rule("import: enforces the size limit in bytes, a parameter with a 50 MiB defaul
   const small = incomingFile();
   await expectRejected(env, small, /too large/, { maxBytes: 100 });
   // "é" is one character but two bytes in UTF-8, so the limit is counted in bytes
-  const wide = fileOf({ exercises: [createExercise({ id: "ex-wide", name: "é".repeat(200) })] });
+  const wide = fileOf({
+    exercises: [createExercise({ id: "ex-wide", name: "Wide", primaryMuscles: ["abs"], notes: "é".repeat(200) })],
+  });
   const characters = wide.length;
   const bytes = new TextEncoder().encode(wide).length;
   assert.equal(bytes, characters + 200);

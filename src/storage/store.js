@@ -25,6 +25,7 @@
 
 import {
   SCHEMA_VERSION,
+  WEIGHT_UNITS,
   createExercise,
   createWorkout,
   createWorkoutEntry,
@@ -32,6 +33,11 @@ import {
 } from "../domain/model.js";
 
 const SCHEMA_KEY = "schemaVersion";
+// Settings kept in meta. Meta is not part of exports or imports.
+const PREFERRED_UNIT_KEY = "preferredUnit";
+const DEFAULT_PREFERRED_UNIT = "lb";
+const CONTINUED_WORKOUT_KEY = "continuedWorkoutId";
+const SEED_VERSION_KEY = "seedVersion";
 
 const compareIds = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const byOrder = (a, b) => a.order - b.order || compareIds(a, b);
@@ -66,6 +72,17 @@ function requireUniqueIds(records, field) {
     if (seen.has(id)) throw new Error(`${field}: duplicate id "${id}"`);
     seen.add(id);
   }
+}
+
+// Runs inside a transaction: removes a workout with all its entries and sets.
+async function removeWorkoutTree(tx, workoutId) {
+  for (const entry of await tx.getAllByIndex("entries", "workoutId", workoutId)) {
+    for (const set of await tx.getAllByIndex("sets", "entryId", entry.id)) {
+      await tx.delete("sets", set.id);
+    }
+    await tx.delete("entries", entry.id);
+  }
+  await tx.delete("workouts", workoutId);
 }
 
 // Runs inside a transaction: the referenced record must already exist.
@@ -191,7 +208,7 @@ export function createStore(adapter) {
   }
 
   // The workout with `entries` (by order), each with its `sets` (by order).
-  function getWorkoutWithDetails(id) {
+  async function getWorkoutWithDetails(id) {
     requireId(id);
     return adapter.transaction(["workouts", "entries", "sets"], "readonly", async (tx) => {
       const workout = await tx.get("workouts", id);
@@ -206,19 +223,129 @@ export function createStore(adapter) {
 
   // Deletes the workout and all its entries and sets in ONE transaction.
   // Resolves true if the workout existed. Exercises are never touched.
-  function deleteWorkout(id) {
+  async function deleteWorkout(id) {
     requireId(id);
     return adapter.transaction(["workouts", "entries", "sets"], "readwrite", async (tx) => {
       const existed = (await tx.get("workouts", id)) !== undefined;
-      for (const entry of await tx.getAllByIndex("entries", "workoutId", id)) {
-        for (const set of await tx.getAllByIndex("sets", "entryId", entry.id)) {
-          await tx.delete("sets", set.id);
-        }
-        await tx.delete("entries", entry.id);
-      }
-      await tx.delete("workouts", id);
+      await removeWorkoutTree(tx, id);
       return existed;
     });
+  }
+
+  // Throws away an UNFINISHED workout with all its entries and sets, in ONE
+  // transaction. A finished workout is refused (use deleteWorkout for that),
+  // so this cannot remove history by accident. Resolves true if it existed.
+  async function discardWorkout(id) {
+    requireId(id);
+    return adapter.transaction(["workouts", "entries", "sets"], "readwrite", async (tx) => {
+      const workout = await tx.get("workouts", id);
+      if (workout === undefined) return false;
+      if (workout.endedAt !== null) {
+        throw new Error("endedAt: a finished workout cannot be discarded; delete it instead");
+      }
+      await removeWorkoutTree(tx, id);
+      return true;
+    });
+  }
+
+  // Deletes one set in ONE transaction. If it was the last set of its entry,
+  // the entry is removed too, so no empty entry is left behind.
+  // Resolves true if the set existed.
+  async function deleteSet(id) {
+    requireId(id);
+    return adapter.transaction(["entries", "sets"], "readwrite", async (tx) => {
+      const set = await tx.get("sets", id);
+      if (set === undefined) return false;
+      await tx.delete("sets", id);
+      if ((await tx.getAllByIndex("sets", "entryId", set.entryId)).length === 0) {
+        await tx.delete("entries", set.entryId);
+      }
+      return true;
+    });
+  }
+
+  // Every workout, newest first, with how many entries and sets it has,
+  // read in one transaction.
+  async function listWorkoutSummaries() {
+    const { workouts, entries, sets } = await adapter.transaction(
+      ["workouts", "entries", "sets"],
+      "readonly",
+      async (tx) => ({
+        workouts: await tx.getAll("workouts"),
+        entries: await tx.getAll("entries"),
+        sets: await tx.getAll("sets"),
+      }),
+    );
+    const workoutOfEntry = new Map(entries.map((entry) => [entry.id, entry.workoutId]));
+    const entryCounts = new Map();
+    const setCounts = new Map();
+    for (const entry of entries) entryCounts.set(entry.workoutId, (entryCounts.get(entry.workoutId) ?? 0) + 1);
+    for (const set of sets) {
+      const workoutId = workoutOfEntry.get(set.entryId);
+      setCounts.set(workoutId, (setCounts.get(workoutId) ?? 0) + 1);
+    }
+    return workouts.sort(newestFirst).map((workout) => ({
+      ...workout,
+      entryCount: entryCounts.get(workout.id) ?? 0,
+      setCount: setCounts.get(workout.id) ?? 0,
+    }));
+  }
+
+  // All exercises, alphabetical by name.
+  async function listExercises() {
+    const exercises = await adapter.transaction(["exercises"], "readonly", (tx) => tx.getAll("exercises"));
+    return exercises.sort((a, b) => a.name.localeCompare(b.name) || compareIds(a, b));
+  }
+
+  // Adds built-in exercises. Runs only when the stored seedVersion is lower
+  // than `version`; then adds the ids that are missing and NEVER overwrites a
+  // record that exists. All in one transaction. Resolves { added, skipped }.
+  async function seedExercises(exercises, version) {
+    if (!Number.isInteger(version) || version < 1) throw new Error("version must be an integer >= 1");
+    const seeds = validateAll(exercises, createExercise, "seed exercises");
+    requireUniqueIds(seeds, "seed exercises");
+    return adapter.transaction(["meta", "exercises"], "readwrite", async (tx) => {
+      const stored = await tx.get("meta", SEED_VERSION_KEY);
+      if (stored !== undefined && Number.isInteger(stored.value) && stored.value >= version) {
+        return { added: 0, skipped: true };
+      }
+      let added = 0;
+      for (const seed of seeds) {
+        if ((await tx.get("exercises", seed.id)) === undefined) {
+          await tx.put("exercises", seed);
+          added += 1;
+        }
+      }
+      await tx.put("meta", { key: SEED_VERSION_KEY, value: version });
+      return { added, skipped: false };
+    });
+  }
+
+  const readSetting = (key) => adapter.transaction(["meta"], "readonly", async (tx) => (await tx.get("meta", key))?.value);
+
+  // "kg" or "lb". Defaults to "lb" until the user chooses.
+  async function getPreferredUnit() {
+    const stored = await readSetting(PREFERRED_UNIT_KEY);
+    return WEIGHT_UNITS.includes(stored) ? stored : DEFAULT_PREFERRED_UNIT;
+  }
+
+  async function setPreferredUnit(unit) {
+    if (!WEIGHT_UNITS.includes(unit)) throw new Error('unit must be "kg" or "lb"');
+    await adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key: PREFERRED_UNIT_KEY, value: unit }));
+    return unit;
+  }
+
+  // The unfinished workout the user chose to Continue, or null.
+  async function getContinuedWorkoutId() {
+    const stored = await readSetting(CONTINUED_WORKOUT_KEY);
+    return typeof stored === "string" && stored !== "" ? stored : null;
+  }
+
+  async function setContinuedWorkoutId(id) {
+    await adapter.transaction(["meta"], "readwrite", (tx) => (id === null
+      ? tx.delete("meta", CONTINUED_WORKOUT_KEY)
+      : tx.put("meta", { key: CONTINUED_WORKOUT_KEY, value: requireId(id) })));
+    return id;
   }
 
   return {
@@ -234,7 +361,16 @@ export function createStore(adapter) {
     getSet: (id) => getOne("sets", id),
     saveWorkoutWithDetails,
     listWorkouts,
+    listWorkoutSummaries,
     getWorkoutWithDetails,
     deleteWorkout,
+    discardWorkout,
+    deleteSet,
+    listExercises,
+    seedExercises,
+    getPreferredUnit,
+    setPreferredUnit,
+    getContinuedWorkoutId,
+    setContinuedWorkoutId,
   };
 }

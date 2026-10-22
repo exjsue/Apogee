@@ -1,7 +1,16 @@
-// Tiny static file server for local testing. Node built-ins only.
+// Tiny static file server for local use. Node built-ins only.
 // Bound to 127.0.0.1, so other machines on the network cannot reach it.
-// Serves only src/ and tests/ (the browser test page needs nothing else).
-// Usage: node tools/serve.js [port]      (default port 8080)
+// Serves index.html (at "/"), src/ and tests/, and nothing else. Dotfiles and
+// anything outside those places are refused.
+// Usage: node tools/serve.js
+//
+// The port is fixed on purpose. Browser storage (IndexedDB) belongs to an
+// origin, and an origin includes the port: http://127.0.0.1:8080 and
+// http://127.0.0.1:8081 are different origins with separate databases. If this
+// server quietly moved to another port, the app would open with an empty
+// database and your workouts would seem to be gone. So when the port is taken
+// the server stops with a message instead of choosing another one.
+// (An explicit port can still be given as an argument; that is your choice.)
 
 import http from "node:http";
 import fs from "node:fs";
@@ -9,13 +18,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8080);
+const DEFAULT_PORT = 8080;
+const PORT = process.argv[2] === undefined ? DEFAULT_PORT : Number(process.argv[2]);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVED_FOLDERS = ["src", "tests"];
-const START_PATH = "/tests/browser/index.html";
+const ROOT_FILES = ["index.html"];
+const TESTS_PATH = "/tests/browser/index.html";
 
-if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
-  console.error(`Not a valid port: ${process.argv[2] ?? process.env.PORT}`);
+// Blocks every network request from the page. Kept identical to the policy in
+// the meta tag of index.html (a test checks that they match).
+const CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; base-uri 'none'; form-action 'none'";
+
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`Not a valid port: ${process.argv[2]}`);
   process.exit(1);
 }
 
@@ -31,8 +46,7 @@ const TYPES = {
 const HEADERS = {
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
-  // The page may load only from this same server: nothing external can load.
-  "Content-Security-Policy": "default-src 'self'",
+  "Content-Security-Policy": CONTENT_SECURITY_POLICY,
 };
 
 function send(res, status, body, extra = {}) {
@@ -50,8 +64,10 @@ function resolveRequest(rawUrl) {
   }
   if (/[\0\\:]/.test(pathname)) return { status: 403 };
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length === 0 || !SERVED_FOLDERS.includes(segments[0])) return { status: 403 };
+  if (segments.length === 0) return { file: path.join(ROOT, "index.html") };
   if (segments.some((segment) => segment.startsWith("."))) return { status: 403 }; // dotfiles and ".."
+  if (segments.length === 1 && ROOT_FILES.includes(segments[0])) return { file: path.join(ROOT, segments[0]) };
+  if (!SERVED_FOLDERS.includes(segments[0])) return { status: 403 };
   const file = path.join(ROOT, ...segments);
   const folder = path.join(ROOT, segments[0]) + path.sep;
   if (!file.startsWith(folder)) return { status: 403 };
@@ -71,10 +87,6 @@ const server = http.createServer((req, res) => {
   // Refuse requests that arrive under another hostname (DNS rebinding).
   if (!hostAllowed(req.headers.host)) {
     send(res, 403, "Forbidden");
-    return;
-  }
-  if (req.url === "/") {
-    send(res, 302, "", { Location: START_PATH });
     return;
   }
   const resolved = resolveRequest(req.url);
@@ -113,14 +125,22 @@ const server = http.createServer((req, res) => {
 });
 
 server.on("error", (error) => {
-  console.error(error.code === "EADDRINUSE"
-    ? `Port ${PORT} is already in use. Try: node tools/serve.js ${PORT + 1}`
-    : error.message);
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `Port ${PORT} is already in use, so the server did not start.\n`
+      + "Close whatever is using it (often an earlier copy of this server) and run this again.\n"
+      + "The port is not changed automatically: browser storage is separate for every port, "
+      + "so the app would open with an empty database on a different one.",
+    );
+  } else {
+    console.error(error.message);
+  }
   process.exit(1);
 });
 
 server.listen(PORT, HOST, () => {
   const { port } = server.address();
-  console.log(`Serving src/ and tests/ on 127.0.0.1 only. Press Ctrl+C to stop.`);
-  console.log(`Browser tests: http://127.0.0.1:${port}${START_PATH}`);
+  console.log(`GymApp server running on port ${port}, 127.0.0.1 only. Press Ctrl+C to stop.`);
+  console.log(`App:           http://127.0.0.1:${port}/`);
+  console.log(`Browser tests: http://127.0.0.1:${port}${TESTS_PATH}`);
 });

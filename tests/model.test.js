@@ -33,28 +33,32 @@ test("createExercise: valid input", () => {
 });
 
 test("createExercise: defaults and supplied id", () => {
-  const e = createExercise({ id: "ex-1", name: "Squat", isCustom: true });
+  const e = createExercise({ id: "ex-1", name: "Squat", primaryMuscles: ["quads"], isCustom: true });
   assert.equal(e.id, "ex-1");
-  assert.deepEqual(e.primaryMuscles, []);
+  assert.deepEqual(e.primaryMuscles, ["quads"]);
+  assert.deepEqual(e.secondaryMuscles, []);
+  assert.deepEqual(e.equipmentTags, []);
   assert.equal(e.notes, "");
   assert.equal(e.isCustom, true);
 });
 
 test("createExercise: generates a different id each time", () => {
-  assert.notEqual(createExercise({ name: "A" }).id, createExercise({ name: "A" }).id);
+  const input = { name: "A", primaryMuscles: ["abs"] };
+  assert.notEqual(createExercise(input).id, createExercise(input).id);
 });
 
 test("createExercise: invalid input", () => {
+  const base = { name: "A", primaryMuscles: ["abs"] };
   assert.throws(() => createExercise(), /input must be an object/);
-  assert.throws(() => createExercise({}), /name must be a non-empty string/);
-  assert.throws(() => createExercise({ name: "  " }), /name/);
-  assert.throws(() => createExercise({ name: 5 }), /name/);
-  assert.throws(() => createExercise({ name: "A", id: "" }), /id must be a non-empty string/);
-  assert.throws(() => createExercise({ name: "A", id: 7 }), /id/);
-  assert.throws(() => createExercise({ name: "A", primaryMuscles: "chest" }), /primaryMuscles/);
-  assert.throws(() => createExercise({ name: "A", equipmentTags: [""] }), /equipmentTags\[0\]/);
-  assert.throws(() => createExercise({ name: "A", notes: 1 }), /notes/);
-  assert.throws(() => createExercise({ name: "A", isCustom: "yes" }), /isCustom/);
+  assert.throws(() => createExercise({ primaryMuscles: ["abs"] }), /name must be a non-empty string/);
+  assert.throws(() => createExercise({ ...base, name: "  " }), /name/);
+  assert.throws(() => createExercise({ ...base, name: 5 }), /name/);
+  assert.throws(() => createExercise({ ...base, id: "" }), /id must be a non-empty string/);
+  assert.throws(() => createExercise({ ...base, id: 7 }), /id/);
+  assert.throws(() => createExercise({ ...base, primaryMuscles: "chest" }), /primaryMuscles/);
+  assert.throws(() => createExercise({ ...base, equipmentTags: [""] }), /equipmentTags\[0\]/);
+  assert.throws(() => createExercise({ ...base, notes: 1 }), /notes/);
+  assert.throws(() => createExercise({ ...base, isCustom: "yes" }), /isCustom/);
 });
 
 test("createWorkout: defaults startedAt to now, as a UTC ISO string", () => {

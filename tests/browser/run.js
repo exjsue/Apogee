@@ -1,8 +1,13 @@
-// Runs the shared storage and backup rule tests against the IndexedDB adapter and shows
-// pass/fail per test. Makes no network requests; everything loaded is local.
+// Runs the shared rule tests (storage, backup, domain, logger) against the IndexedDB
+// adapter, plus the browser-only tests and the UI smoke tests, and shows pass/fail
+// per test. Makes no network requests; everything loaded is local.
 
 import { storeRules, failAfter, makeDetails, rawCounts, EXERCISE } from "../store-rules.js";
 import { backupRules, openBackup, seedFull, incomingFile, NOW } from "../backup-rules.js";
+import { domainRules } from "../domain-rules.js";
+import { storeExtraRules } from "../store-extra-rules.js";
+import { loggerRules } from "../logger-rules.js";
+import { uiRules } from "./ui-smoke.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
 import { createIdbAdapter, deleteDatabase, requestPersistentStorage } from "../../src/storage/idb-adapter.js";
@@ -151,7 +156,9 @@ async function runAll() {
     return;
   }
 
-  const rules = [...storeRules, ...backupRules, ...browserOnlyRules];
+  const rules = [
+    ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...browserOnlyRules, ...uiRules,
+  ];
   const lines = [];
   let failed = 0;
   for (const rule of rules) {

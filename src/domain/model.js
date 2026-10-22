@@ -5,6 +5,23 @@ export const SCHEMA_VERSION = 1;
 
 export const WEIGHT_UNITS = ["kg", "lb"];
 
+// Fixed vocabularies for exercises. Part of schema version 1: adding an id
+// later is safe, removing or renaming one needs a data migration.
+export const MUSCLES = Object.freeze([
+  "chest", "front_delts", "side_delts", "rear_delts", "biceps", "triceps",
+  "forearms", "traps", "lats", "upper_back", "lower_back", "abs", "obliques",
+  "glutes", "quads", "hamstrings", "calves", "adductors",
+]);
+
+export const EQUIPMENT = Object.freeze([
+  "barbell", "dumbbell", "kettlebell", "ez_bar", "machine", "smith_machine",
+  "cable", "resistance_band", "bodyweight", "bench", "pull_up_bar",
+]);
+
+// Maximum lengths, in characters (Unicode code points) after normalization.
+export const NAME_MAX_LENGTH = 80;
+export const NOTES_MAX_LENGTH = 500;
+
 // Exact definition of the avoirdupois pound.
 const KG_PER_LB = 0.45359237;
 
@@ -21,10 +38,38 @@ function requireNonEmptyString(value, field) {
   return value;
 }
 
-function optionalString(value, field) {
-  if (value === undefined) return "";
+// Every run of whitespace (including line breaks) becomes one space, and the
+// ends are trimmed, so stored text is always single-line and canonical.
+function normalizeText(value, field, maxLength) {
   if (typeof value !== "string") fail(`${field} must be a string`);
-  return value;
+  const text = value.replace(/\s+/g, " ").trim();
+  if ([...text].length > maxLength) fail(`${field} must be at most ${maxLength} characters`);
+  return text;
+}
+
+function requireName(value, field) {
+  if (typeof value !== "string") fail(`${field} must be a non-empty string`);
+  const text = normalizeText(value, field, NAME_MAX_LENGTH);
+  if (text === "") fail(`${field} must be a non-empty string`);
+  return text;
+}
+
+function optionalNotes(value, field) {
+  if (value === undefined) return "";
+  return normalizeText(value, field, NOTES_MAX_LENGTH);
+}
+
+// A list of ids from a fixed vocabulary, without duplicates. Messages never
+// repeat the offending value.
+function requireVocabulary(value, field, allowed, what) {
+  const items = requireStringArray(value, field);
+  const seen = new Set();
+  for (const [i, item] of items.entries()) {
+    if (!allowed.includes(item)) fail(`${field}[${i}] must be a known ${what}`);
+    if (seen.has(item)) fail(`${field} must not contain duplicates`);
+    seen.add(item);
+  }
+  return items;
 }
 
 function requireBoolean(value, field) {
@@ -84,13 +129,19 @@ export function createExercise(input) {
   const {
     id, name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom = false,
   } = requireInput(input);
+  const primary = requireVocabulary(primaryMuscles, "primaryMuscles", MUSCLES, "muscle");
+  const secondary = requireVocabulary(secondaryMuscles, "secondaryMuscles", MUSCLES, "muscle");
+  if (primary.length === 0) fail("primaryMuscles must contain at least one muscle");
+  if (secondary.some((muscle) => primary.includes(muscle))) {
+    fail("secondaryMuscles must not repeat a primary muscle");
+  }
   return {
     id: resolveId(id),
-    name: requireNonEmptyString(name, "name"),
-    primaryMuscles: requireStringArray(primaryMuscles, "primaryMuscles"),
-    secondaryMuscles: requireStringArray(secondaryMuscles, "secondaryMuscles"),
-    equipmentTags: requireStringArray(equipmentTags, "equipmentTags"),
-    notes: optionalString(notes, "notes"),
+    name: requireName(name, "name"),
+    primaryMuscles: primary,
+    secondaryMuscles: secondary,
+    equipmentTags: requireVocabulary(equipmentTags, "equipmentTags", EQUIPMENT, "equipment tag"),
+    notes: optionalNotes(notes, "notes"),
     isCustom: requireBoolean(isCustom, "isCustom"),
   };
 }
@@ -107,7 +158,7 @@ export function createWorkout(input = {}) {
     id: resolveId(id),
     startedAt: started,
     endedAt: ended,
-    notes: optionalString(notes, "notes"),
+    notes: optionalNotes(notes, "notes"),
   };
 }
 
@@ -122,7 +173,7 @@ export function createWorkoutEntry(input) {
     exerciseId: requireNonEmptyString(exerciseId, "exerciseId"),
     order: requireInteger(order, "order", 0),
     supersetGroup,
-    notes: optionalString(notes, "notes"),
+    notes: optionalNotes(notes, "notes"),
   };
 }
 

@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-Domain model (src/domain/model.js), storage layer (src/storage/) and export/import logic (src/backup/) implemented; node --test passes. The storage browser tests pass in desktop Firefox and Chrome; the export/import browser tests (tests/browser/index.html) still need their first browser run. Download and file-picker behavior is untested on iPhone. No UI or app page yet.
+First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. No editing of logged sets, no offline support yet.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -33,6 +33,6 @@ Domain model (src/domain/model.js), storage layer (src/storage/) and export/impo
 - When a bug is reported, ask for the exact error or reproduction steps before proposing a fix.
 
 ## Commands
-- Run: (to be added when the app exists)
+- Run: node tools/serve.js, then open http://127.0.0.1:8080/ (fixed port; the server stops if it is taken, because browser storage is per origin including the port)
 - Test: node --test
-- Browser tests (IndexedDB adapter; storage and export/import): node tools/serve.js, then open http://127.0.0.1:8080/tests/browser/index.html
+- Browser tests (IndexedDB adapter, storage, backup, logger and UI smoke tests): with the server running, open http://127.0.0.1:8080/tests/browser/index.html

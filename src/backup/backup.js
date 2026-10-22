@@ -251,6 +251,16 @@ export function createBackup(adapter) {
     return stored === undefined ? null : stored.value;
   }
 
+  // How many records of each type are stored now, so an import screen can
+  // show what is about to be replaced.
+  function currentCounts() {
+    return adapter.transaction(DATA_STORES, "readonly", async (tx) => {
+      const counts = {};
+      for (const section of DATA_STORES) counts[section] = (await tx.getAll(section)).length;
+      return counts;
+    });
+  }
+
   // Replaces ALL existing data with the file's contents. Nothing is merged.
   // The schema version and lastExportAt in meta are left alone; neither is
   // read from the file. Resolves with the counts of imported records.
@@ -273,5 +283,5 @@ export function createBackup(adapter) {
     return counts;
   }
 
-  return { exportToText, exportForDownload, getLastExportAt, importFromText };
+  return { exportToText, exportForDownload, getLastExportAt, currentCounts, importFromText };
 }
