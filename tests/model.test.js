@@ -173,23 +173,24 @@ test("createWorkSet: 0 means bodyweight, and restSeconds 0 is allowed", () => {
   assert.equal(s.restSeconds, 0);
 });
 
-test("createWorkSet: invalid reps", () => {
-  assert.throws(() => createWorkSet({ ...validSet, reps: 0 }), /reps must be an integer >= 1/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: -3 }), /reps/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: 1.5 }), /reps/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: 2.5 }), /reps/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: "5" }), /reps/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: NaN }), /reps/);
-  assert.throws(() => createWorkSet({ ...validSet, reps: undefined }), /reps/);
+test("createWorkSet: invalid reps, each with its own message", () => {
+  assert.throws(() => createWorkSet({ ...validSet, reps: 0 }), /^Error: reps must be at least 1$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: -3 }), /^Error: reps can't be negative$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: 1.5 }), /^Error: reps must be a whole number$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: 2.5 }), /^Error: reps must be a whole number$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: "5" }), /^Error: reps must be a whole number$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: NaN }), /^Error: reps must be a whole number$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: undefined }), /^Error: reps must be a whole number$/);
+  assert.throws(() => createWorkSet({ ...validSet, reps: -Infinity }), /^Error: reps can't be negative$/);
 });
 
-test("createWorkSet: invalid weightValue", () => {
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: -1 }), /weightValue/);
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: NaN }), /weightValue/);
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: Infinity }), /weightValue/);
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: -Infinity }), /weightValue/);
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: "135" }), /weightValue/);
-  assert.throws(() => createWorkSet({ ...validSet, weightValue: undefined }), /weightValue/);
+test("createWorkSet: invalid weight, each with its own message", () => {
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: -1 }), /^Error: weight can't be negative$/);
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: -Infinity }), /^Error: weight can't be negative$/);
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: NaN }), /^Error: weight must be a number$/);
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: "135" }), /^Error: weight must be a number$/);
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: undefined }), /^Error: weight must be a number$/);
+  assert.throws(() => createWorkSet({ ...validSet, weightValue: Infinity, weightUnit: "kg" }), /^Error: weight is above the maximum of 2500 kg$/);
 });
 
 test("createWorkSet: invalid weightUnit", () => {

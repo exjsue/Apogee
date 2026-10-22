@@ -15,26 +15,39 @@ function requireEntered(text, field) {
   return trimmed;
 }
 
-// "10" -> 10. Digits only: no sign, decimal point, comma or exponent.
-// Whether the number is acceptable (for example reps >= 1) is the domain's call.
+// "10" -> 10. Digits only: no sign, decimal point, comma or exponent. A
+// minus sign gets its own message. Any number of digits is read; whether the
+// number is acceptable (1 to MAX_REPS) is the domain's call, so 920319039
+// reaches it and is refused there with the maximum named.
 export function parseWholeNumber(text, field = "value") {
   const entered = requireEntered(text, field);
-  if (!/^\d{1,9}$/.test(entered)) fail(`${field} must be a whole number`);
-  return Number(entered);
+  if (/^-\d+$/.test(entered)) fail(`${field} can't be negative`);
+  if (!/^\d+$/.test(entered)) fail(`${field} must be a whole number`);
+  const value = Number(entered);
+  if (!Number.isSafeInteger(value)) fail(`${field} is too large`);
+  return value;
 }
 
 // "62.5" -> 62.5 and "62,5" -> 62.5. A comma counts as a decimal mark only
 // when one or two digits follow it and there is no other separator, so
-// "1,500" and "1.500,5" are rejected rather than guessed at. No sign,
-// exponent, hex, Infinity or NaN. Zero must be typed ("0"), never inferred.
+// "1,500" and "1.500,5" are rejected rather than guessed at. No exponent,
+// hex, Infinity or NaN, and no "+". A minus sign gets its own message. Zero
+// must be typed ("0"), never inferred. How large a weight may be is the
+// domain's call (MAX_WEIGHT_KG), so a long number is read here and refused there.
 export function parseDecimal(text, field = "value") {
   const entered = requireEntered(text, field);
+  if (/^-\d+([.,]\d+)?$/.test(entered)) fail(`${field} can't be negative`);
   let normalized;
-  if (/^\d{1,7}(\.\d{1,4})?$/.test(entered)) normalized = entered;
-  else if (/^\d{1,7},\d{1,2}$/.test(entered)) normalized = entered.replace(",", ".");
-  else fail(`${field} must be a number such as 62.5 or 62,5`);
+  if (/^\d+(\.\d+)?$/.test(entered)) {
+    if (/\.\d{5,}$/.test(entered)) fail(`${field} can have at most 4 decimal places`);
+    normalized = entered;
+  } else if (/^\d+,\d{1,2}$/.test(entered)) {
+    normalized = entered.replace(",", ".");
+  } else {
+    fail(`${field} must be a number such as 62.5 or 62,5`);
+  }
   const value = Number(normalized);
-  if (!Number.isFinite(value)) fail(`${field} must be a number such as 62.5 or 62,5`);
+  if (!Number.isFinite(value)) fail(`${field} is too large`);
   return value;
 }
 

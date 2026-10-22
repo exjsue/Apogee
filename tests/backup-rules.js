@@ -442,9 +442,50 @@ rule("import: rejects a bad record, naming the type, id and field", async (ctx) 
   await expectRejected(env, mutate(good, (d) => { d.data.entries[0].order = -1; }), /entry "b1-e0": order/);
   await expectRejected(env, mutate(good, (d) => { d.data.sets[0].reps = 0; }), /set "b1-e0-s0": reps/);
   await expectRejected(env, mutate(good, (d) => { d.data.sets[0].weightUnit = "LB"; }), /set "b1-e0-s0": weightUnit/);
-  await expectRejected(env, mutate(good, (d) => { d.data.sets[0].weightValue = -5; }), /set "b1-e0-s0": weightValue/);
+  await expectRejected(env, mutate(good, (d) => { d.data.sets[0].weightValue = -5; }), /set "b1-e0-s0": weight can't be negative/);
   await expectRejected(env, mutate(good, (d) => { d.data.exercises[0].id = ""; }), /exercise at index 0: id/);
   await expectRejected(env, mutate(good, (d) => { d.data.exercises[0] = "text"; }), /exercise at index 0: not an object/);
+});
+
+rule("import: rejects a set with absurd reps or weight, naming the limit and keeping the data", async (ctx) => {
+  const { assert } = ctx;
+  const env = { assert, ...(await openBackup(ctx)) };
+  await seedFull(env.store);
+  const good = incomingFile();
+  await expectRejected(
+    env,
+    mutate(good, (d) => { d.data.sets[0].reps = 920319039; }),
+    /set "b1-e0-s0": reps is above the maximum of 1000/,
+  );
+  await expectRejected(
+    env,
+    mutate(good, (d) => { d.data.sets[0].reps = 1001; }),
+    /set "b1-e0-s0": reps is above the maximum of 1000/,
+  );
+  await expectRejected(
+    env,
+    mutate(good, (d) => { d.data.sets[0].weightValue = 2500.5; d.data.sets[0].weightUnit = "kg"; }),
+    /set "b1-e0-s0": weight is above the maximum of 2500 kg/,
+  );
+  await expectRejected(
+    env,
+    mutate(good, (d) => { d.data.sets[0].weightValue = 5512; d.data.sets[0].weightUnit = "lb"; }),
+    /set "b1-e0-s0": weight is above the maximum of 5511.55 lb/,
+  );
+  await expectRejected(
+    env,
+    mutate(good, (d) => { d.data.sets[0].weightValue = -3; }),
+    /set "b1-e0-s0": weight can't be negative/,
+  );
+  // exactly on the limits is fine
+  const onLimits = mutate(good, (d) => {
+    d.data.sets[0].reps = 1000;
+    d.data.sets[0].weightValue = 2500;
+    d.data.sets[0].weightUnit = "kg";
+  });
+  assert.deepEqual(inspectBackup(onLimits).counts, { exercises: 1, workouts: 1, entries: 1, sets: 2 });
+  await env.backup.importFromText(onLimits, { confirmReplace: true });
+  assert.equal((await env.store.getSet("b1-e0-s0")).reps, 1000);
 });
 
 rule("import: rejects values the importer would otherwise rewrite (never invents or changes values)", async (ctx) => {

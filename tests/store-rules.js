@@ -193,7 +193,7 @@ rule("invalid records are rejected with the field named, and nothing is saved", 
   const setInput = { id: "bad", entryId: "e1", order: 0, reps: 5, weightValue: 100, weightUnit: "kg" };
   await assert.rejects(store.saveSet({ ...setInput, reps: 0 }), /reps/);
   await assert.rejects(store.saveSet({ ...setInput, weightUnit: "LB" }), /weightUnit/);
-  await assert.rejects(store.saveSet({ ...setInput, weightValue: -1 }), /weightValue/);
+  await assert.rejects(store.saveSet({ ...setInput, weightValue: -1 }), /weight can't be negative/);
   assert.equal(await store.getExercise("bad"), null);
   assert.equal(await store.getWorkout("bad"), null);
   assert.equal((await rawCounts(adapter)).sets, 0);

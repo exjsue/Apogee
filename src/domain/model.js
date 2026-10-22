@@ -22,6 +22,12 @@ export const EQUIPMENT = Object.freeze([
 export const NAME_MAX_LENGTH = 80;
 export const NOTES_MAX_LENGTH = 500;
 
+// Limits for a set. Easy to change: they are only checked, never stored.
+// A set has 1 to MAX_REPS reps. A weight is 0 (bodyweight) up to
+// MAX_WEIGHT_KG, whichever unit it was entered in.
+export const MAX_REPS = 1000;
+export const MAX_WEIGHT_KG = 2500;
+
 // Exact definition of the avoirdupois pound.
 const KG_PER_LB = 0.45359237;
 
@@ -177,15 +183,56 @@ export function createWorkoutEntry(input) {
   };
 }
 
+// Reps: a whole number from 1 to MAX_REPS. Each message says which rule broke.
+function requireReps(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) fail("reps must be a whole number");
+  if (value > MAX_REPS) fail(`reps is above the maximum of ${MAX_REPS}`);
+  if (value < 0) fail("reps can't be negative");
+  if (!Number.isInteger(value)) fail("reps must be a whole number");
+  if (value < 1) fail("reps must be at least 1");
+  return value;
+}
+
+// The kg/lb round trip is not exact in floating point: for about 3% of
+// possible limits (31 kg, 59 kg, 62 kg, ...) converting the limit to pounds and
+// back lands a hair above it. This tolerance stops a weight sitting exactly on
+// the limit in pounds from being rejected by that noise, whatever MAX_WEIGHT_KG
+// is changed to.
+const WEIGHT_LIMIT_TOLERANCE_KG = 1e-9;
+
+// Is the weight above the limit? `maxKg` is a parameter only so the tolerance
+// can be tested against limits that show the rounding noise.
+export function isAboveWeightLimit(value, unit, maxKg = MAX_WEIGHT_KG) {
+  const kg = unit === "lb" ? value * KG_PER_LB : value;
+  return kg > maxKg + WEIGHT_LIMIT_TOLERANCE_KG;
+}
+
+// The limit in the unit the weight was entered in, rounded DOWN to 2 decimals
+// so the number shown is itself acceptable.
+function describeWeightLimit(unit) {
+  const limit = unit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_KG / KG_PER_LB;
+  return `${Math.floor(limit * 100) / 100} ${unit}`;
+}
+
+// Weight: 0 (bodyweight) up to MAX_WEIGHT_KG once converted to kg. The stored
+// value stays exactly as entered; the conversion is only used to check the limit.
+function requireWeight(value, unit) {
+  if (typeof value !== "number" || Number.isNaN(value)) fail("weight must be a number");
+  if (value < 0) fail("weight can't be negative");
+  if (isAboveWeightLimit(value, unit)) {
+    fail(`weight is above the maximum of ${describeWeightLimit(unit)}`);
+  }
+  return value;
+}
+
 // Weight is stored exactly as entered: value plus unit, never converted.
 export function createWorkSet(input) {
   const {
     id, entryId, order, reps, weightValue, weightUnit,
     isWarmup = false, restSeconds, completedAt,
   } = requireInput(input);
-  if (typeof weightValue !== "number" || !Number.isFinite(weightValue) || weightValue < 0) {
-    fail("weightValue must be a finite number >= 0");
-  }
+  const unit = requireWeightUnit(weightUnit, "weightUnit");
+  const weight = requireWeight(weightValue, unit);
   const rest = restSeconds === undefined || restSeconds === null
     ? null
     : requireInteger(restSeconds, "restSeconds", 0);
@@ -193,9 +240,9 @@ export function createWorkSet(input) {
     id: resolveId(id),
     entryId: requireNonEmptyString(entryId, "entryId"),
     order: requireInteger(order, "order", 0),
-    reps: requireInteger(reps, "reps", 1),
-    weightValue,
-    weightUnit: requireWeightUnit(weightUnit, "weightUnit"),
+    reps: requireReps(reps),
+    weightValue: weight,
+    weightUnit: unit,
     isWarmup: requireBoolean(isWarmup, "isWarmup"),
     restSeconds: rest,
     completedAt: optionalTimestamp(completedAt, "completedAt"),

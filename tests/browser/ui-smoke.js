@@ -149,6 +149,24 @@ rule("ui: a blank weight or blank reps shows an error and logs nothing", async (
   });
 });
 
+rule("ui: negative and too-large numbers say what is wrong", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    await pickExercise(root, "bench", BENCH);
+    const errorText = () => region(root, "set-error").textContent;
+    await submitSet(root, "8", "-3");
+    await waitFor(() => errorText() === "weight can't be negative", "the negative weight message");
+    await submitSet(root, "-3", "100");
+    await waitFor(() => errorText() === "reps can't be negative", "the negative reps message");
+    await submitSet(root, "920319039", "100");
+    await waitFor(() => errorText() === "reps is above the maximum of 1000", "the reps maximum message");
+    await submitSet(root, "8", "2500.5", "kg");
+    await waitFor(() => errorText() === "weight is above the maximum of 2500 kg", "the kg maximum message");
+    await submitSet(root, "8", "5512", "lb");
+    await waitFor(() => errorText() === "weight is above the maximum of 5511.55 lb", "the lb maximum message");
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+  });
+});
+
 rule("ui: the kg/lb toggle changes what is displayed and is remembered, never what is stored", async (ctx) => {
   await withApp(ctx, async ({ root, store, adapter }) => {
     await pickExercise(root, "bench", BENCH);

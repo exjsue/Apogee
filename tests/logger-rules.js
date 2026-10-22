@@ -88,10 +88,26 @@ rule("logger: blank or whitespace reps and weight are errors and never become 0"
     await assert.rejects(logger.logSet(bench("5", blank)), /weight is required/);
   }
   await assert.rejects(logger.logSet(bench(undefined, "100")), /reps/);
-  await assert.rejects(logger.logSet(bench("5", undefined)), /weightValue/);
-  await assert.rejects(logger.logSet(bench("5", null)), /weightValue/);
+  await assert.rejects(logger.logSet(bench("5", undefined)), /weight must be a number/);
+  await assert.rejects(logger.logSet(bench("5", null)), /weight must be a number/);
   await assert.rejects(logger.logSet(bench(null, "100")), /reps/);
   assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+});
+
+rule("logger: typed negative and too-large numbers say what is wrong and log nothing", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  await assert.rejects(logger.logSet(bench("5", "-3")), /^Error: weight can't be negative$/);
+  await assert.rejects(logger.logSet(bench("5", "-62,5")), /^Error: weight can't be negative$/);
+  await assert.rejects(logger.logSet(bench("-3", "100")), /^Error: reps can't be negative$/);
+  await assert.rejects(logger.logSet(bench("920319039", "100")), /^Error: reps is above the maximum of 1000$/);
+  await assert.rejects(logger.logSet(bench("1001", "100")), /^Error: reps is above the maximum of 1000$/);
+  await assert.rejects(logger.logSet(bench("5", "2500.5", "kg")), /^Error: weight is above the maximum of 2500 kg$/);
+  await assert.rejects(logger.logSet(bench("5", "5512", "lb")), /^Error: weight is above the maximum of 5511\.55 lb$/);
+  await assert.rejects(logger.logSet(bench("5", "99999999999", "kg")), /weight is above the maximum of 2500 kg/);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+  const edge = await logger.logSet(bench("1000", "2500", "kg"));
+  assert.deepEqual([edge.reps, edge.weightValue], [1000, 2500]);
 });
 
 rule("logger: bodyweight is an explicit 0", async (ctx) => {

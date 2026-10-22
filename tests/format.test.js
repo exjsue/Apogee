@@ -34,15 +34,23 @@ test("parseDecimal: rejects thousands separators and ambiguous forms", () => {
 });
 
 test("parseDecimal: rejects exponent, hex, Infinity, NaN, signs and words", () => {
-  for (const text of ["1e3", "1E3", "1e-3", "0x10", "0b1", "Infinity", "-Infinity", "NaN", "-5", "+5", "-0", "abc", "5kg", "5 kg", "6 2", ".5", "5.", "--5", "∞", "١٢"]) {
+  for (const text of ["1e3", "1E3", "1e-3", "0x10", "0b1", "Infinity", "-Infinity", "NaN", "+5", "abc", "5kg", "5 kg", "6 2", ".5", "5.", "--5", "∞", "١٢"]) {
     assert.throws(() => parseDecimal(text, "weight"), /weight must be a number/, text);
   }
 });
 
-test("parseDecimal: rejects absurdly long numbers", () => {
-  assert.throws(() => parseDecimal("9".repeat(400)), /must be a number/);
-  assert.throws(() => parseDecimal("12345678"), /must be a number/);
-  assert.throws(() => parseDecimal("1.23456"), /must be a number/);
+test("parseDecimal: a minus sign says the weight can't be negative, not 'must be a number'", () => {
+  for (const text of ["-5", "-3", "-0", "-62.5", "-62,5", " -3 "]) {
+    assert.throws(() => parseDecimal(text, "weight"), /^Error: weight can't be negative$/, text);
+  }
+});
+
+test("parseDecimal: long numbers are read (the domain refuses them with the maximum), absurd ones are 'too large'", () => {
+  assert.equal(parseDecimal("12345678"), 12345678);
+  assert.equal(parseDecimal("920319039"), 920319039);
+  assert.throws(() => parseDecimal("9".repeat(400), "weight"), /^Error: weight is too large$/);
+  assert.throws(() => parseDecimal("1.23456", "weight"), /^Error: weight can have at most 4 decimal places$/);
+  assert.equal(parseDecimal("1.2345"), 1.2345);
 });
 
 test("parseDecimal: blank or whitespace is an error, never 0", () => {
@@ -73,9 +81,13 @@ test("parseWholeNumber: accepts digits only", () => {
 });
 
 test("parseWholeNumber: rejects everything else, and blank is an error not 0", () => {
-  for (const text of ["1.5", "1,5", "-3", "+3", "1e1", "0x5", "5 reps", "abc", "1 2", "1,000", "9999999999", "∞"]) {
+  for (const text of ["1.5", "1,5", "+3", "1e1", "0x5", "5 reps", "abc", "1 2", "1,000", "∞"]) {
     assert.throws(() => parseWholeNumber(text, "reps"), /reps must be a whole number/, text);
   }
+  assert.throws(() => parseWholeNumber("-3", "reps"), /^Error: reps can't be negative$/);
+  assert.equal(parseWholeNumber("920319039"), 920319039); // read here, refused by the domain with the maximum
+  assert.equal(parseWholeNumber("9999999999"), 9999999999);
+  assert.throws(() => parseWholeNumber("9".repeat(400), "reps"), /^Error: reps is too large$/);
   for (const text of ["", " ", "\t\n"]) {
     assert.throws(() => parseWholeNumber(text, "reps"), /reps is required/);
   }

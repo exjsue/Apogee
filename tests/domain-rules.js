@@ -7,9 +7,14 @@ import {
   EQUIPMENT,
   NAME_MAX_LENGTH,
   NOTES_MAX_LENGTH,
+  MAX_REPS,
+  MAX_WEIGHT_KG,
+  isAboveWeightLimit,
   createExercise,
   createWorkout,
   createWorkoutEntry,
+  createWorkSet,
+  convertWeight,
 } from "../src/domain/model.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
 
@@ -115,6 +120,87 @@ rule("domain: notes are normalized and limited to 500 characters on exercises, w
   assert.ok(/notes must be at most 500 characters/.test(
     messageOf(() => createWorkoutEntry({ workoutId: "w", exerciseId: "e", order: 0, notes: long })),
   ));
+});
+
+const aSet = { entryId: "e1", order: 0, reps: 5, weightValue: 100, weightUnit: "kg" };
+
+rule("limits: MAX_REPS and MAX_WEIGHT_KG are named constants", async ({ assert }) => {
+  assert.equal(MAX_REPS, 1000);
+  assert.equal(MAX_WEIGHT_KG, 2500);
+});
+
+rule("limits: reps 1000 is accepted and 1001 is rejected, naming the maximum", async ({ assert }) => {
+  assert.equal(createWorkSet({ ...aSet, reps: 1 }).reps, 1);
+  assert.equal(createWorkSet({ ...aSet, reps: MAX_REPS }).reps, 1000);
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: MAX_REPS + 1 })), "reps is above the maximum of 1000");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: 920319039 })), "reps is above the maximum of 1000");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: Infinity })), "reps is above the maximum of 1000");
+});
+
+rule("limits: each bad reps value gets its own message", async ({ assert }) => {
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: 0 })), "reps must be at least 1");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: -3 })), "reps can't be negative");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: 2.5 })), "reps must be a whole number");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: "5" })), "reps must be a whole number");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: NaN })), "reps must be a whole number");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, reps: undefined })), "reps must be a whole number");
+});
+
+rule("limits: a weight exactly at the limit is accepted and just above it is rejected, in kg", async ({ assert }) => {
+  assert.equal(createWorkSet({ ...aSet, weightValue: 0 }).weightValue, 0);
+  assert.equal(createWorkSet({ ...aSet, weightValue: MAX_WEIGHT_KG }).weightValue, 2500);
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: 2500.0001 })), "weight is above the maximum of 2500 kg");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: 2501 })), "weight is above the maximum of 2500 kg");
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: Infinity })), "weight is above the maximum of 2500 kg");
+});
+
+rule("limits: a weight exactly at the limit is accepted and just above it is rejected, in lb", async ({ assert }) => {
+  const limitLb = convertWeight(MAX_WEIGHT_KG, "kg", "lb"); // 5511.5565...
+  const atLimit = createWorkSet({ ...aSet, weightValue: limitLb, weightUnit: "lb" });
+  assert.equal(atLimit.weightValue, limitLb); // stored exactly as entered
+  assert.equal(atLimit.weightUnit, "lb");
+  const above = "weight is above the maximum of 5511.55 lb";
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: limitLb + 0.0001, weightUnit: "lb" })), above);
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: 5512, weightUnit: "lb" })), above);
+  // what a person can type, to 4 decimals
+  assert.equal(createWorkSet({ ...aSet, weightValue: 5511.5565, weightUnit: "lb" }).weightValue, 5511.5565);
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: 5511.5566, weightUnit: "lb" })), above);
+  // the number named in the message is itself acceptable
+  assert.equal(createWorkSet({ ...aSet, weightValue: 5511.55, weightUnit: "lb" }).weightValue, 5511.55);
+});
+
+rule("limits: a weight on the limit in lb is not rejected by rounding noise, for any limit", async ({ assert }) => {
+  // These limits are ones where converting to lb and back lands just above the limit.
+  for (const maxKg of [31, 59, 62, 118, 124]) {
+    const limitLb = convertWeight(maxKg, "kg", "lb");
+    assert.ok(limitLb * 0.45359237 > maxKg, `${maxKg} kg shows no rounding noise, so it proves nothing`);
+    assert.equal(isAboveWeightLimit(limitLb, "lb", maxKg), false);
+    assert.equal(isAboveWeightLimit(maxKg, "kg", maxKg), false);
+    assert.equal(isAboveWeightLimit(limitLb + 0.001, "lb", maxKg), true);
+    assert.equal(isAboveWeightLimit(maxKg + 0.001, "kg", maxKg), true);
+  }
+  // with the real limit
+  assert.equal(isAboveWeightLimit(MAX_WEIGHT_KG, "kg"), false);
+  assert.equal(isAboveWeightLimit(MAX_WEIGHT_KG + 0.0001, "kg"), true);
+});
+
+rule("limits: a negative weight says it can't be negative, not 'must be a number'", async ({ assert }) => {
+  for (const unit of ["kg", "lb"]) {
+    for (const value of [-3, -0.0001, -Infinity]) {
+      const message = messageOf(() => createWorkSet({ ...aSet, weightValue: value, weightUnit: unit }));
+      assert.equal(message, "weight can't be negative");
+    }
+  }
+  assert.equal(messageOf(() => createWorkSet({ ...aSet, weightValue: "x" })), "weight must be a number");
+});
+
+rule("limits: the limit messages never repeat the entered value", async ({ assert }) => {
+  const messages = [
+    messageOf(() => createWorkSet({ ...aSet, reps: 920319039 })),
+    messageOf(() => createWorkSet({ ...aSet, weightValue: 987654.321 })),
+    messageOf(() => createWorkSet({ ...aSet, weightValue: -987654.321 })),
+  ];
+  for (const message of messages) assert.ok(!/987654|920319039/.test(message), message);
 });
 
 rule("seed: about 15 lifts with stable seed- ids, all valid and already canonical", async ({ assert }) => {
