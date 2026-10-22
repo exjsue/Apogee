@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Empty icon so the browser doesn't request /favicon.ico -->
+<link rel="icon" href="data:,">
+<title>Persistence test</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; max-width: 480px; }
+  input, button { font-size: 16px; padding: 8px 12px; }
+  input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  p { margin: 12px 0; }
+  .error { color: #b00020; }
+</style>
+</head>
+<body>
+<h1>Persistence test</h1>
+
+<input id="input" type="text" placeholder="Type something to save">
+<button id="save">Save</button>
+<button id="load">Load</button>
+
+<p>Result: <span id="result">-</span></p>
+<p>Last save: <span id="savedAt">-</span></p>
+<p>Persistent storage granted: <span id="persist">checking...</span></p>
+
+<script>
+  const DB_NAME = "persist-test";
+  const STORE = "kv";
+
+  const $ = (id) => document.getElementById(id);
+
+  function showResult(text, isError) {
+    $("result").textContent = text;
+    $("result").className = isError ? "error" : "";
+  }
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Runs one request against the store and resolves when the transaction finishes.
+  async function withStore(mode, fn) {
+    const db = await openDb();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const req = fn(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error("Transaction aborted"));
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async function showSavedAt() {
+    const savedAt = await withStore("readonly", (s) => s.get("savedAt"));
+    $("savedAt").textContent = savedAt ? new Date(savedAt).toLocaleString() : "never";
+  }
+
+  $("save").addEventListener("click", async () => {
+    try {
+      const value = $("input").value;
+      await withStore("readwrite", (s) => s.put(value, "value"));
+      await withStore("readwrite", (s) => s.put(Date.now(), "savedAt"));
+      await showSavedAt();
+      showResult("Saved: " + value, false);
+    } catch (err) {
+      showResult("Save failed: " + (err && (err.name + ": " + err.message) || err), true);
+    }
+  });
+
+  $("load").addEventListener("click", async () => {
+    try {
+      const value = await withStore("readonly", (s) => s.get("value"));
+      showResult(value === undefined || value === "" ? "nothing saved" : "Loaded: " + value, false);
+    } catch (err) {
+      showResult("Load failed: " + (err && (err.name + ": " + err.message) || err), true);
+    }
+  });
+
+  window.addEventListener("load", async () => {
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        $("persist").textContent = String(await navigator.storage.persist());
+      } else {
+        $("persist").textContent = "not supported in this browser";
+      }
+    } catch (err) {
+      $("persist").textContent = "error: " + (err && err.message || err);
+    }
+
+    try {
+      await showSavedAt();
+    } catch (err) {
+      $("savedAt").textContent = "error: " + (err && err.message || err);
+    }
+  });
+</script>
+</body>
+</html>
