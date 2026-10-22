@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-Pre-build. No app code exists yet. First milestone: a blank page that loads in a browser with no network calls.
+Domain model implemented and tested (src/domain/model.js, node --test). No storage, UI, or app page yet.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
