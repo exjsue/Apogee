@@ -62,6 +62,9 @@ export function createMemoryAdapter() {
         delete: async (name, key) => {
           writable(name).delete(key);
         },
+        clear: async (name) => {
+          writable(name).clear();
+        },
         getAll: async (name) => [...table(name).values()].map((record) => structuredClone(record)),
         getAllByIndex: async (name, index, value) => {
           const records = table(name);

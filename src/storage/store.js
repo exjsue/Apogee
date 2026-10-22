@@ -9,6 +9,7 @@
 //       tx.get(store, key)                    -> record | undefined
 //       tx.put(store, record)                 -> void
 //       tx.delete(store, key)                 -> void
+//       tx.clear(store)                       -> void   (removes every record in the store)
 //       tx.getAll(store)                      -> record[]
 //       tx.getAllByIndex(store, index, value) -> record[]
 //     If fn throws or rejects, every write made through tx is rolled back and

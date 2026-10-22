@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-Domain model (src/domain/model.js) and storage layer (src/storage/) implemented; node --test passes. The IndexedDB adapter still needs its browser test run (tests/browser/index.html). No export/import, UI, or app page yet.
+Domain model (src/domain/model.js), storage layer (src/storage/) and export/import logic (src/backup/) implemented; node --test passes. The storage browser tests pass in desktop Firefox and Chrome; the export/import browser tests (tests/browser/index.html) still need their first browser run. Download and file-picker behavior is untested on iPhone. No UI or app page yet.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -35,4 +35,4 @@ Domain model (src/domain/model.js) and storage layer (src/storage/) implemented;
 ## Commands
 - Run: (to be added when the app exists)
 - Test: node --test
-- Browser tests (IndexedDB adapter): node tools/serve.js, then open http://127.0.0.1:8080/tests/browser/index.html
+- Browser tests (IndexedDB adapter; storage and export/import): node tools/serve.js, then open http://127.0.0.1:8080/tests/browser/index.html

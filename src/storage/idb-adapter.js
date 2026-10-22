@@ -40,6 +40,7 @@ function makeHandle(tx) {
     get: (store, key) => call(() => tx.objectStore(store).get(key)),
     put: (store, record) => call(() => tx.objectStore(store).put(record)).then(() => undefined),
     delete: (store, key) => call(() => tx.objectStore(store).delete(key)).then(() => undefined),
+    clear: (store) => call(() => tx.objectStore(store).clear()).then(() => undefined),
     getAll: (store) => call(() => tx.objectStore(store).getAll()),
     getAllByIndex: (store, index, value) => call(() => tx.objectStore(store).index(index).getAll(value)),
   };

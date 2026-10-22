@@ -57,11 +57,12 @@ export const rawCounts = (adapter) =>
 
 const EMPTY = { workouts: 0, entries: 0, sets: 0 };
 
-// Wraps an adapter so that put and/or delete fails after the given number of
-// successful calls. The wrapped adapter's own rollback must then undo the rest.
-export function failAfter(adapter, { puts = Infinity, deletes = Infinity } = {}) {
+// Wraps an adapter so that put, delete and/or clear fails after the given
+// number of successful calls. The wrapped adapter's own rollback must then undo the rest.
+export function failAfter(adapter, { puts = Infinity, deletes = Infinity, clears = Infinity } = {}) {
   let putCount = 0;
   let deleteCount = 0;
+  let clearCount = 0;
   return {
     open: () => adapter.open(),
     close: () => adapter.close(),
@@ -71,6 +72,7 @@ export function failAfter(adapter, { puts = Infinity, deletes = Infinity } = {})
       getAllByIndex: (...args) => tx.getAllByIndex(...args),
       put: (...args) => (putCount++ >= puts ? Promise.reject(new Error("injected failure")) : tx.put(...args)),
       delete: (...args) => (deleteCount++ >= deletes ? Promise.reject(new Error("injected failure")) : tx.delete(...args)),
+      clear: (...args) => (clearCount++ >= clears ? Promise.reject(new Error("injected failure")) : tx.clear(...args)),
     })),
   };
 }

@@ -1,7 +1,9 @@
-// Runs the shared storage rule tests against the IndexedDB adapter and shows
+// Runs the shared storage and backup rule tests against the IndexedDB adapter and shows
 // pass/fail per test. Makes no network requests; everything loaded is local.
 
 import { storeRules, failAfter, makeDetails, rawCounts, EXERCISE } from "../store-rules.js";
+import { backupRules, openBackup, seedFull, incomingFile, NOW } from "../backup-rules.js";
+import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
 import { createIdbAdapter, deleteDatabase, requestPersistentStorage } from "../../src/storage/idb-adapter.js";
 
@@ -76,6 +78,21 @@ const browserOnlyRules = [
       assert.deepEqual(await rawCounts(fresh), { workouts: 0, entries: 0, sets: 0 });
     },
   },
+  {
+    name: "a failed import is gone for good: a brand-new connection sees the previous data, unchanged",
+    async run(ctx) {
+      const { adapter, store, backup } = await openBackup(ctx);
+      await seedFull(store);
+      const before = await backup.exportToText({ now: NOW });
+      const failing = createBackup(failAfter(adapter, { puts: 3 }));
+      await assert.rejects(failing.importFromText(incomingFile(), { confirmReplace: true }), /injected failure/);
+      adapter.close();
+
+      const fresh = ctx.createAdapter(); // a new adapter object, so a new IndexedDB connection
+      await createStore(fresh).open();
+      assert.equal(await createBackup(fresh).exportToText({ now: NOW }), before);
+    },
+  },
 ];
 
 // ---- runner ----
@@ -134,7 +151,7 @@ async function runAll() {
     return;
   }
 
-  const rules = [...storeRules, ...browserOnlyRules];
+  const rules = [...storeRules, ...backupRules, ...browserOnlyRules];
   const lines = [];
   let failed = 0;
   for (const rule of rules) {
