@@ -1,0 +1,22 @@
+# the app's own export files (user data)
+gymapp-export-*.json
+
+# dependencies and build output
+node_modules/
+dist/
+build/
+
+# editor and OS junk
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# local tooling, logs, secrets
+.claude/settings.local.json
+*.log
+.env
+.env.*
