@@ -257,3 +257,79 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 }
 .banner > span:first-child { flex: 1 1 14rem; }
 .banner-error { flex-basis: 100%; color: var(--danger); }
+
+/* set rows, the check and the rest line under each row */
+
+.sets li.set-row { display: block; padding: 8px 0; }
+.set-main { display: flex; align-items: center; gap: 8px; }
+.set-text, .set-planned { flex: 1; min-width: 0; }
+.set-planned { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.set-fields { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.set-fields input { width: 4.5rem; min-height: 40px; }
+.set-fields select { display: inline-block; width: auto; min-height: 40px; }
+.set-index { font-variant-numeric: tabular-nums; }
+
+/* The check: an outlined circle; checked, a filled circle with a check in the page colour. */
+button.check-toggle {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+button.check-toggle[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+.rest-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.rest-time { font-variant-numeric: tabular-nums; }
+button.rest-time {
+  min-height: 32px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rest-icon { flex: none; width: 22px; height: 22px; color: var(--text); }
+.rest-ring { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.rest-pie { fill: currentColor; }
+.rest-icon[data-phase="done"] .rest-ring { display: none; }
+.rest-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rest-editor input { width: 6rem; min-height: 40px; }
+
+/* Done: the whole row is greyed with the muted colour (checked for contrast in
+   tests/rest-timer.test.js), the time reads 0:00 and the outline is gone. */
+.set-row[data-phase="done"] { color: var(--muted); }
+.set-row[data-phase="done"] button.check-toggle { border-color: var(--muted); }
+.set-row[data-phase="done"] button.check-toggle[aria-pressed="true"] { background: var(--muted); color: var(--bg); }
+.set-row[data-phase="done"] .rest-icon { color: var(--muted); }
+
+/* the exercise heading with its three-dot menu */
+
+.entry-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.entry-head h3 { margin: 12px 0 4px; }
+button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem; line-height: 1; }
+.menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}

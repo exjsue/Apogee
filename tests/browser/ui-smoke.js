@@ -7,6 +7,7 @@ import { createStore } from "../../src/storage/store.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createLogger } from "../../src/app/logger.js";
 import { checkPersistence } from "../../src/app/persistence.js";
+import { showDatabaseNotice } from "../../src/ui/db-notices.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
@@ -76,34 +77,48 @@ async function withApp(ctx, body, { prepare, offline } = {}) {
   };
   const root = document.createElement("div");
   document.body.append(root); // forms only submit when they are in the document
+  let app = null;
   try {
-    const app = await mountApp(root, services);
+    app = await mountApp(root, services);
     await body({ root, store, adapter, services, calls, app });
   } finally {
-    root.remove();
+    root.remove(); // also stops any ticker, which only runs while its view is on the page
+    if (app !== null) await app.idle(); // let a render that is still reading finish before the database is closed
   }
 }
 
+// The unchecked rows on screen, and the last one (the one to fill in).
+const plannedRows = (root) => [...root.querySelectorAll('li.set-row[data-kind="planned"]')];
+const loggedRows = (root) => [...root.querySelectorAll('li.set-row[data-kind="logged"]')];
+const lastPlanned = (root) => plannedRows(root).at(-1);
+const errorText = (root) => (region(root, "view-error") ? region(root, "view-error").textContent : "");
+
+// Choosing an exercise puts it in the session with one unchecked row.
 async function pickExercise(root, query, id) {
   click(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
   setValue(await waitFor(() => field(root, "search"), "the search box"), query);
   click(await waitFor(() => $(root, `[data-action="pick-exercise"][data-exercise-id="${id}"]`), "the exercise in the list"));
-  await waitFor(() => field(root, "reps"), "the set form");
+  await waitFor(() => lastPlanned(root), "the first unchecked row");
 }
 
+// Types into the last unchecked row and taps its check.
 async function submitSet(root, reps, weight, unit = "kg") {
-  setValue(field(root, "reps"), reps);
-  setValue(field(root, "weight"), weight);
-  field(root, "unit").value = unit;
-  click(action(root, "log-set"));
+  const row = lastPlanned(root);
+  setValue(row.querySelector('[data-field="reps"]'), reps);
+  setValue(row.querySelector('[data-field="weight"]'), weight);
+  row.querySelector('[data-field="unit"]').value = unit;
+  click(row.querySelector('[data-action="toggle-set"]'));
 }
 
+// Logs one set: adds a row if none is waiting, fills it and checks it.
 async function logOneSet(root, reps, weight, unit) {
-  // the previous set's message is still on screen; remove it so we wait for a new one
-  const old = region(root, "notice");
-  if (old) old.remove();
+  const before = loggedRows(root).length;
+  if (!lastPlanned(root)) {
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    await waitFor(() => lastPlanned(root), "a new unchecked row");
+  }
   await submitSet(root, reps, weight, unit);
-  await waitFor(() => region(root, "notice") && region(root, "notice").textContent === "Set logged.", "the Set logged message");
+  await waitFor(() => loggedRows(root).length === before + 1, "the set to be logged");
 }
 
 const goToTab = async (root, tab) => {
@@ -124,34 +139,39 @@ rule("ui: the app mounts with the log screen, tabs and unit toggle", async (ctx)
   });
 });
 
-rule("ui: choosing an exercise from search and logging a set shows it in the current workout", async (ctx) => {
+rule("ui: choosing an exercise adds an unchecked row; checking it logs the set in the current workout", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     await pickExercise(root, "bench", BENCH);
     ctx.assert.ok(root.textContent.includes("Barbell bench press"));
+    // nothing is logged until a row is checked
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+    ctx.assert.ok(root.textContent.includes("No workout in progress"));
     await logOneSet(root, "8", "100", "kg");
-    await waitForText(root, "Current workout");
+    await waitForText(root, "Started");
     ctx.assert.ok(root.textContent.includes("8 reps"));
     // stored in kg, displayed in the default unit (lb) with the original shown
     ctx.assert.ok(root.textContent.includes("220.5 lb (entered 100 kg)"));
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
-    // the form is ready for the next set, prefilled from the last one
-    ctx.assert.equal(field(root, "reps").value, "8");
-    ctx.assert.equal(field(root, "weight").value, "100");
-    ctx.assert.equal(field(root, "unit").value, "kg");
+    // Add set gives a new unchecked row, prefilled from the last set
+    click(action(root, "add-set"));
+    const next = await waitFor(() => lastPlanned(root), "the new row");
+    ctx.assert.equal(next.querySelector('[data-field="reps"]').value, "8");
+    ctx.assert.equal(next.querySelector('[data-field="weight"]').value, "100");
+    ctx.assert.equal(next.querySelector('[data-field="unit"]').value, "kg");
   });
 });
 
-rule("ui: a blank weight or blank reps shows an error and logs nothing", async (ctx) => {
+rule("ui: a blank weight or blank reps shows an error, keeps the row unchecked and logs nothing", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     await pickExercise(root, "bench", BENCH);
     await submitSet(root, "8", "   ");
-    const error = await waitFor(() => region(root, "set-error") && !region(root, "set-error").hidden && region(root, "set-error"), "the weight error");
-    ctx.assert.ok(/weight is required/.test(error.textContent));
+    await waitFor(() => /weight is required/.test(errorText(root)), "the weight error");
     await submitSet(root, "", "100");
-    await waitFor(() => /reps is required/.test(region(root, "set-error").textContent), "the reps error");
+    await waitFor(() => /reps is required/.test(errorText(root)), "the reps error");
     await submitSet(root, "8", "1,500");
-    await waitFor(() => /weight must be a number/.test(region(root, "set-error").textContent), "the weight format error");
+    await waitFor(() => /weight must be a number/.test(errorText(root)), "the weight format error");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+    ctx.assert.equal(plannedRows(root).length, 1);
     await submitSet(root, "8", "0"); // an explicit zero is bodyweight
     await waitForText(root, "Bodyweight");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
@@ -161,17 +181,16 @@ rule("ui: a blank weight or blank reps shows an error and logs nothing", async (
 rule("ui: negative and too-large numbers say what is wrong", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     await pickExercise(root, "bench", BENCH);
-    const errorText = () => region(root, "set-error").textContent;
     await submitSet(root, "8", "-3");
-    await waitFor(() => errorText() === "weight can't be negative", "the negative weight message");
+    await waitFor(() => errorText(root) === "weight can't be negative", "the negative weight message");
     await submitSet(root, "-3", "100");
-    await waitFor(() => errorText() === "reps can't be negative", "the negative reps message");
+    await waitFor(() => errorText(root) === "reps can't be negative", "the negative reps message");
     await submitSet(root, "920319039", "100");
-    await waitFor(() => errorText() === "reps is above the maximum of 1000", "the reps maximum message");
+    await waitFor(() => errorText(root) === "reps is above the maximum of 1000", "the reps maximum message");
     await submitSet(root, "8", "2500.5", "kg");
-    await waitFor(() => errorText() === "weight is above the maximum of 2500 kg", "the kg maximum message");
+    await waitFor(() => errorText(root) === "weight is above the maximum of 2500 kg", "the kg maximum message");
     await submitSet(root, "8", "5512", "lb");
-    await waitFor(() => errorText() === "weight is above the maximum of 5511.55 lb", "the lb maximum message");
+    await waitFor(() => errorText(root) === "weight is above the maximum of 5511.55 lb", "the lb maximum message");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
   });
 });
@@ -284,7 +303,7 @@ rule("ui: adding a custom exercise needs a primary muscle, then selects the new 
     root.querySelector('input[data-group="secondary"][value="front_delts"]').checked = true;
     root.querySelector('input[data-group="equipment"][value="cable"]').checked = true;
     click(action(root, "save-custom"));
-    await waitFor(() => field(root, "reps"), "the set form for the new exercise");
+    await waitFor(() => lastPlanned(root), "the first row for the new exercise");
     ctx.assert.ok(root.textContent.includes("My cable fly"));
     const saved = (await store.listExercises()).find((exercise) => exercise.name === "My cable fly");
     ctx.assert.ok(saved && saved.isCustom === true);
@@ -394,6 +413,171 @@ rule("ui: export warns that the file is unencrypted, downloads, and shows copyab
     ctx.assert.equal(doc.data.exercises.length, SEED_EXERCISES.length);
     ctx.assert.ok(action(root, "select-export-text") && action(root, "copy-export-text"));
   });
+});
+
+rule("ui: a set goes template, resting, done; tapping its time edits only that rest; unchecking resets it", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await pickExercise(root, "bench", BENCH);
+    const row = () => root.querySelector("li.set-row");
+    const time = () => row().querySelector(".rest-time").textContent;
+    // template: the planned rest (3:00) and a full icon
+    ctx.assert.deepEqual([row().dataset.phase, time(), row().querySelector(".rest-icon").dataset.phase], ["template", "3:00", "template"]);
+    ctx.assert.ok(row().querySelector(".rest-pie").getAttribute("d").length > 0);
+
+    // tapping the time edits this set's rest; a bad value says what is expected
+    click(row().querySelector('[data-action="edit-rest"]'));
+    setValue(await waitFor(() => field(root, "rest"), "the rest editor"), "90");
+    click(action(root, "save-rest"));
+    await waitFor(() => /look like 3:00/.test(region(root, "rest-error").textContent) && !region(root, "rest-error").hidden, "the format message");
+    setValue(field(root, "rest"), "0:02");
+    click(action(root, "save-rest"));
+    await waitFor(() => row().querySelector("button.rest-time") && time() === "0:02", "the new rest");
+
+    await submitSet(root, "8", "100", "kg");
+    await waitFor(() => row().dataset.phase === "resting", "the timer to start");
+    ctx.assert.equal(row().querySelector('[data-action="toggle-set"]').getAttribute("aria-pressed"), "true");
+    ctx.assert.equal(row().querySelector(".rest-icon").dataset.phase, "resting");
+
+    // done: the row is greyed, the time reads 0:00, and the pie is gone
+    await waitFor(() => row().dataset.phase === "done", "the timer to run out", 6000);
+    ctx.assert.deepEqual([time(), row().querySelector(".rest-icon").dataset.phase, row().querySelector(".rest-pie").getAttribute("d")], ["0:00", "done", ""]);
+    ctx.assert.equal(row().querySelector('[data-action="edit-rest"]'), null); // a done set keeps its rest
+
+    // unchecking returns it to the template state with its own rest
+    click(row().querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => row().dataset.phase === "template", "the template state");
+    ctx.assert.equal(time(), "0:02");
+  });
+});
+
+rule("ui: the running timer counts down, and checking another set puts the earlier one in done", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    const first = () => loggedRows(root)[0];
+    await waitFor(() => first().dataset.phase === "resting", "the first timer");
+    await waitFor(() => first().querySelector(".rest-time").textContent === "2:59", "the countdown to tick", 4000);
+    await logOneSet(root, "8", "100", "kg");
+    await waitFor(() => first().dataset.phase === "done", "the first set to be done");
+    ctx.assert.equal(loggedRows(root)[1].dataset.phase, "resting");
+    click(loggedRows(root)[1].querySelector('[data-action="toggle-set"]')); // uncheck the new one
+    await waitFor(() => plannedRows(root).length === 1, "the row to be planned again");
+    ctx.assert.equal(first().dataset.phase, "done"); // not revived
+    ctx.assert.equal(first().querySelector(".rest-time").textContent, "0:00");
+  });
+});
+
+rule("ui: Add set shows no timer; finishing with unchecked sets asks first, then keeps only the checked ones", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(action(root, "add-set"));
+    await waitFor(() => lastPlanned(root), "the new row");
+    ctx.assert.equal(action(root, "add-set").closest("[data-timer-for]"), null);
+    click(action(root, "finish"));
+    const confirm = await waitFor(() => region(root, "confirm-finish"), "the confirmation");
+    ctx.assert.ok(/1 unchecked set will be removed/.test(confirm.textContent));
+    click(action(root, "cancel-finish"));
+    await waitFor(() => action(root, "finish"), "the workout actions again");
+    ctx.assert.equal(plannedRows(root).length, 1);
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+    click(action(root, "finish"));
+    click(await waitFor(() => action(root, "confirm-finish"), "the confirm button"));
+    await waitForText(root, "Workout finished.");
+    ctx.assert.equal(plannedRows(root).length, 0);
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+  });
+});
+
+rule("ui: Add set then tap the check with nothing typed logs the prefilled values", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    const row = await waitFor(() => lastPlanned(root), "the new row");
+    click(row.querySelector('[data-action="toggle-set"]')); // nothing typed
+    await waitFor(() => loggedRows(root).length === 2, "the second set to be logged");
+    ctx.assert.equal(errorText(root), "");
+    const [workout] = await store.listWorkouts();
+    const { entries } = await store.getWorkoutWithDetails(workout.id);
+    ctx.assert.deepEqual(entries[0].sets.map((s) => [s.reps, s.weightValue, s.weightUnit]), [[8, 100, "kg"], [8, 100, "kg"]]);
+    // a row for an exercise with nothing to copy from is still refused when blank
+    click(action(root, "choose-exercise"));
+    setValue(await waitFor(() => field(root, "search"), "the search box"), "squat");
+    click(await waitFor(() => $(root, `[data-action="pick-exercise"][data-exercise-id="seed-barbell-squat"]`), "the squat"));
+    await waitFor(() => lastPlanned(root) && lastPlanned(root).closest("[data-exercise-id]").dataset.exerciseId === "seed-barbell-squat", "the squat row");
+    click(lastPlanned(root).querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => /reps is required/.test(errorText(root)), "the blank refused");
+  });
+});
+
+rule("ui: if all data is cleared while the app is open there is no phantom workout", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    await waitFor(() => lastPlanned(root), "an unchecked row");
+    await adapter.transaction(["exercises", "workouts", "entries", "sets", "meta"], "readwrite", async (tx) => {
+      for (const name of ["exercises", "workouts", "entries", "sets", "meta"]) await tx.clear(name);
+    });
+    await app.render();
+    ctx.assert.ok(root.textContent.includes("No workout in progress"));
+    ctx.assert.equal(root.querySelectorAll("li.set-row").length, 0);
+    ctx.assert.equal(action(root, "finish"), null);
+  });
+});
+
+rule("ui: the three-dot menu has Update Rest Timers: it sets the exercise default and its unchecked sets, never a checked one", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg"); // checked, logged with 3:00
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    await waitFor(() => lastPlanned(root), "an unchecked row");
+
+    click(action(root, "exercise-menu"));
+    await waitFor(() => action(root, "exercise-menu").getAttribute("aria-expanded") === "true", "the menu to open");
+    click(await waitFor(() => action(root, "update-rest-timers"), "the menu item"));
+    const input = await waitFor(() => field(root, "default-rest"), "the editor");
+    ctx.assert.equal(input.value, "3:00");
+    setValue(input, "90"); // a bare number is refused
+    click(action(root, "save-default-rest"));
+    await waitFor(() => !region(root, "default-rest-error").hidden && /look like 3:00/.test(region(root, "default-rest-error").textContent), "the format message");
+    setValue(field(root, "default-rest"), "1:30");
+    click(action(root, "save-default-rest"));
+    await waitFor(() => !field(root, "default-rest"), "the editor to close");
+
+    ctx.assert.equal(lastPlanned(root).querySelector(".rest-time").textContent, "1:30"); // the unchecked set
+    ctx.assert.equal((await store.getExercise(BENCH)).defaultRestSeconds, 90);
+    const [workout] = await store.listWorkouts();
+    const { entries } = await store.getWorkoutWithDetails(workout.id);
+    ctx.assert.equal(entries[0].sets[0].restSeconds, 180); // the checked set keeps its logged rest
+    // the editor starts from the current default next time
+    click(action(root, "exercise-menu"));
+    click(await waitFor(() => action(root, "update-rest-timers"), "the menu item"));
+    ctx.assert.equal((await waitFor(() => field(root, "default-rest"), "the editor")).value, "1:30");
+    click(action(root, "cancel-default-rest"));
+    await waitFor(() => !field(root, "default-rest"), "the editor to close");
+  });
+});
+
+rule("ui: the database notices say what is going on, and the reload button is only on the one that needs it", async (ctx) => {
+  const root = document.createElement("div");
+  let reloads = 0;
+  const blocked = showDatabaseNotice(root, "blocked", { reload: () => { reloads += 1; } });
+  ctx.assert.ok(/waiting for another GymApp tab/.test(blocked.textContent));
+  ctx.assert.equal(blocked.querySelector("button"), null);
+  const changed = showDatabaseNotice(root, "versionchange", { reload: () => { reloads += 1; } });
+  ctx.assert.equal(root.querySelectorAll('[data-region="database-notice"]').length, 1); // replaced, not stacked
+  ctx.assert.ok(/updated in another tab/.test(changed.textContent));
+  changed.querySelector('[data-action="reload-database"]').click();
+  ctx.assert.equal(reloads, 1);
+  let message = "";
+  try {
+    showDatabaseNotice(root, "nonsense");
+  } catch (error) {
+    message = error.message;
+  }
+  ctx.assert.ok(/unknown notice/.test(message));
 });
 
 rule("ui: the backup reminder shows with a logged workout and no confirmed export, and dismiss hides it", async (ctx) => {

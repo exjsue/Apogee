@@ -16,6 +16,7 @@ const lift = (id, name, primaryMuscles, secondaryMuscles, equipmentTags) => ({
   equipmentTags,
   notes: "",
   isCustom: false,
+  defaultRestSeconds: null, // the app default (3:00) until the user sets one
 });
 
 export const SEED_EXERCISES = Object.freeze([

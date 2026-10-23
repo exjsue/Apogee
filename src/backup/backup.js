@@ -13,6 +13,7 @@ import {
   createWorkSet,
 } from "../domain/model.js";
 import { snoozeUntil } from "../domain/backup-reminder.js";
+import { WORKOUT_META_KEYS } from "../storage/schema.js";
 
 // Keys in meta. Meta is not part of exports, so none of these travel in a backup.
 const LAST_EXPORT_KEY = "lastExportAt";
@@ -35,12 +36,20 @@ const DATA_STORES = ["exercises", "workouts", "entries", "sets"];
 // Every field a record must have in a file. Nothing is defaulted on import:
 // a record with a missing or extra field is rejected.
 export const RECORD_FIELDS = {
-  exercises: ["id", "name", "primaryMuscles", "secondaryMuscles", "equipmentTags", "notes", "isCustom"],
+  exercises: ["id", "name", "primaryMuscles", "secondaryMuscles", "equipmentTags", "notes", "isCustom", "defaultRestSeconds"],
   workouts: ["id", "startedAt", "endedAt", "notes"],
   entries: ["id", "workoutId", "exerciseId", "order", "supersetGroup", "notes"],
   sets: [
     "id", "entryId", "order", "reps", "weightValue", "weightUnit", "isWarmup", "restSeconds", "completedAt",
   ],
+};
+
+// What a schema version 1 file contains: the same, but exercises had no
+// defaultRestSeconds. A version 1 file is accepted as it is (the field then
+// becomes null); it must not contain the new field.
+export const RECORD_FIELDS_V1 = {
+  ...RECORD_FIELDS,
+  exercises: RECORD_FIELDS.exercises.filter((field) => field !== "defaultRestSeconds"),
 };
 
 const RECORD_TYPES = {
@@ -93,9 +102,9 @@ function describe(label, record, index) {
 }
 
 // Validates one section. Returns the records exactly as they will be stored.
-function validateSection(section, items) {
+function validateSection(section, items, fieldsOf) {
   const { label, create } = RECORD_TYPES[section];
-  const fields = RECORD_FIELDS[section];
+  const fields = fieldsOf[section];
   const seen = new Set();
   return items.map((item, index) => {
     const where = describe(label, item, index);
@@ -161,7 +170,9 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
   }
 
   const records = {};
-  for (const section of DATA_STORES) records[section] = validateSection(section, doc.data[section]);
+  // The file is checked against the field list of the schema it says it is.
+  const fieldsOf = doc.schemaVersion >= 2 ? RECORD_FIELDS : RECORD_FIELDS_V1;
+  for (const section of DATA_STORES) records[section] = validateSection(section, doc.data[section], fieldsOf);
 
   const workoutIds = new Set(records.workouts.map((record) => record.id));
   const exerciseIds = new Set(records.exercises.map((record) => record.id));
@@ -221,7 +232,11 @@ export function createBackup(adapter) {
       return snapshot;
     });
     const sorted = {};
-    for (const section of DATA_STORES) sorted[section] = data[section].sort(byId).map(withSortedKeys);
+    // An exercise saved before schema version 2 has no defaultRestSeconds; the file always does.
+    const complete = (section, record) => (section === "exercises" ? { defaultRestSeconds: null, ...record } : record);
+    for (const section of DATA_STORES) {
+      sorted[section] = data[section].sort(byId).map((record) => withSortedKeys(complete(section, record)));
+    }
     const text = JSON.stringify({
       app: APP_MARKER,
       exportFormat: EXPORT_FORMAT,
@@ -344,7 +359,8 @@ export function createBackup(adapter) {
 
   // Replaces ALL existing data with the file's contents. Nothing is merged.
   // The schema version and lastExportAt in meta are left alone; neither is
-  // read from the file. Resolves with the counts of imported records.
+  // read from the file. The session's planned sets and running timer are removed.
+  // Resolves with the counts of imported records.
   async function importFromText(text, { confirmReplace, maxBytes } = {}) {
     if (confirmReplace !== true) {
       fail("Import replaces all existing data; confirmReplace: true is required");
@@ -355,11 +371,15 @@ export function createBackup(adapter) {
     // anything throws, the adapter rolls it all back. Only tx.* calls are
     // awaited inside (see the note in store.js); the puts are issued together
     // and awaited as a group.
-    await adapter.transaction(DATA_STORES, "readwrite", async (tx) => {
+    await adapter.transaction([...DATA_STORES, "meta"], "readwrite", async (tx) => {
       for (const section of DATA_STORES) await tx.clear(section);
       for (const section of DATA_STORES) {
         await Promise.all(records[section].map((record) => tx.put(section, record)));
       }
+      // The unchecked sets and the running timer refer to the data that was just
+      // replaced (exercise ids, set ids), so they go in the same transaction.
+      await tx.delete("meta", WORKOUT_META_KEYS.plan);
+      await tx.delete("meta", WORKOUT_META_KEYS.timer);
     });
     return counts;
   }

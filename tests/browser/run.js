@@ -7,6 +7,8 @@ import { backupRules, openBackup, seedFull, incomingFile, NOW } from "../backup-
 import { domainRules } from "../domain-rules.js";
 import { storeExtraRules } from "../store-extra-rules.js";
 import { loggerRules } from "../logger-rules.js";
+import { sessionRules } from "../session-rules.js";
+import { upgradeRules } from "./upgrade-rules.js";
 import { uiRules } from "./ui-smoke.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
@@ -157,7 +159,7 @@ async function runAll() {
   }
 
   const rules = [
-    ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...browserOnlyRules, ...uiRules,
+    ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...browserOnlyRules, ...upgradeRules, ...uiRules,
   ];
   const lines = [];
   let failed = 0;

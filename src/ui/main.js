@@ -3,6 +3,7 @@
 
 import { h } from "./dom.js";
 import { mountApp } from "./app.js";
+import { showDatabaseNotice } from "./db-notices.js";
 import { createIdbAdapter, requestPersistentStorage } from "../storage/idb-adapter.js";
 import { APP_DB_NAME } from "../storage/schema.js";
 import { createStore } from "../storage/store.js";
@@ -17,7 +18,13 @@ const root = document.getElementById("app");
 
 async function start() {
   try {
-    const adapter = createIdbAdapter({ name: APP_DB_NAME });
+    const adapter = createIdbAdapter({
+      name: APP_DB_NAME,
+      // Both are visible messages: an update of the storage waiting for another tab to
+      // close, and this page being left behind after another tab updated it.
+      onBlocked: () => showDatabaseNotice(root, "blocked"),
+      onVersionChange: () => showDatabaseNotice(root, "versionchange"),
+    });
     const store = createStore(adapter);
     await store.open();
     await store.seedExercises(SEED_EXERCISES, SEED_VERSION);

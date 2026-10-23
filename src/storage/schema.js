@@ -19,3 +19,12 @@ export const INDEXES = {
   entries: ["workoutId"],
   sets: ["entryId"],
 };
+
+// Keys in meta for the session of the Log tab: the unchecked sets and the one
+// running rest timer. Defined here so the store and the importer agree. Meta is
+// never exported.
+export const WORKOUT_META_KEYS = { plan: "workoutPlan", timer: "runningTimer" };
+
+// The code of the error a session write throws when the plan changed since it was
+// read (see checkRevision in store.js). The logger reads again and retries.
+export const SESSION_CONFLICT = "session-conflict";

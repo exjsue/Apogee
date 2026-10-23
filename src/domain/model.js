@@ -1,7 +1,7 @@
-// Domain data model, schema version 1.
+// Domain data model, schema version 2 (version 2 added defaultRestSeconds to exercises).
 // Pure JavaScript: no DOM, no storage, no network.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const WEIGHT_UNITS = ["kg", "lb"];
 
@@ -27,6 +27,10 @@ export const NOTES_MAX_LENGTH = 500;
 // MAX_WEIGHT_KG, whichever unit it was entered in.
 export const MAX_REPS = 1000;
 export const MAX_WEIGHT_KG = 2500;
+
+// The longest rest, in seconds: 60:00. Used for an exercise's default rest and by
+// the rest timer.
+export const MAX_REST_SECONDS = 3600;
 
 // Exact definition of the avoirdupois pound.
 const KG_PER_LB = 0.45359237;
@@ -133,8 +137,14 @@ function requireInput(input) {
 
 export function createExercise(input) {
   const {
-    id, name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom = false,
+    id, name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom = false, defaultRestSeconds,
   } = requireInput(input);
+  // null (or missing, as in data saved before schema version 2) means the app's
+  // default rest, 3:00. A number is this exercise's own default, in seconds.
+  const defaultRest = defaultRestSeconds === undefined || defaultRestSeconds === null
+    ? null
+    : requireInteger(defaultRestSeconds, "defaultRestSeconds", 0);
+  if (defaultRest !== null && defaultRest > MAX_REST_SECONDS) fail(`defaultRestSeconds must be at most ${MAX_REST_SECONDS}`);
   const primary = requireVocabulary(primaryMuscles, "primaryMuscles", MUSCLES, "muscle");
   const secondary = requireVocabulary(secondaryMuscles, "secondaryMuscles", MUSCLES, "muscle");
   if (primary.length === 0) fail("primaryMuscles must contain at least one muscle");
@@ -149,6 +159,7 @@ export function createExercise(input) {
     equipmentTags: requireVocabulary(equipmentTags, "equipmentTags", EQUIPMENT, "equipment tag"),
     notes: optionalNotes(notes, "notes"),
     isCustom: requireBoolean(isCustom, "isCustom"),
+    defaultRestSeconds: defaultRest,
   };
 }
 

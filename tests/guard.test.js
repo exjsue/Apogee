@@ -234,7 +234,8 @@ test("guard: the app database name is defined once, in schema.js, and still read
 test("guard: main.js opens the app database with the explicit name", () => {
   const main = fs.readFileSync(path.join(ROOT, "src", "ui", "main.js"), "utf8");
   assert.match(main, /import \{ APP_DB_NAME \} from "\.\.\/storage\/schema\.js";/);
-  assert.match(main, /createIdbAdapter\(\{ name: APP_DB_NAME \}\)/);
+  // The name comes first and is the constant; other options (the visible notices) may follow.
+  assert.match(main, /createIdbAdapter\(\{\s*name: APP_DB_NAME\b/);
 });
 
 test("guard: no code in src/, tools/ or the browser test page calls createIdbAdapter without a name", () => {

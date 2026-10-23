@@ -11,8 +11,20 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-test("SCHEMA_VERSION is 1", () => {
-  assert.equal(SCHEMA_VERSION, 1);
+test("SCHEMA_VERSION is 2 (version 2 added defaultRestSeconds to exercises)", () => {
+  assert.equal(SCHEMA_VERSION, 2);
+});
+
+test("createExercise: defaultRestSeconds is null unless given, accepts 0 to 3600, and refuses anything else", () => {
+  const base = { name: "Squat", primaryMuscles: ["quads"] };
+  assert.equal(createExercise(base).defaultRestSeconds, null);
+  assert.equal(createExercise({ ...base, defaultRestSeconds: null }).defaultRestSeconds, null);
+  assert.equal(createExercise({ ...base, defaultRestSeconds: 0 }).defaultRestSeconds, 0);
+  assert.equal(createExercise({ ...base, defaultRestSeconds: 120 }).defaultRestSeconds, 120);
+  assert.equal(createExercise({ ...base, defaultRestSeconds: 3600 }).defaultRestSeconds, 3600);
+  for (const bad of [-1, 1.5, 3601, "120", NaN, true]) {
+    assert.throws(() => createExercise({ ...base, defaultRestSeconds: bad }), /defaultRestSeconds/, String(bad));
+  }
 });
 
 test("createExercise: valid input", () => {

@@ -139,15 +139,31 @@ export async function mountApp(root, services) {
     view,
   );
 
+  // Every render in flight, so a caller (a test, mostly) can wait until the UI
+  // has finished reading from the database before the database is closed.
+  const inFlight = new Set();
+  function render() {
+    const running = renderNow();
+    inFlight.add(running);
+    running.finally(() => inFlight.delete(running)).catch(() => {});
+    return running;
+  }
+  async function idle() {
+    while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
+  }
+
   let latest = 0;
-  async function render() {
+  async function renderNow() {
     const mine = ++latest;
     const context = {
       services,
       state,
       unit: state.unit,
       rerender: render,
+      // The import itself already removed the planned sets and the running timer
+      // (in its own transaction); this resets what the screens remember.
       resetAfterImport: () => {
+        if (typeof state.log.stopTicker === "function") state.log.stopTicker();
         state.log = freshLogState();
         state.history = freshHistoryState();
       },
@@ -175,5 +191,5 @@ export async function mountApp(root, services) {
   }
 
   await render();
-  return { render, state };
+  return { render, state, idle };
 }

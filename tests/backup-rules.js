@@ -769,3 +769,97 @@ rule("a failing import leaves the previous data fully intact, including after re
   await backup.importFromText(incoming, { confirmReplace: true }); // works once the fault is gone
   assert.deepEqual(parse(await snapshot(backup)).data, parse(incoming).data);
 });
+
+// ---- schema version 2: defaultRestSeconds on exercises ----
+
+// An exercise record as a schema version 1 file has it: without defaultRestSeconds.
+const v1Exercise = (input) => {
+  const { defaultRestSeconds, ...record } = createExercise(input);
+  return record;
+};
+const v1File = (extra = {}) => {
+  const d = makeDetails("old1", 1, 2);
+  return fileOf({
+    exercises: [v1Exercise({ id: "ex-old", name: "Old row", primaryMuscles: ["lats"] }), v1Exercise({ id: "ex-old2", name: "Old curl", primaryMuscles: ["biceps"], isCustom: true })],
+    workouts: [d.workout],
+    entries: d.entries.map((entry) => ({ ...entry, exerciseId: "ex-old" })),
+    sets: d.sets,
+  }, { schemaVersion: 1, ...extra });
+};
+
+rule("import: an old schema version 1 file (exercises without defaultRestSeconds) imports into the new build, the field becoming null", async (ctx) => {
+  const { assert } = ctx;
+  const { store, backup } = await openBackup(ctx);
+  const counts = await backup.importFromText(v1File(), { confirmReplace: true });
+  assert.deepEqual(counts, { exercises: 2, workouts: 1, entries: 1, sets: 2 });
+  const exercises = await store.listExercises();
+  assert.deepEqual(exercises.map((e) => [e.id, e.defaultRestSeconds]), [["ex-old2", null], ["ex-old", null]]); // listed by name
+  assert.equal((await store.getSet("old1-e0-s0")).restSeconds, null); // history is not rewritten
+});
+
+rule("import: old file in, new file out: the export is schema version 2 and imports again unchanged", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  await backup.importFromText(v1File(), { confirmReplace: true });
+  const exported = await backup.exportToText({ now: NOW });
+  const doc = parse(exported);
+  assert.equal(doc.schemaVersion, SCHEMA_VERSION);
+  assert.equal(doc.exportFormat, 1);
+  assert.ok(doc.data.exercises.every((record) => record.defaultRestSeconds === null));
+  await wipe(adapter);
+  await backup.importFromText(exported, { confirmReplace: true });
+  assert.equal(await backup.exportToText({ now: NOW }), exported);
+});
+
+rule("import: a new file round-trips with its exercise defaults", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, backup } = await openBackup(ctx);
+  await seedFull(store);
+  await store.saveExercise({ ...(await store.getExercise("ex-bench")), defaultRestSeconds: 90 });
+  const exported = await backup.exportToText({ now: NOW });
+  assert.equal(parse(exported).data.exercises.find((e) => e.id === "ex-bench").defaultRestSeconds, 90);
+  await wipe(adapter);
+  await backup.importFromText(exported, { confirmReplace: true });
+  assert.equal((await store.getExercise("ex-bench")).defaultRestSeconds, 90);
+  assert.equal(await backup.exportToText({ now: NOW }), exported);
+});
+
+rule("import: each schema is strict about its own fields: v1 must not have defaultRestSeconds, v2 must", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  const withField = mutate(v1File(), (doc) => { doc.data.exercises[0].defaultRestSeconds = null; });
+  await assert.rejects(backup.importFromText(withField, { confirmReplace: true }), /unknown field "defaultRestSeconds"/);
+  const without = mutate(incomingFile(), (doc) => { delete doc.data.exercises[0].defaultRestSeconds; });
+  await assert.rejects(backup.importFromText(without, { confirmReplace: true }), /required field "defaultRestSeconds" is missing/);
+  for (const bad of [-1, 1.5, 3601, "90", true]) {
+    const file = mutate(incomingFile(), (doc) => { doc.data.exercises[0].defaultRestSeconds = bad; });
+    await assert.rejects(backup.importFromText(file, { confirmReplace: true }), /defaultRestSeconds/, String(bad));
+  }
+  assert.deepEqual(await rawCounts(adapter), EMPTY); // nothing was written
+});
+
+rule("import: a file from a newer schema is refused before anything is written", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, backup } = await openBackup(ctx);
+  await seedFull(store);
+  const before = await backup.exportToText({ now: NOW });
+  const future = mutate(incomingFile(), (doc) => { doc.schemaVersion = SCHEMA_VERSION + 1; });
+  await assert.rejects(backup.importFromText(future, { confirmReplace: true }), /newer version of GymApp.*Update the app/);
+  assert.equal(await backup.exportToText({ now: NOW }), before);
+  assert.equal((await rawMeta(adapter, "schemaVersion")).value, SCHEMA_VERSION);
+});
+
+rule("export: writes the code's SCHEMA_VERSION whatever the stored value says, and gives every exercise the field", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, backup } = await openBackup(ctx);
+  await seedFull(store);
+  // Data as an old build left it: a stored schema version of 1 and an exercise without the field.
+  await adapter.transaction(["meta", "exercises"], "readwrite", async (tx) => {
+    await tx.put("meta", { key: "schemaVersion", value: 1 });
+    await tx.put("exercises", v1Exercise({ id: "ex-legacy", name: "Legacy", primaryMuscles: ["calves"] }));
+  });
+  const doc = parse(await backup.exportToText({ now: NOW }));
+  assert.equal(doc.schemaVersion, SCHEMA_VERSION);
+  assert.equal(doc.data.exercises.find((e) => e.id === "ex-legacy").defaultRestSeconds, null);
+  assert.ok(doc.data.exercises.every((record) => "defaultRestSeconds" in record));
+});

@@ -38,7 +38,6 @@
 - [ ] Edit a logged set, and edit a finished workout (deleting one is done: History detail has Delete workout, with a confirmation)
 - [ ] Check on a real phone that the Delete workout button in History detail is hard to tap by mistake (it sits at the bottom, away from Back, and asks first; there is no undo)
 - [ ] Edit or delete a custom exercise (blocked until we decide what happens to sets that use it)
-- [ ] **Before any schema bump:** handle IndexedDB versionchange events, so a tab closes its connection when another tab upgrades the database. The adapter already closes its own connection when that happens (src/storage/idb-adapter.js), but the app does not yet tell the user, reopen, or stop the old tab from carrying on with a closed database (its operations would fail with "database is not open"). Needs a plan: a banner like the update one, a test with two connections, and a decision on what an old tab may still do
 - [ ] Show the app version more widely if it helps support (today the first 8 characters of the cache version are in Backup, Offline only)
 - [ ] Custom domain for the app: removes the shared-origin risk and allows real response headers (frame-ancestors, nosniff) if the host supports them
 - [ ] Decide whether preferredUnit, seedVersion and the unfinished-workout choice should be part of exports (they live in meta and are not exported; a restored backup starts on lb)
@@ -46,6 +45,13 @@
 - [ ] Notes in the UI (exercise, workout and entry notes exist in the model; they are single-line and limited to 500 characters)
 - [ ] Profile model (age bracket, height, body weight)
 - [ ] Consider optional passphrase encryption for exports (requires owner approval)
+- [ ] Rest timer extras, feature-detected: Wake Lock while a timer runs, a sound at the end only after a tap unlocked audio (see the notes in DECISIONS.md); vibration is documented as unsupported on iOS Safari
+- [ ] A way to mark a set as warm-up on the Log tab (isWarmup exists in the data; warm-up sets already get no timer)
+- [ ] Planned (unchecked) sets live in meta, so they are not in a backup and are lost if site data is cleared; decide whether that is acceptable
+- [ ] **Verify on iPhone (first launch after the update):** the database upgrades in place with your existing workouts (export first and confirm it, because a failed upgrade is undone but an export is your safety net), then History and the Backup tab show the same data, and Update Rest Timers in an exercise's three-dot menu changes only its unchecked sets
+- [ ] A tab does not redraw by itself when another tab changes the workout (it shows the old state until its next action or tab change); consider a storage event or BroadcastChannel to refresh open tabs, without any network use
+- [ ] The History delete and the old logSet path do not use the session revision (see DECISIONS.md on two tabs); route them through it if they ever run while a session is open in another tab
+- [ ] **Verify on iPhone (rest timer):** the check and the three row states, the countdown and the pie in the Home Screen app, leaving the app and coming back after the rest ended, locking the phone mid-rest, editing a time by tapping it, Add set showing no timer, finishing with unchecked sets, and the grey done state in daylight
 
 ## Deferred
 - [ ] Importers (Strong, Liftoff); each needs a mapping onto the fixed muscle and equipment lists

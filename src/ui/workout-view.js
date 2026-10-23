@@ -1,77 +1,32 @@
-// The Log tab: current workout, exercise picker and the set form.
-// Only builds elements and passes input to the logger. Parsing, validation
-// and every decision happen in src/app and src/domain.
+// The Log tab: the session's exercises with their set rows, the exercise picker
+// and the workout actions. Only builds elements and passes input to the logger.
+// Parsing, validation and every decision happen in src/app and src/domain.
 
 import { h, button } from "./dom.js";
-import { MUSCLES, EQUIPMENT, WEIGHT_UNITS, NAME_MAX_LENGTH } from "../domain/model.js";
+import { MUSCLES, EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
+import { isRunning } from "../domain/rest-timer.js";
+import { exerciseBlocks, startTicker, stopTicker, perform } from "./set-rows.js";
 
 export const freshLogState = () => ({
-  exerciseId: null,
   pickerOpen: false,
   addingCustom: false,
   query: "",
-  formUnit: null,
   error: null,
   notice: null,
   confirmDiscard: false,
+  confirmFinish: false,
   confirmDeleteSetId: null,
+  editingRestId: null,
+  menuExerciseId: null,
+  editingDefaultFor: null,
+  stopTicker: null,
 });
-
-// Runs an action; a failure becomes the message shown at the top of the view.
-async function perform(ctx, action) {
-  try {
-    await action();
-    ctx.state.log.error = null;
-  } catch (error) {
-    ctx.state.log.error = error.message;
-  }
-  await ctx.rerender();
-}
 
 const countSets = (workout) => workout.entries.reduce((total, entry) => total + entry.sets.length, 0);
 
-function setLine(set, index, unit) {
-  return `${index + 1}. ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, unit)}`;
-}
-
-function deleteControl(ctx, set, exerciseName, index) {
-  const log = ctx.state.log;
-  if (log.confirmDeleteSetId === set.id) {
-    return h(
-      "span",
-      { class: "inline-confirm" },
-      "Delete this set?",
-      button("Delete", {
-        class: "danger small",
-        "data-action": "confirm-delete-set",
-        onClick: () => perform(ctx, async () => {
-          log.confirmDeleteSetId = null;
-          await ctx.services.logger.deleteSet(set.id);
-        }),
-      }),
-      button("Keep", {
-        class: "small",
-        "data-action": "keep-set",
-        onClick: () => {
-          log.confirmDeleteSetId = null;
-          return ctx.rerender();
-        },
-      }),
-    );
-  }
-  return button("Delete", {
-    class: "small",
-    "data-action": "delete-set",
-    "aria-label": `Delete set ${index + 1} of ${exerciseName}`,
-    onClick: () => {
-      log.confirmDeleteSetId = set.id;
-      return ctx.rerender();
-    },
-  });
-}
-
-function entriesList(ctx, entries, editable) {
+// A read-only list of the logged sets (the unfinished workout that must be resolved first).
+function loggedList(ctx, entries) {
   return h(
     "div",
     { class: "entries" },
@@ -85,8 +40,11 @@ function entriesList(ctx, entries, editable) {
         entry.sets.map((set, index) => h(
           "li",
           { "data-set-id": set.id },
-          h("span", { class: "set-text" }, setLine(set, index, ctx.unit)),
-          editable ? deleteControl(ctx, set, entry.exerciseName, index) : null,
+          h(
+            "span",
+            { class: "set-text" },
+            `${index + 1}. ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, ctx.unit)}`,
+          ),
         )),
       ),
     )),
@@ -104,7 +62,7 @@ function discardConfirm(ctx, setCount) {
       "data-action": "confirm-discard",
       onClick: () => perform(ctx, async () => {
         await ctx.services.logger.discardWorkout();
-        Object.assign(log, { confirmDiscard: false, exerciseId: null, notice: "Workout discarded." });
+        Object.assign(log, { confirmDiscard: false, notice: "Workout discarded." });
       }),
     }),
     button("Keep workout", {
@@ -117,10 +75,34 @@ function discardConfirm(ctx, setCount) {
   );
 }
 
-function staleCard(ctx, current) {
+function finishConfirm(ctx, plannedCount) {
+  const log = ctx.state.log;
+  return h(
+    "div",
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm finish", "data-region": "confirm-finish" },
+    h("p", {}, `Finish this workout? ${formatCount(plannedCount, "unchecked set")} will be removed. Only checked sets are kept.`),
+    button("Finish and remove them", {
+      class: "primary",
+      "data-action": "confirm-finish",
+      onClick: () => perform(ctx, async () => {
+        await ctx.services.logger.finishWorkout({ removeUnchecked: true });
+        Object.assign(log, { confirmFinish: false, notice: "Workout finished. It is in History." });
+      }),
+    }),
+    button("Keep going", {
+      "data-action": "cancel-finish",
+      onClick: () => {
+        log.confirmFinish = false;
+        return ctx.rerender();
+      },
+    }),
+  );
+}
+
+function staleCard(ctx, session) {
   const log = ctx.state.log;
   const { logger } = ctx.services;
-  const workout = current.workout;
+  const workout = session.workout;
   const setCount = countSets(workout);
   const card = h(
     "section",
@@ -131,7 +113,7 @@ function staleCard(ctx, current) {
       {},
       `It has ${formatCount(setCount, "set")} logged. Choose what to do with it before logging anything new.`,
     ),
-    entriesList(ctx, workout.entries, false),
+    loggedList(ctx, workout.entries),
   );
   if (log.confirmDiscard) {
     card.append(discardConfirm(ctx, setCount));
@@ -149,7 +131,7 @@ function staleCard(ctx, current) {
       "data-action": "finish-stale",
       disabled: setCount === 0,
       onClick: () => perform(ctx, async () => {
-        await logger.finishWorkout();
+        await logger.finishWorkout({ removeUnchecked: true }); // a stale workout's unchecked sets are not kept
         log.notice = "Workout finished. It is in History.";
       }),
     }),
@@ -165,21 +147,30 @@ function staleCard(ctx, current) {
   return card;
 }
 
-function currentCard(ctx, current) {
+function currentCard(ctx, session) {
   const log = ctx.state.log;
   const { logger } = ctx.services;
   const card = h("section", { class: "card", "aria-label": "Current workout" }, h("h2", {}, "Current workout"));
-  if (current.status.kind === "none") {
-    card.append(h("p", { class: "muted" }, "No workout in progress. Logging your first set starts one."));
+  const started = session.status.kind !== "none";
+  if (!started) {
+    card.append(h("p", { class: "muted" }, "No workout in progress. Checking your first set starts one."));
+  } else {
+    card.append(h(
+      "p",
+      { class: "muted" },
+      `Started ${formatDateTime(session.workout.startedAt)} · ${formatCount(session.loggedCount, "set")}`,
+    ));
+    if (session.loggedCount === 0 && session.plannedCount === 0) card.append(h("p", { class: "muted" }, "No sets yet."));
+  }
+  card.append(exerciseBlocks(ctx, session.blocks));
+  if (!started) return card;
+
+  if (log.confirmDiscard) {
+    card.append(discardConfirm(ctx, session.loggedCount));
     return card;
   }
-  const workout = current.workout;
-  const setCount = countSets(workout);
-  card.append(h("p", { class: "muted" }, `Started ${formatDateTime(workout.startedAt)} · ${formatCount(setCount, "set")}`));
-  if (setCount === 0) card.append(h("p", { class: "muted" }, "No sets yet."));
-  card.append(entriesList(ctx, workout.entries, true));
-  if (log.confirmDiscard) {
-    card.append(discardConfirm(ctx, setCount));
+  if (log.confirmFinish && session.plannedCount > 0) {
+    card.append(finishConfirm(ctx, session.plannedCount));
     return card;
   }
   card.append(h(
@@ -188,11 +179,17 @@ function currentCard(ctx, current) {
     button("Finish workout", {
       class: "primary",
       "data-action": "finish",
-      disabled: setCount === 0,
-      onClick: () => perform(ctx, async () => {
-        await logger.finishWorkout();
-        Object.assign(log, { exerciseId: null, notice: "Workout finished. It is in History." });
-      }),
+      disabled: session.loggedCount === 0,
+      onClick: () => {
+        if (session.plannedCount > 0) {
+          log.confirmFinish = true;
+          return ctx.rerender();
+        }
+        return perform(ctx, async () => {
+          await logger.finishWorkout();
+          log.notice = "Workout finished. It is in History.";
+        });
+      },
     }),
     button("Discard workout", {
       class: "danger-outline",
@@ -240,11 +237,8 @@ function customForm(ctx) {
             secondaryMuscles: secondary.selected(),
             equipmentTags: equipment.selected(),
           });
-          Object.assign(log, {
-            exerciseId: saved.id, pickerOpen: false, addingCustom: false, formUnit: null,
-            notice: `Added "${saved.name}".`, error: null,
-          });
-          ctx.state.focus = '[data-field="reps"]';
+          await ctx.services.logger.addSet(saved.id);
+          Object.assign(log, { pickerOpen: false, addingCustom: false, notice: `Added "${saved.name}".`, error: null });
           await ctx.rerender();
         } catch (caught) {
           error.textContent = caught.message;
@@ -311,11 +305,10 @@ function picker(ctx) {
             class: "pick",
             "data-action": "pick-exercise",
             "data-exercise-id": exercise.id,
-            onClick: () => {
-              Object.assign(log, { exerciseId: exercise.id, pickerOpen: false, formUnit: null, query: "", error: null });
-              ctx.state.focus = '[data-field="reps"]';
-              return ctx.rerender();
-            },
+            onClick: () => perform(ctx, async () => {
+              await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
+              Object.assign(log, { pickerOpen: false, query: "" });
+            }),
           },
         ),
       ))));
@@ -343,113 +336,35 @@ function picker(ctx) {
           return ctx.rerender();
         },
       }),
-      log.exerciseId
-        ? button("Cancel", {
-          "data-action": "cancel-picker",
-          onClick: () => {
-            log.pickerOpen = false;
-            return ctx.rerender();
-          },
-        })
-        : null,
+      button("Cancel", {
+        "data-action": "cancel-picker",
+        onClick: () => {
+          log.pickerOpen = false;
+          return ctx.rerender();
+        },
+      }),
     ));
   }
   return panel;
 }
 
-async function setForm(ctx, exercise) {
+function addExerciseArea(ctx, session) {
   const log = ctx.state.log;
-  const { logger } = ctx.services;
-  const suggestion = await logger.suggestNextSet(exercise.id);
-  const formUnit = log.formUnit ?? (suggestion ? suggestion.weightUnit : ctx.unit);
-
-  const reps = h("input", {
-    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "reps",
-    value: suggestion ? String(suggestion.reps) : "",
-  });
-  const weight = h("input", {
-    type: "text", inputmode: "decimal", autocomplete: "off", "data-field": "weight",
-    "aria-describedby": "weight-help", value: suggestion ? String(suggestion.weightValue) : "",
-  });
-  const unit = h(
-    "select",
-    { "data-field": "unit", "aria-label": "Weight unit" },
-    WEIGHT_UNITS.map((value) => h("option", { value, selected: value === formUnit }, value)),
-  );
-  const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "set-error" });
-  const submit = h("button", { type: "submit", class: "primary", "data-action": "log-set" }, "Log set");
-
-  return h(
-    "form",
-    {
-      class: "card set-form",
-      "aria-label": "Log a set",
-      onSubmit: async (event) => {
-        event.preventDefault();
-        submit.disabled = true;
-        error.hidden = true;
-        try {
-          await logger.logSet({
-            exerciseId: exercise.id, reps: reps.value, weight: weight.value, weightUnit: unit.value,
-          });
-          Object.assign(log, { formUnit: unit.value, error: null, notice: "Set logged." });
-          ctx.state.focus = '[data-field="reps"]';
-          await ctx.rerender();
-        } catch (caught) {
-          error.textContent = caught.message;
-          error.hidden = false;
-          submit.disabled = false;
-        }
-      },
+  if (log.pickerOpen) return picker(ctx);
+  return button(session.blocks.length === 0 ? "Choose exercise" : "Add exercise", {
+    class: "primary wide",
+    "data-action": "choose-exercise",
+    onClick: () => {
+      log.pickerOpen = true;
+      return ctx.rerender();
     },
-    h("h2", {}, exercise.name),
-    button("Change exercise", {
-      class: "small",
-      "data-action": "change-exercise",
-      onClick: () => {
-        log.pickerOpen = true;
-        return ctx.rerender();
-      },
-    }),
-    h("label", { class: "field" }, h("span", {}, "Reps"), reps),
-    h(
-      "div",
-      { class: "field-row" },
-      h("label", { class: "field" }, h("span", {}, "Weight"), weight),
-      h("label", { class: "field narrow" }, h("span", {}, "Unit"), unit),
-    ),
-    h("p", { class: "muted", id: "weight-help" }, "Enter 0 for bodyweight. Leave nothing blank."),
-    error,
-    submit,
-  );
-}
-
-async function logArea(ctx) {
-  const log = ctx.state.log;
-  if (log.pickerOpen || !log.exerciseId) {
-    if (!log.pickerOpen && !log.exerciseId) {
-      return button("Choose exercise", {
-        class: "primary wide",
-        "data-action": "choose-exercise",
-        onClick: () => {
-          log.pickerOpen = true;
-          return ctx.rerender();
-        },
-      });
-    }
-    return picker(ctx);
-  }
-  const exercise = (await ctx.services.logger.findExercises("")).find((candidate) => candidate.id === log.exerciseId);
-  if (exercise === undefined) {
-    log.exerciseId = null;
-    return logArea(ctx);
-  }
-  return setForm(ctx, exercise);
+  });
 }
 
 export async function renderLogView(ctx) {
   const log = ctx.state.log;
-  const current = await ctx.services.logger.getCurrent();
+  stopTicker(ctx);
+  const session = await ctx.services.logger.getSession();
   const view = h("section", { class: "view", "aria-label": "Log" });
 
   if (log.notice) {
@@ -461,11 +376,13 @@ export async function renderLogView(ctx) {
     log.error = null;
   }
 
-  if (current.status.kind === "stale") {
-    view.append(staleCard(ctx, current));
+  if (session.status.kind === "stale") {
+    view.append(staleCard(ctx, session));
     return view;
   }
-  view.append(currentCard(ctx, current));
-  view.append(await logArea(ctx));
+  view.append(currentCard(ctx, session));
+  view.append(addExerciseArea(ctx, session));
+  // Only a timer that is still running gets a ticker; an expired one is already done.
+  if (session.timer !== null && isRunning(session.timer, session.nowMs)) startTicker(ctx, view, session.timer);
   return view;
 }

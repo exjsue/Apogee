@@ -10,9 +10,10 @@
 
 import { SCHEMA_VERSION } from "../domain/model.js";
 import { STORES, INDEXES } from "./schema.js";
+import { upgradeData } from "./migrations.js";
 
 function createSchema(database) {
-  // Version 1 has no migrations. Later versions add upgrade steps here.
+  // Creates what is missing. Changes to existing data are upgrade steps in migrations.js.
   for (const [name, { keyPath }] of Object.entries(STORES)) {
     if (database.objectStoreNames.contains(name)) continue;
     const objectStore = database.createObjectStore(name, { keyPath });
@@ -49,7 +50,18 @@ function makeHandle(tx) {
 // The database name is required and has no default. A default would let a test
 // that forgot to name its database open, and possibly delete, the app's real one.
 // The app passes the name defined in schema.js; tests pass a name of their own.
-export function createIdbAdapter({ name, version = SCHEMA_VERSION, indexedDB = globalThis.indexedDB } = {}) {
+// Options besides the name:
+//   version           the database version to open (the app uses SCHEMA_VERSION)
+//   upgrade           runs inside the upgrade transaction (migrations.js); tests may replace it
+//   onBlocked         called when another open connection is stopping an upgrade; the open
+//                     then keeps waiting for it to close instead of failing, so the caller can
+//                     show a message (without it, a blocked open fails with an error)
+//   onVersionChange   called when another tab upgrades the database; this connection is closed
+//                     first, so the other tab can go on, and later transactions fail with
+//                     "database is not open" until the page is reloaded
+export function createIdbAdapter({
+  name, version = SCHEMA_VERSION, indexedDB = globalThis.indexedDB, upgrade = upgradeData, onBlocked, onVersionChange,
+} = {}) {
   if (typeof name !== "string" || name.trim() === "") {
     throw new Error("createIdbAdapter needs an explicit database name (the app passes its real one from schema.js; tests must pass a separate name)");
   }
@@ -68,18 +80,48 @@ export function createIdbAdapter({ name, version = SCHEMA_VERSION, indexedDB = g
         reject(error);
       };
       let idbRequest;
+      let upgradeError = null;
       try {
         idbRequest = indexedDB.open(name, version);
       } catch (error) {
         fail(error);
         return;
       }
-      idbRequest.onupgradeneeded = () => createSchema(idbRequest.result);
-      idbRequest.onblocked = () => fail(new Error(
-        `Opening database "${name}" is blocked by another open connection to it. Close other GymApp tabs.`,
-      ));
+      idbRequest.onupgradeneeded = (event) => {
+        createSchema(idbRequest.result);
+        // The data upgrade runs in this same upgrade transaction. If it fails, the
+        // transaction is aborted: the version stays as it was and nothing is changed.
+        // It is started synchronously, like every transaction here, so its first request
+        // is issued while the transaction is still active.
+        const upgradeTx = idbRequest.transaction;
+        let started;
+        try {
+          started = Promise.resolve(upgrade({ oldVersion: event.oldVersion, newVersion: event.newVersion, tx: makeHandle(upgradeTx) }));
+        } catch (error) {
+          started = Promise.reject(error);
+        }
+        started.catch((error) => {
+          upgradeError = error;
+          try {
+            upgradeTx.abort();
+          } catch {
+            // already finished
+          }
+        });
+      };
+      idbRequest.onblocked = () => {
+        if (typeof onBlocked === "function") {
+          onBlocked(); // and keep waiting: the open goes on by itself once the other connection closes
+          return;
+        }
+        fail(new Error(`Opening database "${name}" is blocked by another open connection to it. Close other GymApp tabs.`));
+      };
       idbRequest.onerror = () => {
         const error = idbRequest.error;
+        if (upgradeError !== null) {
+          fail(new Error(`The storage upgrade failed and was undone; your data was not changed. (${upgradeError.message})`));
+          return;
+        }
         fail(error && error.name === "VersionError"
           ? new Error(
             `Database "${name}" was saved by a newer version of GymApp than this code (schema ${version}). `
@@ -97,6 +139,7 @@ export function createIdbAdapter({ name, version = SCHEMA_VERSION, indexedDB = g
         opened.onversionchange = () => {
           opened.close();
           if (db === opened) db = null;
+          if (typeof onVersionChange === "function") onVersionChange();
         };
         db = opened;
         settled = true;

@@ -31,6 +31,7 @@ import {
   createWorkoutEntry,
   createWorkSet,
 } from "../domain/model.js";
+import { WORKOUT_META_KEYS, SESSION_CONFLICT } from "./schema.js";
 
 const SCHEMA_KEY = "schemaVersion";
 // Settings kept in meta. Meta is not part of exports or imports.
@@ -39,6 +40,8 @@ const DEFAULT_PREFERRED_UNIT = "lb";
 const CONTINUED_WORKOUT_KEY = "continuedWorkoutId";
 const SEED_VERSION_KEY = "seedVersion";
 const PERSIST_STATUS_KEY = "persistStatus";
+// The unchecked sets of the session and the one running rest timer live in meta
+// (keys in schema.js), so they are never exported (see src/domain/workout-plan.js).
 
 const compareIds = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const byOrder = (a, b) => a.order - b.order || compareIds(a, b);
@@ -86,6 +89,34 @@ async function removeWorkoutTree(tx, workoutId) {
   await tx.delete("workouts", workoutId);
 }
 
+// Runs inside a transaction, before anything is written: refuses the write if the
+// plan was changed since the caller read it (another tab, usually). The plan
+// carries a revision number, 0 when there is no plan; every session write stores
+// the next one. The error has code SESSION_CONFLICT; the logger reads again and
+// retries. This is a compare-and-set: a stale copy can never overwrite newer data.
+async function checkRevision(tx, expectRev) {
+  if (expectRev === undefined) return;
+  const stored = await tx.get("meta", WORKOUT_META_KEYS.plan);
+  const rev = stored !== undefined && stored.value !== null && Number.isInteger(stored.value.rev) ? stored.value.rev : 0;
+  if (rev !== expectRev) {
+    const error = new Error("The workout was changed in another tab. Try again.");
+    error.code = SESSION_CONFLICT;
+    throw error;
+  }
+}
+
+// Runs inside a transaction: writes the plan and/or the running timer. Each
+// value is a record to store, null to delete it, or undefined to leave it alone.
+async function applyWorkoutMeta(tx, meta = {}) {
+  for (const [name, value] of Object.entries(meta)) {
+    const key = WORKOUT_META_KEYS[name];
+    if (key === undefined) throw new Error(`unknown workout setting "${name}"`);
+    if (value === undefined) continue;
+    if (value === null) await tx.delete("meta", key);
+    else await tx.put("meta", { key, value });
+  }
+}
+
 // Runs inside a transaction: the referenced record must already exist.
 async function requireExists(tx, storeName, id, field, label) {
   if ((await tx.get(storeName, id)) === undefined) {
@@ -127,9 +158,15 @@ export function createStore(adapter) {
     return adapter.transaction([storeName], "readonly", async (tx) => (await tx.get(storeName, id)) ?? null);
   };
 
-  async function saveExercise(input) {
+  // `meta` ({ plan, timer }) and `expectRev` are for the session: they are written
+  // and checked in the same transaction (see checkRevision and applyWorkoutMeta).
+  async function saveExercise(input, { meta, expectRev } = {}) {
     const exercise = createExercise(input);
-    await adapter.transaction(["exercises"], "readwrite", (tx) => tx.put("exercises", exercise));
+    await adapter.transaction(["exercises", "meta"], "readwrite", async (tx) => {
+      await checkRevision(tx, expectRev);
+      await tx.put("exercises", exercise);
+      await applyWorkoutMeta(tx, meta);
+    });
     return exercise;
   }
 
@@ -163,7 +200,9 @@ export function createStore(adapter) {
   // it is saved or none of it. The lists are the workout's complete contents:
   // entries and sets already stored for this workout but missing from the
   // lists are deleted in the same transaction.
-  async function saveWorkoutWithDetails(workoutInput, entryInputs = [], setInputs = []) {
+  // `meta` ({ plan, timer }) is written, and `expectRev` checked, in the same
+  // transaction (see applyWorkoutMeta and checkRevision).
+  async function saveWorkoutWithDetails(workoutInput, entryInputs = [], setInputs = [], { meta, expectRev } = {}) {
     const workout = createWorkout(workoutInput);
     const entries = validateAll(entryInputs, createWorkoutEntry, "entries");
     const sets = validateAll(setInputs, createWorkSet, "sets");
@@ -182,7 +221,8 @@ export function createStore(adapter) {
     });
     const setIds = new Set(sets.map((set) => set.id));
 
-    await adapter.transaction(["workouts", "exercises", "entries", "sets"], "readwrite", async (tx) => {
+    await adapter.transaction(["workouts", "exercises", "entries", "sets", "meta"], "readwrite", async (tx) => {
+      await checkRevision(tx, expectRev);
       const checkedExercises = new Set();
       for (const [i, entry] of entries.entries()) {
         if (checkedExercises.has(entry.exerciseId)) continue;
@@ -198,6 +238,7 @@ export function createStore(adapter) {
       await tx.put("workouts", workout);
       for (const entry of entries) await tx.put("entries", entry);
       for (const set of sets) await tx.put("sets", set);
+      await applyWorkoutMeta(tx, meta);
     });
     return { workout, entries, sets };
   }
@@ -236,15 +277,17 @@ export function createStore(adapter) {
   // Throws away an UNFINISHED workout with all its entries and sets, in ONE
   // transaction. A finished workout is refused (use deleteWorkout for that),
   // so this cannot remove history by accident. Resolves true if it existed.
-  async function discardWorkout(id) {
+  async function discardWorkout(id, { meta, expectRev } = {}) {
     requireId(id);
-    return adapter.transaction(["workouts", "entries", "sets"], "readwrite", async (tx) => {
+    return adapter.transaction(["workouts", "entries", "sets", "meta"], "readwrite", async (tx) => {
+      await checkRevision(tx, expectRev);
       const workout = await tx.get("workouts", id);
       if (workout === undefined) return false;
       if (workout.endedAt !== null) {
         throw new Error("endedAt: a finished workout cannot be discarded; delete it instead");
       }
       await removeWorkoutTree(tx, id);
+      await applyWorkoutMeta(tx, meta);
       return true;
     });
   }
@@ -252,15 +295,17 @@ export function createStore(adapter) {
   // Deletes one set in ONE transaction. If it was the last set of its entry,
   // the entry is removed too, so no empty entry is left behind.
   // Resolves true if the set existed.
-  async function deleteSet(id) {
+  async function deleteSet(id, { meta, expectRev } = {}) {
     requireId(id);
-    return adapter.transaction(["entries", "sets"], "readwrite", async (tx) => {
+    return adapter.transaction(["entries", "sets", "meta"], "readwrite", async (tx) => {
+      await checkRevision(tx, expectRev);
       const set = await tx.get("sets", id);
       if (set === undefined) return false;
       await tx.delete("sets", id);
       if ((await tx.getAllByIndex("sets", "entryId", set.entryId)).length === 0) {
         await tx.delete("entries", set.entryId);
       }
+      await applyWorkoutMeta(tx, meta);
       return true;
     });
   }
@@ -349,6 +394,20 @@ export function createStore(adapter) {
     return id;
   }
 
+  // The session's planned sets and the one running rest timer, or null. Raw
+  // values: src/domain/workout-plan.js and rest-timer.js decide what they mean.
+  const getWorkoutPlan = async () => (await readSetting(WORKOUT_META_KEYS.plan)) ?? null;
+  const getRunningTimer = async () => (await readSetting(WORKOUT_META_KEYS.timer)) ?? null;
+
+  // Writes the plan and/or the timer ({ plan, timer }; null deletes, undefined
+  // skips). With expectRev, only if the plan has not changed since it was read.
+  async function setWorkoutMeta(meta, { expectRev } = {}) {
+    await adapter.transaction(["meta"], "readwrite", async (tx) => {
+      await checkRevision(tx, expectRev);
+      await applyWorkoutMeta(tx, meta);
+    });
+  }
+
   // The latest answer from the browser about keeping this app's data, or null
   // if no check has been stored yet. Written on every launch (src/app/persistence.js).
   async function getPersistStatus() {
@@ -377,6 +436,9 @@ export function createStore(adapter) {
     close,
     getPersistStatus,
     setPersistStatus,
+    getWorkoutPlan,
+    getRunningTimer,
+    setWorkoutMeta,
     saveExercise,
     getExercise: (id) => getOne("exercises", id),
     saveWorkout,
