@@ -47,6 +47,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const names = new Map((await store.listExercises()).map((exercise) => [exercise.id, exercise.name]));
     return {
       ...details,
+      setCount: details.entries.reduce((total, entry) => total + entry.sets.length, 0),
       entries: details.entries.map((entry) => ({ ...entry, exerciseName: names.get(entry.exerciseId) ?? UNKNOWN_EXERCISE })),
     };
   }
@@ -176,6 +177,19 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return (await store.listWorkoutSummaries()).filter((workout) => workout.endedAt !== null);
   }
 
+  // Deletes a FINISHED workout with its entries and sets, in one transaction.
+  // An unfinished workout is refused (that is what Discard is for), and so is
+  // an unknown id. Checking and deleting are two transactions, which is safe
+  // because a finished workout never becomes unfinished again.
+  async function deleteFinishedWorkout(id) {
+    const workout = await store.getWorkout(id); // an empty or non-string id is refused here
+    if (workout === null) throw new Error("There is no workout with that id");
+    if (workout.endedAt === null) {
+      throw new Error("This workout is not finished; use Discard on the Log tab instead");
+    }
+    return store.deleteWorkout(id);
+  }
+
   return {
     getStatus,
     getCurrent,
@@ -188,6 +202,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     addCustomExercise,
     findExercises,
     getHistory,
+    deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
     getPreferredUnit: () => store.getPreferredUnit(),
     setPreferredUnit: (unit) => store.setPreferredUnit(unit),

@@ -18,7 +18,8 @@
 - [x] Import screen calls inspectBackup, shows the counts that will be replaced, and offers an export first
 
 ## Next
-- [ ] Edit a logged set and edit or delete a finished workout from the UI (the store can already delete a workout; there is no UI for it yet)
+- [ ] Edit a logged set, and edit a finished workout (deleting one is done: History detail has Delete workout, with a confirmation)
+- [ ] Check on a real phone that the Delete workout button in History detail is hard to tap by mistake (it sits at the bottom, away from Back, and asks first; there is no undo)
 - [ ] Edit or delete a custom exercise (blocked until we decide what happens to sets that use it)
 - [ ] Offline use: service worker and web app manifest (the CSP will need `manifest-src 'self'`; a service worker is already allowed by `script-src 'self'`)
 - [ ] Decide whether preferredUnit, seedVersion and the unfinished-workout choice should be part of exports (they live in meta and are not exported; a restored backup starts on lb)

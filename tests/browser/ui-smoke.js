@@ -197,6 +197,72 @@ rule("ui: finishing the workout puts it in History, where its sets can be opened
   });
 });
 
+// Two finished workouts, one set each: bench 8 x 100 kg, then bench 5 x 120 kg.
+async function twoFinishedWorkouts(store) {
+  let time = Date.now() - 48 * HOUR;
+  const logger = createLogger(store, { now: () => new Date(time) });
+  for (const [reps, weight] of [["8", "100"], ["5", "120"]]) {
+    await logger.logSet({ exerciseId: BENCH, reps, weight, weightUnit: "kg" });
+    time += 30 * 60 * 1000;
+    await logger.finishWorkout();
+    time += 24 * HOUR;
+  }
+}
+
+rule("ui: deleting a finished workout asks first, cancel keeps it, confirm removes it", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    const rows = () => root.querySelectorAll('[data-action="open-workout"]');
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 2, entries: 2, sets: 2 });
+    await goToTab(root, "history");
+    await waitFor(() => rows().length === 2, "two workouts in History");
+
+    click(rows()[0]); // the newest
+    click(await waitFor(() => action(root, "delete-workout"), "the Delete workout button"));
+    const confirm = await waitFor(() => region(root, "confirm-delete"), "the confirmation");
+    ctx.assert.ok(confirm.textContent.includes("Delete this workout and its 1 set?"));
+    ctx.assert.ok(/cannot be undone/.test(confirm.textContent));
+    ctx.assert.ok(/export your data first/.test(confirm.textContent));
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 2, entries: 2, sets: 2 }); // nothing yet
+
+    // Cancel changes nothing
+    click(action(root, "cancel-delete-workout"));
+    await waitFor(() => !region(root, "confirm-delete") && action(root, "delete-workout"), "the confirmation to close");
+    ctx.assert.ok(action(root, "back-to-history")); // still looking at the workout
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 2, entries: 2, sets: 2 });
+
+    // Confirm removes it and returns to the refreshed list
+    click(action(root, "delete-workout"));
+    click(await waitFor(() => action(root, "confirm-delete-workout"), "the confirm button"));
+    await waitFor(() => region(root, "history-list") && rows().length === 1, "the list with one workout left");
+    ctx.assert.equal(region(root, "notice").textContent, "Workout deleted.");
+    ctx.assert.equal(action(root, "back-to-history"), null);
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+
+    // Deleting the last one shows the empty state
+    click(rows()[0]);
+    click(await waitFor(() => action(root, "delete-workout"), "the Delete workout button"));
+    click(await waitFor(() => action(root, "confirm-delete-workout"), "the confirm button"));
+    await waitForText(root, "No finished workouts yet");
+    ctx.assert.equal(region(root, "history-list"), null);
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+  }, { prepare: twoFinishedWorkouts });
+});
+
+rule("ui: leaving a workout detail closes its delete confirmation", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    await goToTab(root, "history");
+    click(await waitFor(() => $(root, '[data-action="open-workout"]'), "a workout in History"));
+    click(await waitFor(() => action(root, "delete-workout"), "the Delete workout button"));
+    await waitFor(() => region(root, "confirm-delete"), "the confirmation");
+    click(action(root, "back-to-history"));
+    await waitFor(() => region(root, "history-list"), "the list");
+    click($(root, '[data-action="open-workout"]'));
+    await waitFor(() => action(root, "delete-workout"), "the plain Delete workout button again");
+    ctx.assert.equal(region(root, "confirm-delete"), null); // asks again from scratch
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 2, entries: 2, sets: 2 });
+  }, { prepare: twoFinishedWorkouts });
+});
+
 rule("ui: adding a custom exercise needs a primary muscle, then selects the new exercise", async (ctx) => {
   await withApp(ctx, async ({ root, store }) => {
     click(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));

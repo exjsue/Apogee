@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. No editing of logged sets, no offline support yet.
+First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. A finished workout can be deleted from History (with a confirmation). No editing of logged sets, no offline support yet.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.

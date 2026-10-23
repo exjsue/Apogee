@@ -5,7 +5,7 @@
 import { createStore } from "../src/storage/store.js";
 import { createLogger } from "../src/app/logger.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
-import { rawCounts } from "./store-rules.js";
+import { rawCounts, failAfter } from "./store-rules.js";
 
 export const loggerRules = [];
 const rule = (name, run) => loggerRules.push({ name, run });
@@ -381,6 +381,114 @@ rule("logger: history lists finished workouts newest first with counts, and deta
   assert.equal(detail.entries[0].exerciseName, "Barbell bench press");
   assert.equal(detail.entries[0].sets.length, 2);
   assert.equal(await logger.getWorkoutDetail("no-such-workout"), null);
+});
+
+// ---- deleting a finished workout ----
+
+// Logs and finishes a workout: 2 entries (bench x2 sets, squat x1 set) = 3 sets.
+async function finishedWorkout(env) {
+  const { logger, clock } = env;
+  clock.time += 24 * HOUR;
+  await logger.logSet(bench("8", "100"));
+  await logger.logSet(bench("6", "100"));
+  await logger.logSet({ exerciseId: SQUAT, reps: "5", weight: "140", weightUnit: "kg" });
+  clock.time += 45 * 60 * 1000;
+  const finished = await logger.finishWorkout();
+  clock.time += 60 * 1000;
+  return finished;
+}
+
+rule("logger: deleteFinishedWorkout removes the workout, its entries and sets, and leaves the others untouched", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  const { adapter, store, logger } = env;
+  const doomed = await finishedWorkout(env);
+  const kept = await finishedWorkout(env);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 2, entries: 4, sets: 6 });
+  const keptBefore = await logger.getWorkoutDetail(kept.id);
+  const exercisesBefore = (await store.listExercises()).length;
+
+  assert.equal(await logger.deleteFinishedWorkout(doomed.id), true);
+
+  assert.equal(await logger.getWorkoutDetail(doomed.id), null);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 2, sets: 3 }); // no orphans
+  assert.deepEqual(await logger.getWorkoutDetail(kept.id), keptBefore);
+  assert.deepEqual((await logger.getHistory()).map((w) => w.id), [kept.id]);
+  assert.equal((await store.listExercises()).length, exercisesBefore); // exercises are never deleted
+});
+
+rule("logger: deleting the only finished workout leaves an empty history", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  const only = await finishedWorkout(env);
+  await env.logger.deleteFinishedWorkout(only.id);
+  assert.deepEqual(await env.logger.getHistory(), []);
+  assert.deepEqual(await rawCounts(env.adapter), { workouts: 0, entries: 0, sets: 0 });
+  await assert.rejects(env.logger.deleteFinishedWorkout(only.id), /no workout with that id/); // not twice
+});
+
+rule("logger: deleteFinishedWorkout refuses an unfinished workout, which is what Discard is for", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger, clock } = await setup(ctx);
+  await logger.logSet(bench("8", "100"));
+  const current = (await logger.getStatus()).workout;
+  await assert.rejects(logger.deleteFinishedWorkout(current.id), /not finished; use Discard/);
+  clock.time += 20 * HOUR; // an old unfinished workout is still unfinished
+  assert.equal((await logger.getStatus()).kind, "stale");
+  await assert.rejects(logger.deleteFinishedWorkout(current.id), /not finished; use Discard/);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+  assert.equal(await logger.discardWorkout(), true); // the intended path still works
+});
+
+rule("logger: deleteFinishedWorkout rejects an unknown id and an invalid id, deleting nothing", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  await finishedWorkout(env);
+  const { adapter, logger } = env;
+  await assert.rejects(logger.deleteFinishedWorkout("no-such-workout"), /There is no workout with that id/);
+  for (const bad of ["", undefined, null, 7]) {
+    await assert.rejects(logger.deleteFinishedWorkout(bad), /id must be a non-empty string/);
+  }
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 2, sets: 3 });
+});
+
+rule("logger: a failed deleteFinishedWorkout rolls back and leaves the workout complete", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  const { adapter, logger } = env;
+  const finished = await finishedWorkout(env);
+  const before = await logger.getWorkoutDetail(finished.id);
+  // 3 sets + 2 entries + 1 workout = 6 deletes: fail on the first, in the middle, and on the last
+  for (const succeed of [0, 2, 5]) {
+    const failing = createLogger(createStore(failAfter(adapter, { deletes: succeed })), { now: () => new Date(env.clock.time) });
+    await assert.rejects(failing.deleteFinishedWorkout(finished.id), /injected failure/);
+    assert.deepEqual(await logger.getWorkoutDetail(finished.id), before);
+    assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 2, sets: 3 });
+  }
+  assert.equal(await logger.deleteFinishedWorkout(finished.id), true); // works once the fault is gone
+});
+
+rule("logger: deleting a finished workout does not touch the current workout", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  const { adapter, logger } = env;
+  const finished = await finishedWorkout(env);
+  await logger.logSet(bench("5", "100")); // starts a new, unfinished workout
+  const current = (await logger.getCurrent()).workout;
+  await logger.deleteFinishedWorkout(finished.id);
+  const after = await logger.getCurrent();
+  assert.equal(after.status.kind, "active");
+  assert.deepEqual(after.workout, current);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+});
+
+rule("logger: workout details report how many sets they hold", async (ctx) => {
+  const { assert } = ctx;
+  const env = await setup(ctx);
+  const finished = await finishedWorkout(env);
+  const detail = await env.logger.getWorkoutDetail(finished.id);
+  assert.equal(detail.setCount, 3);
+  assert.deepEqual(detail.entries.map((entry) => entry.sets.length), [2, 1]);
 });
 
 rule("logger: preferred unit passes through to the store", async (ctx) => {
