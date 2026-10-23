@@ -21,13 +21,13 @@ const HOST = "127.0.0.1";
 const DEFAULT_PORT = 8080;
 const PORT = process.argv[2] === undefined ? DEFAULT_PORT : Number(process.argv[2]);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SERVED_FOLDERS = ["src", "tests"];
-const ROOT_FILES = ["index.html"];
+const SERVED_FOLDERS = ["src", "tests", "icons"];
+const ROOT_FILES = ["index.html", "manifest.webmanifest"];
 const TESTS_PATH = "/tests/browser/index.html";
 
 // Blocks every network request from the page. Kept identical to the policy in
 // the meta tag of index.html (a test checks that they match).
-const CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; base-uri 'none'; form-action 'none'";
+const CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'";
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   console.error(`Not a valid port: ${process.argv[2]}`);
@@ -39,6 +39,8 @@ const TYPES = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+  ".png": "image/png",
   ".txt": "text/plain; charset=utf-8",
   ".md": "text/plain; charset=utf-8",
 };
