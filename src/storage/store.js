@@ -38,6 +38,7 @@ const PREFERRED_UNIT_KEY = "preferredUnit";
 const DEFAULT_PREFERRED_UNIT = "lb";
 const CONTINUED_WORKOUT_KEY = "continuedWorkoutId";
 const SEED_VERSION_KEY = "seedVersion";
+const PERSIST_STATUS_KEY = "persistStatus";
 
 const compareIds = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const byOrder = (a, b) => a.order - b.order || compareIds(a, b);
@@ -348,9 +349,34 @@ export function createStore(adapter) {
     return id;
   }
 
+  // The latest answer from the browser about keeping this app's data, or null
+  // if no check has been stored yet. Written on every launch (src/app/persistence.js).
+  async function getPersistStatus() {
+    return (await readSetting(PERSIST_STATUS_KEY)) ?? null;
+  }
+
+  async function setPersistStatus(status) {
+    if (typeof status.supported !== "boolean" || typeof status.persisted !== "boolean") {
+      throw new Error("supported and persisted must be booleans");
+    }
+    if (typeof status.checkedAt !== "string" || Number.isNaN(Date.parse(status.checkedAt))) {
+      throw new Error("checkedAt must be a valid date");
+    }
+    const value = {
+      supported: status.supported,
+      persisted: status.persisted,
+      error: typeof status.error === "string" ? status.error : null,
+      checkedAt: status.checkedAt,
+    };
+    await adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key: PERSIST_STATUS_KEY, value }));
+    return value;
+  }
+
   return {
     open,
     close,
+    getPersistStatus,
+    setPersistStatus,
     saveExercise,
     getExercise: (id) => getOne("exercises", id),
     saveWorkout,

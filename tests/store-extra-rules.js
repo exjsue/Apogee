@@ -126,6 +126,30 @@ rule("preferred unit defaults to lb, can be set to kg, and survives reopening", 
   assert.equal(await store.getPreferredUnit(), "lb");
 });
 
+rule("persistence status: none until stored, then the latest one replaces the last", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store } = await openStore(ctx);
+  assert.equal(await store.getPersistStatus(), null);
+  await store.setPersistStatus({ supported: true, persisted: false, error: null, checkedAt: "2026-10-23T08:00:00.000Z" });
+  await store.setPersistStatus({ supported: true, persisted: true, error: null, checkedAt: "2026-10-24T08:00:00.000Z" });
+  adapter.close();
+  await adapter.open();
+  assert.deepEqual(await store.getPersistStatus(), {
+    supported: true, persisted: true, error: null, checkedAt: "2026-10-24T08:00:00.000Z",
+  });
+});
+
+rule("persistence status: refuses malformed values and keeps the stored one", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await openStore(ctx);
+  const good = { supported: true, persisted: false, error: null, checkedAt: "2026-10-23T08:00:00.000Z" };
+  await store.setPersistStatus(good);
+  await assert.rejects(store.setPersistStatus({ ...good, persisted: "yes" }), /booleans/);
+  await assert.rejects(store.setPersistStatus({ ...good, supported: undefined }), /booleans/);
+  await assert.rejects(store.setPersistStatus({ ...good, checkedAt: "soon" }), /valid date/);
+  assert.deepEqual(await store.getPersistStatus(), good);
+});
+
 rule("preferred unit rejects anything but kg and lb", async (ctx) => {
   const { assert } = ctx;
   const { store } = await openStore(ctx);

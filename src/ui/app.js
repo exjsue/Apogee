@@ -1,6 +1,8 @@
 // Mounts the app into `root`. The services are passed in, so the same UI runs
 // against the real database and, in the browser tests, against a test one:
-//   { logger, backup, downloadBlob, readFileAsText, requestPersistentStorage, offline }
+//   { logger, backup, downloadBlob, readFileAsText, persistence, offline }
+// `persistence` is { getStatus(), check() } (src/app/persistence.js); without it the
+// Storage card shows no status and no button.
 // `offline` (src/app/offline.js) is optional: without it there is no update
 // banner and no Offline section.
 
@@ -9,6 +11,7 @@ import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
 import { renderBackupView, freshBackupState } from "./backup-view.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
+import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
 const TABS = [
   { id: "log", label: "Log", render: renderLogView },
@@ -88,6 +91,41 @@ export async function mountApp(root, services) {
     showBanner(services.offline.getState());
   }
 
+  // The backup reminder. Shown on every tab while it is due; hidden when the
+  // rule (src/domain/backup-reminder.js) says so, or after a dismissal.
+  const reminder = h("div", { class: "banner", role: "status", hidden: true, "data-region": "backup-reminder" });
+  async function refreshReminder() {
+    const inputs = await services.backup.getReminderInputs();
+    const due = isReminderDue({ now: new Date(), ...inputs });
+    reminder.hidden = !due;
+    if (!due) {
+      reminder.replaceChildren();
+      return;
+    }
+    const message = inputs.lastExportAt === null
+      ? "You have logged workouts but never confirmed a backup. Export one and tap \"I saved the file\"."
+      : "Your last confirmed backup is more than 14 days old. Export again and tap \"I saved the file\".";
+    reminder.replaceChildren(
+      h("span", {}, message),
+      button("Go to Backup", {
+        class: "small primary",
+        "data-action": "reminder-backup",
+        onClick: async () => {
+          state.tab = "backup";
+          await render();
+        },
+      }),
+      button(`Dismiss (back in ${REMINDER_SNOOZE_DAYS} days)`, {
+        class: "small",
+        "data-action": "reminder-dismiss",
+        onClick: async () => {
+          await services.backup.dismissReminder(new Date());
+          await render();
+        },
+      }),
+    );
+  }
+
   root.replaceChildren(
     h(
       "header",
@@ -96,6 +134,7 @@ export async function mountApp(root, services) {
       h("div", { class: "units", role: "group", "aria-label": "Display unit" }, unitButtons),
     ),
     banner,
+    reminder,
     h("nav", { class: "tabs", "aria-label": "Sections" }, tabButtons),
     view,
   );
@@ -121,6 +160,8 @@ export async function mountApp(root, services) {
     }
     if (mine !== latest) return; // a newer render has taken over
     view.replaceChildren(content);
+    // A failed read only hides the reminder; it never blocks the tab.
+    await refreshReminder().catch(() => { reminder.hidden = true; });
     tabButtons.forEach((element) => {
       const current = element.dataset.tab === state.tab;
       element.setAttribute("aria-current", current ? "page" : "false");

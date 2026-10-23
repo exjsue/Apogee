@@ -3,16 +3,18 @@
 
 import { h, button } from "./dom.js";
 import { inspectBackup } from "../backup/backup.js";
+import { describePersistence } from "../app/persistence.js";
 import { formatDateTime, formatCount } from "../domain/format.js";
 
 export const freshBackupState = () => ({
   exportText: null,
+  // The export waiting for the user's "I saved the file" tap: { exportedAt } or null.
+  pendingExport: null,
   importText: "",
   previewText: null,
   preview: null,
   error: null,
   notice: null,
-  persistResult: null,
   confirmReset: false,
 });
 
@@ -41,7 +43,7 @@ function countsTable(file, current) {
 
 export async function renderBackupView(ctx) {
   const b = ctx.state.backup;
-  const { backup, downloadBlob, readFileAsText, requestPersistentStorage } = ctx.services;
+  const { backup, downloadBlob, readFileAsText, persistence } = ctx.services;
   const view = h("section", { class: "view", "aria-label": "Backup" });
 
   if (b.notice) {
@@ -53,11 +55,15 @@ export async function renderBackupView(ctx) {
     b.error = null;
   }
 
+  // Starting a download records an attempt only. The export counts as a backup
+  // when the user taps "I saved the file" (confirmExport).
   async function downloadExport() {
     try {
-      const { blob, filename } = await backup.exportForDownload();
+      const { blob, filename, exportedAt } = await backup.exportForDownload();
       downloadBlob(blob, filename);
-      b.notice = `Export file generated: ${filename}. Check where your browser saved it.`;
+      b.pendingExport = { exportedAt };
+      b.notice = `Export file started: ${filename}. Check where your browser saved it, then tap "I saved the file".`;
+      await backup.recordExportAttempt(exportedAt);
     } catch (error) {
       b.error = error.message;
     }
@@ -65,7 +71,13 @@ export async function renderBackupView(ctx) {
   }
 
   // ---- export ----
-  const lastExportAt = await backup.getLastExportAt();
+  const { lastExportAt, lastExportAttemptAt } = await backup.getExportTimes();
+  const lastLine = lastExportAt === null
+    ? "No export has been confirmed as saved yet."
+    : `Last export confirmed as saved: ${formatDateTime(lastExportAt)}.`;
+  const attemptLine = lastExportAttemptAt !== null && lastExportAttemptAt !== lastExportAt
+    ? ` An export was started ${formatDateTime(lastExportAttemptAt)} but not confirmed.`
+    : "";
   const exportCard = h(
     "section",
     { class: "card", "aria-label": "Export" },
@@ -79,9 +91,7 @@ export async function renderBackupView(ctx) {
     h(
       "p",
       { class: "muted", "data-region": "last-export" },
-      lastExportAt === null
-        ? "You have not generated an export yet."
-        : `Last export generated: ${formatDateTime(lastExportAt)}. GymApp cannot tell whether you saved the file.`,
+      `${lastLine}${attemptLine} GymApp cannot see whether the file was saved; it counts an export only when you confirm.`,
     ),
     h(
       "div",
@@ -91,7 +101,10 @@ export async function renderBackupView(ctx) {
         "data-action": "show-export-text",
         onClick: async () => {
           try {
-            b.exportText = await backup.exportToText();
+            const { text, exportedAt } = await backup.exportSnapshot();
+            b.exportText = text;
+            b.pendingExport = { exportedAt };
+            await backup.recordExportAttempt(exportedAt);
           } catch (error) {
             b.error = error.message;
           }
@@ -100,6 +113,27 @@ export async function renderBackupView(ctx) {
       }),
     ),
   );
+  if (b.pendingExport !== null) {
+    exportCard.append(h(
+      "div",
+      { class: "confirm-saved", "data-region": "export-confirm" },
+      h("p", {}, "Once you have saved the file (or kept the copied text), tap this:"),
+      button("I saved the file", {
+        class: "primary wide",
+        "data-action": "confirm-export-saved",
+        onClick: async () => {
+          try {
+            await backup.confirmExport(b.pendingExport.exportedAt);
+            b.pendingExport = null;
+            b.notice = "Recorded: your last export is confirmed as saved.";
+          } catch (error) {
+            b.error = error.message;
+          }
+          await ctx.rerender();
+        },
+      }),
+    ));
+  }
   if (b.exportText !== null) {
     const box = h("textarea", {
       readonly: true, rows: 8, "data-field": "export-text", "aria-label": "Export text", spellcheck: "false",
@@ -229,30 +263,36 @@ export async function renderBackupView(ctx) {
   ));
 
   // ---- storage ----
-  const persistLine = h("p", { class: "muted", role: "status", "data-region": "persist-result" }, b.persistResult ?? "");
-  view.append(h(
+  // The status comes from the last check stored on this device (run on every launch).
+  const status = persistence ? await persistence.getStatus() : null;
+  const described = describePersistence(status);
+  const storageCard = h(
     "section",
     { class: "card", "aria-label": "Storage" },
     h("h2", {}, "Storage"),
+    h("p", { role: "status", "data-region": "persist-status" }, h("strong", {}, described.label)),
+    described.detail ? h("p", { class: "muted", "data-region": "persist-detail" }, described.detail) : null,
     h(
       "p",
       {},
       "Your data is stored only in this browser. Browsers may delete it when space runs low or after a period of not using the site. "
-      + "You can ask the browser to keep it, but it may refuse, so export regularly.",
+      + "Export regularly, whatever this status says.",
     ),
-    button("Ask the browser to keep my data", {
+  );
+  if (persistence) {
+    storageCard.append(button("Ask the browser again", {
       "data-action": "persist",
       onClick: async () => {
-        const result = await requestPersistentStorage();
-        if (!result.supported) b.persistResult = "This browser does not support asking. Export regularly.";
-        else if (result.error) b.persistResult = `The browser reported an error: ${result.error}`;
-        else if (result.persisted) b.persistResult = "The browser agreed to keep your data. Exporting is still a good idea.";
-        else b.persistResult = "The browser did not promise to keep your data. Export regularly.";
-        persistLine.textContent = b.persistResult;
+        try {
+          await persistence.check();
+        } catch (error) {
+          b.error = error.message;
+        }
+        await ctx.rerender();
       },
-    }),
-    persistLine,
-  ));
+    }));
+  }
+  view.append(storageCard);
 
   // ---- offline ----
   if (ctx.services.offline) view.append(await offlineCard(ctx));

@@ -86,6 +86,7 @@ export function incomingFile() {
 }
 
 const parse = (text) => JSON.parse(text);
+const rawMeta = (adapter, key) => adapter.transaction(["meta"], "readonly", (tx) => tx.get("meta", key));
 const mutate = (text, change) => {
   const doc = parse(text);
   change(doc);
@@ -176,16 +177,140 @@ rule("export: an empty database exports a valid, importable file", async (ctx) =
   assert.deepEqual(await backup.importFromText(text, { confirmReplace: true }), { exercises: 0, workouts: 0, entries: 0, sets: 0 });
 });
 
-rule("export: records when an export was generated, and still returns the text if that write fails", async (ctx) => {
+rule("export: generating an export writes nothing: it is not a backup until confirmed", async (ctx) => {
   const { assert } = ctx;
   const { adapter, backup } = await openBackup(ctx);
   assert.equal(await backup.getLastExportAt(), null);
   await backup.exportToText({ now: "2026-05-05T05:05:05.005Z" });
+  assert.equal(await backup.getLastExportAt(), null);
+  assert.deepEqual(await backup.getExportTimes(), { lastExportAt: null, lastExportAttemptAt: null });
+  assert.equal(await rawMeta(adapter, "lastExportAt"), undefined);
+});
+
+rule("export: starting a download records an attempt, not a confirmed export", async (ctx) => {
+  const { assert } = ctx;
+  const { backup } = await openBackup(ctx);
+  const { exportedAt } = await backup.exportForDownload({ now: NOW });
+  assert.equal(exportedAt, NOW);
+  await backup.recordExportAttempt(exportedAt);
+  assert.deepEqual(await backup.getExportTimes(), { lastExportAt: null, lastExportAttemptAt: NOW });
+  assert.equal(await backup.getLastExportAt(), null);
+});
+
+rule("export: only confirmExport sets lastExportAt, to the export's own time", async (ctx) => {
+  const { assert } = ctx;
+  const { backup } = await openBackup(ctx);
+  await backup.confirmExport("2026-05-05T05:05:05.005Z");
   assert.equal(await backup.getLastExportAt(), "2026-05-05T05:05:05.005Z");
-  const broken = createBackup(failAfter(adapter, { puts: 0 }));
-  const text = await broken.exportToText({ now: NOW });
+  assert.deepEqual(await backup.getExportTimes(), {
+    lastExportAt: "2026-05-05T05:05:05.005Z",
+    lastExportAttemptAt: null,
+  });
+});
+
+rule("export: the text path records an attempt, and only its confirmation counts", async (ctx) => {
+  const { assert } = ctx;
+  const { backup } = await openBackup(ctx);
+  const { text, exportedAt } = await backup.exportSnapshot({ now: NOW });
   assert.equal(parse(text).exportedAt, NOW);
-  assert.equal(await backup.getLastExportAt(), "2026-05-05T05:05:05.005Z");
+  assert.equal(exportedAt, NOW);
+  await backup.recordExportAttempt(exportedAt);
+  assert.equal(await backup.getLastExportAt(), null);
+  await backup.confirmExport(exportedAt);
+  assert.equal(await backup.getLastExportAt(), NOW);
+});
+
+rule("export: a failed attempt or confirmation write rejects; it never reports a backup it did not record", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter } = await openBackup(ctx);
+  const broken = createBackup(failAfter(adapter, { puts: 0 }));
+  await assert.rejects(broken.confirmExport(NOW));
+  await assert.rejects(broken.recordExportAttempt(NOW));
+  assert.equal(await createBackup(adapter).getLastExportAt(), null);
+});
+
+const putMeta = (adapter, key, value) => adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key, value }));
+const metaValue = async (adapter, key) => (await rawMeta(adapter, key))?.value;
+
+rule("migration: an old lastExportAt becomes an attempt, the old key is deleted and the version is set", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  await putMeta(adapter, "lastExportAt", "2026-10-20T10:00:00.000Z");
+  assert.deepEqual(await backup.migrateExportConfirmation(), { migrated: true, movedAttemptAt: "2026-10-20T10:00:00.000Z" });
+  assert.equal(await rawMeta(adapter, "lastExportAt"), undefined);
+  assert.equal(await metaValue(adapter, "lastExportAttemptAt"), "2026-10-20T10:00:00.000Z");
+  assert.equal(await metaValue(adapter, "exportConfirmationVersion"), 1);
+  assert.deepEqual(await backup.getExportTimes(), { lastExportAt: null, lastExportAttemptAt: "2026-10-20T10:00:00.000Z" });
+});
+
+rule("migration: an older existing attempt is replaced by the old value", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  await putMeta(adapter, "lastExportAt", "2026-10-20T10:00:00.000Z");
+  await putMeta(adapter, "lastExportAttemptAt", "2026-10-01T10:00:00.000Z");
+  await backup.migrateExportConfirmation();
+  assert.equal(await metaValue(adapter, "lastExportAttemptAt"), "2026-10-20T10:00:00.000Z");
+  assert.equal(await rawMeta(adapter, "lastExportAt"), undefined);
+});
+
+rule("migration: a newer existing attempt is kept, and the old key is still deleted", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  await putMeta(adapter, "lastExportAt", "2026-10-01T10:00:00.000Z");
+  await putMeta(adapter, "lastExportAttemptAt", "2026-10-20T10:00:00.000Z");
+  assert.deepEqual(await backup.migrateExportConfirmation(), { migrated: true, movedAttemptAt: null });
+  assert.equal(await metaValue(adapter, "lastExportAttemptAt"), "2026-10-20T10:00:00.000Z");
+  assert.equal(await rawMeta(adapter, "lastExportAt"), undefined);
+  assert.equal(await metaValue(adapter, "exportConfirmationVersion"), 1);
+});
+
+rule("migration: already-migrated data is untouched, including a lastExportAt from the new flow", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  await backup.migrateExportConfirmation();
+  await backup.recordExportAttempt("2026-10-22T09:00:00.000Z");
+  await backup.confirmExport("2026-10-22T09:00:00.000Z");
+  assert.deepEqual(await backup.migrateExportConfirmation(), { migrated: false, movedAttemptAt: null });
+  assert.deepEqual(await backup.getExportTimes(), {
+    lastExportAt: "2026-10-22T09:00:00.000Z",
+    lastExportAttemptAt: "2026-10-22T09:00:00.000Z",
+  });
+  assert.equal(await metaValue(adapter, "exportConfirmationVersion"), 1);
+});
+
+rule("migration: a fresh install with no values only sets the version, and running again changes nothing", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, backup } = await openBackup(ctx);
+  assert.deepEqual(await backup.migrateExportConfirmation(), { migrated: true, movedAttemptAt: null });
+  assert.equal(await metaValue(adapter, "exportConfirmationVersion"), 1);
+  assert.deepEqual(await backup.getExportTimes(), { lastExportAt: null, lastExportAttemptAt: null });
+  assert.deepEqual(await backup.migrateExportConfirmation(), { migrated: false, movedAttemptAt: null });
+  assert.deepEqual(await backup.getExportTimes(), { lastExportAt: null, lastExportAttemptAt: null });
+});
+
+rule("migration: a failed write rolls everything back, so the old value is not lost", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter } = await openBackup(ctx);
+  await putMeta(adapter, "lastExportAt", "2026-10-20T10:00:00.000Z");
+  const broken = createBackup(failAfter(adapter, { puts: 1 }));
+  await assert.rejects(broken.migrateExportConfirmation());
+  assert.equal(await metaValue(adapter, "lastExportAt"), "2026-10-20T10:00:00.000Z");
+  assert.equal(await rawMeta(adapter, "exportConfirmationVersion"), undefined);
+  assert.equal(await rawMeta(adapter, "lastExportAttemptAt"), undefined);
+});
+
+rule("reminder inputs: counts workouts and reads the confirmed export and the dismissal", async (ctx) => {
+  const { assert } = ctx;
+  const { store, backup } = await openBackup(ctx);
+  assert.deepEqual(await backup.getReminderInputs(), { lastExportAt: null, dismissedUntil: null, workoutCount: 0 });
+  await seedFull(store);
+  await backup.confirmExport(NOW);
+  await backup.dismissReminder(new Date("2026-10-22T12:00:00.000Z"));
+  assert.deepEqual(await backup.getReminderInputs(), {
+    lastExportAt: NOW,
+    dismissedUntil: "2026-10-29T12:00:00.000Z",
+    workoutCount: (await store.listWorkouts()).length,
+  });
 });
 
 rule("export: exportForDownload gives a blob, a dated filename and the same text", async (ctx) => {
@@ -299,7 +424,7 @@ rule("import: inspectBackup reports what a file holds without reading any databa
 rule("import: leaves the schema version and lastExportAt in meta alone", async (ctx) => {
   const { assert } = ctx;
   const { adapter, backup } = await openBackup(ctx);
-  await backup.exportToText({ now: "2026-05-05T05:05:05.005Z" });
+  await backup.confirmExport("2026-05-05T05:05:05.005Z");
   await backup.importFromText(incomingFile(), { confirmReplace: true });
   assert.equal(await backup.getLastExportAt(), "2026-05-05T05:05:05.005Z");
   const stored = await adapter.transaction(["meta"], "readonly", (tx) => tx.get("meta", "schemaVersion"));

@@ -12,6 +12,14 @@ import {
   createWorkoutEntry,
   createWorkSet,
 } from "../domain/model.js";
+import { snoozeUntil } from "../domain/backup-reminder.js";
+
+// Keys in meta. Meta is not part of exports, so none of these travel in a backup.
+const LAST_EXPORT_KEY = "lastExportAt";
+const EXPORT_ATTEMPT_KEY = "lastExportAttemptAt";
+const REMINDER_DISMISSED_KEY = "reminderDismissedUntil";
+const EXPORT_CONFIRMATION_VERSION_KEY = "exportConfirmationVersion";
+export const EXPORT_CONFIRMATION_VERSION = 1;
 
 export const APP_MARKER = "gymapp-export";
 export const EXPORT_FORMAT = 1;
@@ -203,7 +211,9 @@ export function createBackup(adapter) {
   // identical apart from exportedAt: each type is sorted by id and every
   // record's keys are sorted. The text is also what a user can copy by hand
   // in browsers where file downloads misbehave (iOS).
-  async function exportToText({ now = new Date() } = {}) {
+  // Produces the export and its exportedAt time. Writes nothing: an export is
+  // not a backup until the user confirms they saved it (confirmExport).
+  async function exportSnapshot({ now = new Date() } = {}) {
     const exportedAt = toIsoString(now);
     const data = await adapter.transaction(DATA_STORES, "readonly", async (tx) => {
       const snapshot = {};
@@ -219,36 +229,107 @@ export function createBackup(adapter) {
       exportedAt,
       data: sorted,
     });
+    return { text, exportedAt };
+  }
 
-    // lastExportAt means "when an export was generated". It does not mean a
-    // backup was saved: the app cannot know whether the user kept the file,
-    // or where. It is written after the snapshot, and a failure to write it
-    // does not cost the user the export they asked for.
-    try {
-      await adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key: "lastExportAt", value: exportedAt }));
-    } catch {
-      // The export itself succeeded; only the bookkeeping failed.
-    }
-    return text;
+  async function exportToText(options) {
+    return (await exportSnapshot(options)).text;
   }
 
   // The same export wrapped for a download: the DOM helper in download.js
   // turns this into a file. `text` is kept for the copy-and-paste fallback.
   async function exportForDownload({ now = new Date() } = {}) {
-    const exportedAt = toIsoString(now);
-    const text = await exportToText({ now: exportedAt });
+    const { text, exportedAt } = await exportSnapshot({ now });
     const day = new Date(exportedAt);
     return {
       text,
+      exportedAt,
       blob: new Blob([text], { type: "application/json" }),
       filename: `gymapp-export-${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}.json`,
     };
   }
 
-  // When an export was last generated, as a UTC ISO string, or null if never.
-  async function getLastExportAt() {
-    const stored = await adapter.transaction(["meta"], "readonly", (tx) => tx.get("meta", "lastExportAt"));
+  // Called when a download or a copy of an export starts. Records only the
+  // attempt (lastExportAttemptAt). Not a backup.
+  function recordExportAttempt(exportedAt) {
+    return writeMeta(EXPORT_ATTEMPT_KEY, toIsoString(exportedAt));
+  }
+
+  // Called only when the user taps "I saved the file". Records the export's own
+  // time as the last confirmed export (lastExportAt).
+  function confirmExport(exportedAt) {
+    return writeMeta(LAST_EXPORT_KEY, toIsoString(exportedAt));
+  }
+
+  // The last confirmed export and the last attempt, as UTC ISO strings or null.
+  async function getExportTimes() {
+    return {
+      lastExportAt: await readMeta(LAST_EXPORT_KEY),
+      lastExportAttemptAt: await readMeta(EXPORT_ATTEMPT_KEY),
+    };
+  }
+
+  // The last CONFIRMED export, as a UTC ISO string, or null if never.
+  function getLastExportAt() {
+    return readMeta(LAST_EXPORT_KEY);
+  }
+
+  // One-time migration for data saved before exports needed a confirmation. Those
+  // builds wrote lastExportAt when an export was generated, which is an attempt,
+  // not a confirmed backup. If meta has no exportConfirmationVersion, the old
+  // value moves to lastExportAttemptAt (only if that is empty or older), the old
+  // key is deleted and the version is set. Once the version exists this does
+  // nothing, so a lastExportAt written by the new flow is never touched. All in
+  // one transaction. Resolves { migrated, movedAttemptAt }.
+  async function migrateExportConfirmation() {
+    return adapter.transaction(["meta"], "readwrite", async (tx) => {
+      if ((await tx.get("meta", EXPORT_CONFIRMATION_VERSION_KEY)) !== undefined) {
+        return { migrated: false, movedAttemptAt: null };
+      }
+      let movedAttemptAt = null;
+      const legacy = await tx.get("meta", LAST_EXPORT_KEY);
+      if (legacy !== undefined) {
+        const attempt = await tx.get("meta", EXPORT_ATTEMPT_KEY);
+        const attemptAt = attempt === undefined ? null : attempt.value;
+        const legacyValid = typeof legacy.value === "string" && !Number.isNaN(Date.parse(legacy.value));
+        const attemptValid = typeof attemptAt === "string" && !Number.isNaN(Date.parse(attemptAt));
+        if (legacyValid && (!attemptValid || Date.parse(attemptAt) < Date.parse(legacy.value))) {
+          await tx.put("meta", { key: EXPORT_ATTEMPT_KEY, value: legacy.value });
+          movedAttemptAt = legacy.value;
+        }
+        await tx.delete("meta", LAST_EXPORT_KEY);
+      }
+      await tx.put("meta", { key: EXPORT_CONFIRMATION_VERSION_KEY, value: EXPORT_CONFIRMATION_VERSION });
+      return { migrated: true, movedAttemptAt };
+    });
+  }
+
+  // What the backup reminder needs, read in one transaction.
+  async function getReminderInputs() {
+    return adapter.transaction(["meta", "workouts"], "readonly", async (tx) => {
+      const lastExport = await tx.get("meta", LAST_EXPORT_KEY);
+      const dismissed = await tx.get("meta", REMINDER_DISMISSED_KEY);
+      const workouts = await tx.getAll("workouts");
+      return {
+        lastExportAt: lastExport === undefined ? null : lastExport.value,
+        dismissedUntil: dismissed === undefined ? null : dismissed.value,
+        workoutCount: workouts.length,
+      };
+    });
+  }
+
+  // Hides the reminder for 7 days from `now`.
+  function dismissReminder(now = new Date()) {
+    return writeMeta(REMINDER_DISMISSED_KEY, snoozeUntil(now));
+  }
+
+  async function readMeta(key) {
+    const stored = await adapter.transaction(["meta"], "readonly", (tx) => tx.get("meta", key));
     return stored === undefined ? null : stored.value;
+  }
+
+  function writeMeta(key, value) {
+    return adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key, value }));
   }
 
   // How many records of each type are stored now, so an import screen can
@@ -283,5 +364,18 @@ export function createBackup(adapter) {
     return counts;
   }
 
-  return { exportToText, exportForDownload, getLastExportAt, currentCounts, importFromText };
+  return {
+    exportSnapshot,
+    exportToText,
+    exportForDownload,
+    recordExportAttempt,
+    confirmExport,
+    getExportTimes,
+    getLastExportAt,
+    getReminderInputs,
+    migrateExportConfirmation,
+    dismissReminder,
+    currentCounts,
+    importFromText,
+  };
 }

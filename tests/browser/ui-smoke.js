@@ -6,6 +6,7 @@
 import { createStore } from "../../src/storage/store.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createLogger } from "../../src/app/logger.js";
+import { checkPersistence } from "../../src/app/persistence.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
@@ -61,9 +62,15 @@ async function withApp(ctx, body, { prepare, offline } = {}) {
     backup: createBackup(adapter),
     downloadBlob: (blob, filename) => calls.downloads.push({ blob, filename }),
     readFileAsText: (file) => file.text(),
-    requestPersistentStorage: async () => {
-      calls.persist += 1;
-      return { supported: true, persisted: false, error: null };
+    persistence: {
+      getStatus: () => store.getPersistStatus(),
+      check: () => checkPersistence({
+        request: async () => {
+          calls.persist += 1;
+          return { supported: true, persisted: false, error: null };
+        },
+        store,
+      }),
     },
     ...(offline ? { offline } : {}),
   };
@@ -367,13 +374,18 @@ rule("ui: export warns that the file is unencrypted, downloads, and shows copyab
     const warning = await waitFor(() => region(root, "export-warning"), "the export warning");
     ctx.assert.ok(/not encrypted/.test(warning.textContent));
     ctx.assert.ok(/cannot control where/.test(warning.textContent));
-    ctx.assert.ok(/not generated an export yet/.test(region(root, "last-export").textContent));
+    ctx.assert.ok(/No export has been confirmed/.test(region(root, "last-export").textContent));
 
     click(action(root, "download-export"));
     await waitFor(() => calls.downloads.length === 1, "the download to start");
     ctx.assert.ok(/^gymapp-export-\d{4}-\d{2}-\d{2}\.json$/.test(calls.downloads[0].filename));
     ctx.assert.equal(calls.downloads[0].blob.type, "application/json");
-    await waitFor(() => /Last export generated/.test(region(root, "last-export").textContent), "the last export time");
+    await waitFor(() => /started .* not confirmed/.test(region(root, "last-export").textContent), "the export attempt");
+    ctx.assert.ok(/No export has been confirmed/.test(region(root, "last-export").textContent));
+    ctx.assert.equal(region(root, "export-confirm") !== null, true);
+    click(action(root, "confirm-export-saved"));
+    await waitFor(() => /Last export confirmed as saved/.test(region(root, "last-export").textContent), "the confirmed export");
+    ctx.assert.equal(region(root, "export-confirm"), null);
 
     click(action(root, "show-export-text"));
     const box = await waitFor(() => field(root, "export-text"), "the export text box");
@@ -382,6 +394,16 @@ rule("ui: export warns that the file is unencrypted, downloads, and shows copyab
     ctx.assert.equal(doc.data.exercises.length, SEED_EXERCISES.length);
     ctx.assert.ok(action(root, "select-export-text") && action(root, "copy-export-text"));
   });
+});
+
+rule("ui: the backup reminder shows with a logged workout and no confirmed export, and dismiss hides it", async (ctx) => {
+  const prepare = (store) => store.saveWorkout({ id: "w-remind", startedAt: "2026-10-20T10:00:00.000Z" });
+  await withApp(ctx, async ({ root }) => {
+    const reminder = await waitFor(() => region(root, "backup-reminder"), "the reminder");
+    ctx.assert.equal(reminder.hidden, false);
+    click(action(root, "reminder-dismiss"));
+    await waitFor(() => region(root, "backup-reminder").hidden === true, "the reminder to hide");
+  }, { prepare });
 });
 
 rule("ui: import shows the file's counts next to the current ones and needs explicit confirmation", async (ctx) => {
@@ -606,7 +628,7 @@ rule("ui: asking for persistent storage reports the browser's answer", async (ct
   await withApp(ctx, async ({ root, calls }) => {
     await goToTab(root, "backup");
     click(await waitFor(() => action(root, "persist"), "the storage button"));
-    await waitFor(() => /did not promise/.test(region(root, "persist-result").textContent), "the answer");
+    await waitFor(() => /Not guaranteed/.test(region(root, "persist-status").textContent), "the answer");
     ctx.assert.equal(calls.persist, 1);
   });
 });

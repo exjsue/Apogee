@@ -10,6 +10,7 @@ import { createBackup } from "../backup/backup.js";
 import { downloadBlob, readFileAsText } from "../backup/download.js";
 import { createLogger } from "../app/logger.js";
 import { createOffline } from "../app/offline.js";
+import { checkPersistence } from "../app/persistence.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../domain/seed.js";
 
 const root = document.getElementById("app");
@@ -23,15 +24,26 @@ async function start() {
     // The offline copy needs no database, so a problem with the service worker
     // can never keep the app itself from opening.
     const offline = createOffline();
-    await mountApp(root, {
+    const persistence = {
+      getStatus: () => store.getPersistStatus(),
+      check: () => checkPersistence({ request: requestPersistentStorage, store }),
+    };
+    const backup = createBackup(adapter);
+    // Runs before the UI reads any export time. A failure only means it is tried
+    // again next launch; it never keeps the app from opening.
+    await backup.migrateExportConfirmation().catch(() => {});
+    const app = await mountApp(root, {
       logger: createLogger(store),
-      backup: createBackup(adapter),
+      backup,
       downloadBlob,
       readFileAsText,
-      requestPersistentStorage,
+      persistence,
       offline,
     });
     offline.start().catch(() => {}); // registers the worker (see shouldRegister) and watches for updates
+    // Asked on every launch and not awaited: a browser prompt must never hold up
+    // the app. When the answer is stored, the open tab is redrawn to show it.
+    persistence.check().then(() => app.render(), () => {});
   } catch (error) {
     root.replaceChildren(
       h("h1", {}, "GymApp"),
