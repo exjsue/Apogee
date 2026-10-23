@@ -415,7 +415,7 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
     tick.dispatchEvent(new Event("change", { bubbles: true }));
     ctx.assert.equal(confirmButton.disabled, false);
     click(confirmButton);
-    await waitForText(root, "Imported 1 workout and 2 logged sets, with an exercise library of 1.");
+    await waitForText(root, "Imported 1 workout and 2 logged sets. Everything else was replaced.");
     ctx.assert.deepEqual((await store.listExercises()).map((exercise) => exercise.id), ["ex-row"]);
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 2 });
   });

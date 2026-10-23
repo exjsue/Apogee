@@ -184,7 +184,7 @@ export async function renderBackupView(ctx) {
         confirmButton.disabled = true;
         try {
           const counts = await backup.importFromText(b.previewText, { confirmReplace: true });
-          b.notice = `Imported ${formatCount(counts.workouts, "workout")} and ${formatCount(counts.sets, "logged set")}, with an exercise library of ${counts.exercises}. Everything else was replaced.`;
+          b.notice = `Imported ${formatCount(counts.workouts, "workout")} and ${formatCount(counts.sets, "logged set")}. Everything else was replaced.`;
           b.importText = "";
           b.previewText = null;
           b.preview = null;
