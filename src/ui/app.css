@@ -258,20 +258,45 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 .banner > span:first-child { flex: 1 1 14rem; }
 .banner-error { flex-basis: 100%; color: var(--danger); }
 
-/* set rows, the check and the rest line under each row */
+/* set rows: a header row, then one grid row per set (set number, weight, reps, the check, a small delete) */
 
-.sets li.set-row { display: block; padding: 8px 0; }
-.set-main { display: flex; align-items: center; gap: 8px; }
-.set-text, .set-planned { flex: 1; min-width: 0; }
-.set-planned { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.set-fields { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.set-fields input { width: 4.5rem; min-height: 40px; }
-.set-fields select { display: inline-block; width: auto; min-height: 40px; }
-.set-index { font-variant-numeric: tabular-nums; }
+.set-grid {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1.4fr) minmax(0, 1fr) 44px 44px;
+  column-gap: 6px;
+  align-items: center;
+}
+.set-head { margin-top: 2px; padding-bottom: 2px; font-size: 0.75rem; color: var(--muted); }
+.set-head > span { text-align: center; white-space: nowrap; }
+.sets li.set-row { display: block; padding: 6px 0; }
+.set-num { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The weight and reps cells: a field at least 44 px high with text of at least 16 px
+   (a smaller size makes iOS zoom the page when the field is focused). */
+.cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cell input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 1rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.unit-suffix { flex: none; font-size: 0.875rem; color: var(--muted); }
+.cell-text {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-height: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cell-value { white-space: nowrap; }
+.cell-note { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 
 /* The check: an outlined circle; checked, a filled circle with a check in the page colour. */
 button.check-toggle {
-  flex: none;
   width: 44px;
   height: 44px;
   min-height: 44px;
@@ -286,18 +311,34 @@ button.check-toggle {
 }
 button.check-toggle[aria-pressed="true"] { background: var(--text); color: var(--bg); }
 
+/* Delete: a small x, still a 44 px target; the question appears on a line of its own. */
+button.delete-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.delete-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.delete-confirm button { min-height: 44px; }
+
 .rest-line {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  padding-left: calc(1.5rem + 6px);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 .rest-time { font-variant-numeric: tabular-nums; }
 button.rest-time {
-  min-height: 32px;
-  padding: 2px 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 8px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -308,8 +349,15 @@ button.rest-time {
 .rest-ring { fill: none; stroke: currentColor; stroke-width: 1.5; }
 .rest-pie { fill: currentColor; }
 .rest-icon[data-phase="done"] .rest-ring { display: none; }
+
+/* The forms for typing a rest time: a digits field, what it reads as, Save and Cancel. */
+.rest-line.editing { padding-left: 0; }
 .rest-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rest-editor input { width: 6rem; min-height: 40px; }
+.rest-editor input { width: 5rem; min-height: 44px; padding: 0 4px; font-size: 1rem; text-align: center; font-variant-numeric: tabular-nums; }
+.rest-editor button { min-height: 44px; padding: 0 12px; }
+.rest-editor p { flex-basis: 100%; margin: 0; }
+.rest-preview { min-width: 3.25rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.entry > button[data-action="add-set"] { min-height: 44px; margin-top: 2px; }
 
 /* Done: the whole row is greyed with the muted colour (checked for contrast in
    tests/rest-timer.test.js), the time reads 0:00 and the outline is gone. */

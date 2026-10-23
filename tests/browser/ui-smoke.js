@@ -102,12 +102,21 @@ async function pickExercise(root, query, id) {
   await waitFor(() => lastPlanned(root), "the first unchecked row");
 }
 
+// A row has no unit menu of its own: a blank row is entered in the unit chosen with the
+// kg/lb toggle at the top. So entering a set in a unit means choosing that unit first.
+async function useUnit(root, unit) {
+  const toggle = $(root, `[data-action="set-unit"][data-unit="${unit}"]`);
+  if (toggle.getAttribute("aria-pressed") === "true") return;
+  click(toggle);
+  await waitFor(() => $(root, `[data-action="set-unit"][data-unit="${unit}"]`).getAttribute("aria-pressed") === "true", `the ${unit} choice`);
+}
+
 // Types into the last unchecked row and taps its check.
 async function submitSet(root, reps, weight, unit = "kg") {
+  await useUnit(root, unit);
   const row = lastPlanned(root);
   setValue(row.querySelector('[data-field="reps"]'), reps);
   setValue(row.querySelector('[data-field="weight"]'), weight);
-  row.querySelector('[data-field="unit"]').value = unit;
   click(row.querySelector('[data-action="toggle-set"]'));
 }
 
@@ -149,16 +158,20 @@ rule("ui: choosing an exercise adds an unchecked row; checking it logs the set i
     ctx.assert.ok(root.textContent.includes("No workout in progress"));
     await logOneSet(root, "8", "100", "kg");
     await waitForText(root, "Started");
-    ctx.assert.ok(root.textContent.includes("8 reps"));
-    // stored in kg, displayed in the default unit (lb) with the original shown
-    ctx.assert.ok(root.textContent.includes("220.5 lb (entered 100 kg)"));
+    const logged = () => $(root, 'li[data-kind="logged"]');
+    ctx.assert.equal(logged().querySelector('[data-cell="reps"]').textContent, "8");
+    ctx.assert.equal(logged().querySelector('[data-cell="weight"] .cell-note'), null); // entered in kg, shown in kg
+    // stored in kg; with the display switched to lb it shows the converted weight and what was entered
+    click($(root, '[data-action="set-unit"][data-unit="lb"]'));
+    await waitFor(() => logged().querySelector('[data-cell="weight"] .cell-value').textContent === "220.5 lb", "the weight in lb");
+    ctx.assert.equal(logged().querySelector('[data-cell="weight"] .cell-note').textContent, "entered 100 kg");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
-    // Add set gives a new unchecked row, prefilled from the last set
+    // Add set gives a new unchecked row, prefilled from the last set, and it keeps the unit that weight was entered in
     click(action(root, "add-set"));
     const next = await waitFor(() => lastPlanned(root), "the new row");
     ctx.assert.equal(next.querySelector('[data-field="reps"]').value, "8");
     ctx.assert.equal(next.querySelector('[data-field="weight"]').value, "100");
-    ctx.assert.equal(next.querySelector('[data-field="unit"]').value, "kg");
+    ctx.assert.equal(next.querySelector(".unit-suffix").textContent, "kg");
   });
 });
 
@@ -190,6 +203,9 @@ rule("ui: negative and too-large numbers say what is wrong", async (ctx) => {
     await waitFor(() => errorText(root) === "reps is above the maximum of 1000", "the reps maximum message");
     await submitSet(root, "8", "2500.5", "kg");
     await waitFor(() => errorText(root) === "weight is above the maximum of 2500 kg", "the kg maximum message");
+    // A row that already holds a weight keeps the unit it was typed in, so the pound limit is
+    // checked on a blank row (another exercise) with the lb choice made first.
+    await pickExercise(root, "squat", "seed-barbell-squat");
     await submitSet(root, "8", "5512", "lb");
     await waitFor(() => errorText(root) === "weight is above the maximum of 5511.55 lb", "the lb maximum message");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
@@ -200,9 +216,13 @@ rule("ui: the kg/lb toggle changes what is displayed and is remembered, never wh
   await withApp(ctx, async ({ root, store, adapter }) => {
     await pickExercise(root, "bench", BENCH);
     await logOneSet(root, "5", "100", "kg");
-    click(root.querySelector('[data-action="set-unit"][data-unit="kg"]'));
-    await waitFor(() => root.textContent.includes("5 reps · 100 kg") && !root.textContent.includes("entered"), "weights shown in kg");
+    const weightCell = () => root.querySelector('li[data-kind="logged"] [data-cell="weight"]');
+    await waitFor(() => weightCell().querySelector(".cell-value").textContent === "100 kg" && !weightCell().querySelector(".cell-note"), "weights shown in kg");
     ctx.assert.equal(await store.getPreferredUnit(), "kg");
+    click(root.querySelector('[data-action="set-unit"][data-unit="lb"]'));
+    await waitFor(() => weightCell().querySelector(".cell-value").textContent === "220.5 lb", "weights shown in lb");
+    ctx.assert.equal(weightCell().querySelector(".cell-note").textContent, "entered 100 kg");
+    ctx.assert.equal(await store.getPreferredUnit(), "lb");
     const sets = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
     ctx.assert.deepEqual(sets.map((s) => [s.weightValue, s.weightUnit]), [[100, "kg"]]);
   });
@@ -427,10 +447,11 @@ rule("ui: a set goes template, resting, done; tapping its time edits only that r
 
     // tapping the time edits this set's rest; a bad value says what is expected
     click(row().querySelector('[data-action="edit-rest"]'));
-    setValue(await waitFor(() => field(root, "rest"), "the rest editor"), "90");
+    setValue(await waitFor(() => field(root, "rest"), "the rest editor"), "abc");
     click(action(root, "save-rest"));
-    await waitFor(() => /look like 3:00/.test(region(root, "rest-error").textContent) && !region(root, "rest-error").hidden, "the format message");
-    setValue(field(root, "rest"), "0:02");
+    await waitFor(() => /Enter the rest time, e.g. 300 for 3:00/.test(region(root, "rest-error").textContent) && !region(root, "rest-error").hidden, "the format message");
+    ctx.assert.equal(field(root, "rest").value, "abc"); // what was typed stays
+    setValue(field(root, "rest"), "2"); // digits only: 2 is 0:02
     click(action(root, "save-rest"));
     await waitFor(() => row().querySelector("button.rest-time") && time() === "0:02", "the new rest");
 
@@ -539,11 +560,11 @@ rule("ui: the three-dot menu has Update Rest Timers: it sets the exercise defaul
     await waitFor(() => action(root, "exercise-menu").getAttribute("aria-expanded") === "true", "the menu to open");
     click(await waitFor(() => action(root, "update-rest-timers"), "the menu item"));
     const input = await waitFor(() => field(root, "default-rest"), "the editor");
-    ctx.assert.equal(input.value, "3:00");
-    setValue(input, "90"); // a bare number is refused
+    ctx.assert.equal(input.value, "300"); // digits, like a microwave timer: 300 is 3:00
+    setValue(input, "abc"); // not a time
     click(action(root, "save-default-rest"));
-    await waitFor(() => !region(root, "default-rest-error").hidden && /look like 3:00/.test(region(root, "default-rest-error").textContent), "the format message");
-    setValue(field(root, "default-rest"), "1:30");
+    await waitFor(() => !region(root, "default-rest-error").hidden && /Enter the rest time, e.g. 300 for 3:00/.test(region(root, "default-rest-error").textContent), "the format message");
+    setValue(field(root, "default-rest"), "1:30"); // a typed colon still works
     click(action(root, "save-default-rest"));
     await waitFor(() => !field(root, "default-rest"), "the editor to close");
 
@@ -555,7 +576,7 @@ rule("ui: the three-dot menu has Update Rest Timers: it sets the exercise defaul
     // the editor starts from the current default next time
     click(action(root, "exercise-menu"));
     click(await waitFor(() => action(root, "update-rest-timers"), "the menu item"));
-    ctx.assert.equal((await waitFor(() => field(root, "default-rest"), "the editor")).value, "1:30");
+    ctx.assert.equal((await waitFor(() => field(root, "default-rest"), "the editor")).value, "130");
     click(action(root, "cancel-default-rest"));
     await waitFor(() => !field(root, "default-rest"), "the editor to close");
   });

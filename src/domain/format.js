@@ -72,9 +72,18 @@ export function formatWeight(value, fromUnit, toUnit) {
 // "100 kg" in the unit it was entered in; "220.5 lb (entered 100 kg)" when
 // shown in the other unit. A weight of 0 is bodyweight.
 export function formatSetWeight(value, storedUnit, displayUnit) {
-  if (value === 0) return "Bodyweight";
-  const shown = `${formatWeight(value, storedUnit, displayUnit)} ${displayUnit}`;
-  return storedUnit === displayUnit ? shown : `${shown} (entered ${value} ${storedUnit})`;
+  const { text, entered } = formatSetWeightParts(value, storedUnit, displayUnit);
+  return entered === null ? text : `${text} (entered ${entered})`;
+}
+
+// The same, in two parts, so a narrow screen can put the note on its own line:
+// { text: "220.5 lb", entered: "100 kg" }, entered is null when the units match.
+export function formatSetWeightParts(value, storedUnit, displayUnit) {
+  if (value === 0) return { text: "Bodyweight", entered: null };
+  return {
+    text: `${formatWeight(value, storedUnit, displayUnit)} ${displayUnit}`,
+    entered: storedUnit === displayUnit ? null : `${value} ${storedUnit}`,
+  };
 }
 
 // A stored UTC timestamp as local date and time. `locale` and `timeZone`

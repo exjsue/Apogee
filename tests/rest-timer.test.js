@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   DEFAULT_REST_SECONDS, MAX_REST_SECONDS, formatRest, parseRest, startTimer, remainingMs, remainingSeconds,
   isRunning, fractionRemaining, rescheduleTimer, setPhase, pieGeometry,
+  parseRestEntry, previewRestEntry, restToDigits, REST_ENTRY_HELP,
 } from "../src/domain/rest-timer.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -155,4 +156,55 @@ test("styles: the timer uses tabular numerals, done is greyed with the muted col
   assert.match(css, /\.set-row\[data-phase="done"\]\s*\{\s*color:\s*var\(--muted\)/);
   assert.match(css, /\.rest-icon\[data-phase="done"\] \.rest-ring\s*\{\s*display:\s*none/);
   assert.ok(!/opacity/.test(/\/\* set rows[\s\S]*$/.exec(css)[0]), "the done state must not rely on opacity");
+});
+
+// ---- typing a rest time with digits only (an iPhone keypad has no colon) ----
+
+test("rest entry: the last two digits are seconds and the rest are minutes, and seconds above 59 roll into minutes", () => {
+  const read = (text) => parseRestEntry(text);
+  assert.deepEqual(["300", "130", "45", "5", "1000"].map(read), [180, 90, 45, 5, 600]); // 3:00, 1:30, 0:45, 0:05, 10:00
+  assert.deepEqual(["90", "99", "190", "960"].map(read), [90, 99, 150, 600]); // 1:30, 1:39, 2:30, 10:00
+  assert.deepEqual(["0045", "0300", " 300 "].map(read), [45, 180, 180]); // leading zeros and spaces around it
+});
+
+test("rest entry: zero is allowed, and the longest is 60:00 whichever way it is typed", () => {
+  assert.deepEqual(["0", "00", "000", "0:00"].map(parseRestEntry), [0, 0, 0, 0]);
+  assert.equal(parseRestEntry("6000"), 3600);
+  assert.equal(parseRestEntry("60:00"), 3600);
+  for (const tooLong of ["6001", "6100", "9999", "60:01", "1234567"]) {
+    assert.throws(() => parseRestEntry(tooLong), /can't be longer than 60:00/, tooLong);
+  }
+});
+
+test("rest entry: blank, junk and half-typed times are refused with the one plain message, and never become a number", () => {
+  for (const junk of ["", "   ", "abc", "-5", "3.5", "1 30", "3:5", "3:60", "1:00:00", ":30", "3:", "1e3", "０３００", null, undefined, 300, {}]) {
+    assert.throws(() => parseRestEntry(junk), (error) => error.message === REST_ENTRY_HELP, String(junk));
+  }
+  assert.equal(REST_ENTRY_HELP, "Enter the rest time, e.g. 300 for 3:00");
+});
+
+test("rest entry: a typed colon still works (hardware keyboards) and means the same as the digits", () => {
+  assert.deepEqual(["3:00", "1:30", "0:45", "0:05", "10:00", "60:00", " 2:15 "].map(parseRestEntry), [180, 90, 45, 5, 600, 3600, 135]);
+  for (const seconds of [0, 5, 45, 90, 180, 600, 3599, 3600]) {
+    assert.equal(parseRestEntry(formatRest(seconds)), parseRestEntry(restToDigits(seconds)));
+  }
+});
+
+test("rest entry: the digits an editor starts with read back to the same rest for every rest, so saving untouched changes nothing", () => {
+  assert.deepEqual([0, 5, 45, 75, 180, 600, 3600].map(restToDigits), ["0", "5", "45", "115", "300", "1000", "6000"]);
+  for (let seconds = 0; seconds <= 3600; seconds += 1) {
+    assert.equal(parseRestEntry(restToDigits(seconds)), seconds, `${seconds} s`);
+  }
+  assert.throws(() => restToDigits(3601), /60:00/);
+  assert.throws(() => restToDigits(-1), /rest/);
+});
+
+test("rest entry: the live preview shows the time as it will be read, nothing for blank, and the reason when it cannot be", () => {
+  assert.deepEqual(previewRestEntry("300"), { ok: true, seconds: 180, label: "3:00", message: "" });
+  assert.equal(previewRestEntry("90").label, "1:30");
+  assert.equal(previewRestEntry("5").label, "0:05");
+  assert.deepEqual(previewRestEntry(""), { ok: false, label: "", message: "" });
+  assert.deepEqual(previewRestEntry("  "), { ok: false, label: "", message: "" });
+  assert.equal(previewRestEntry("x").message, REST_ENTRY_HELP);
+  assert.match(previewRestEntry("6001").message, /60:00/);
 });

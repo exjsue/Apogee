@@ -1,13 +1,13 @@
-// The exercise blocks of the Log tab: set rows with a check, the rest line under
-// each row, and the ticker that keeps a running timer on screen. Only builds
-// elements and passes input to the logger; every rule (what can be checked, how
-// a timer behaves) lives in src/app and src/domain.
+// The exercise blocks of the Log tab: a header row, then one row per set (set
+// number, weight, reps, the check, a compact delete), the rest line under each row,
+// and the ticker that keeps a running timer on screen. Only builds elements and
+// passes input to the logger; every rule (what can be checked, how a timer
+// behaves) lives in src/app and src/domain.
 
 import { h, button } from "./dom.js";
-import { WEIGHT_UNITS } from "../domain/model.js";
-import { formatCount, formatSetWeight } from "../domain/format.js";
+import { formatSetWeightParts } from "../domain/format.js";
 import {
-  formatRest, parseRest, pieGeometry, isRunning, remainingSeconds, fractionRemaining,
+  formatRest, parseRestEntry, previewRestEntry, restToDigits, pieGeometry, isRunning, remainingSeconds, fractionRemaining,
 } from "../domain/rest-timer.js";
 
 // Runs an action; a failure becomes the message shown at the top of the view.
@@ -21,37 +21,12 @@ export async function perform(ctx, action) {
   await ctx.rerender();
 }
 
-function rowLine(row, index, unit) {
-  return `${index + 1}. ${formatCount(row.reps, "rep")} · ${formatSetWeight(row.weight, row.unit, unit)}`;
-}
+// ---- delete: a small × in the row, and the question on a line of its own ----
 
-function deleteControl(ctx, row, exerciseName, index) {
+function deleteButton(ctx, row, exerciseName, index) {
   const log = ctx.state.log;
-  if (log.confirmDeleteSetId === row.id) {
-    return h(
-      "span",
-      { class: "inline-confirm" },
-      "Delete this set?",
-      button("Delete", {
-        class: "danger small",
-        "data-action": "confirm-delete-set",
-        onClick: () => perform(ctx, async () => {
-          log.confirmDeleteSetId = null;
-          await ctx.services.logger.deleteSet(row.id);
-        }),
-      }),
-      button("Keep", {
-        class: "small",
-        "data-action": "keep-set",
-        onClick: () => {
-          log.confirmDeleteSetId = null;
-          return ctx.rerender();
-        },
-      }),
-    );
-  }
-  return button("Delete", {
-    class: "small",
+  return button("×", {
+    class: "delete-button",
     "data-action": "delete-set",
     "aria-label": `Delete set ${index + 1} of ${exerciseName}`,
     onClick: () => {
@@ -59,6 +34,31 @@ function deleteControl(ctx, row, exerciseName, index) {
       return ctx.rerender();
     },
   });
+}
+
+function deleteConfirm(ctx, row) {
+  const log = ctx.state.log;
+  return h(
+    "div",
+    { class: "delete-confirm", role: "group", "aria-label": "Confirm delete" },
+    h("span", {}, "Delete this set?"),
+    button("Delete", {
+      class: "danger small",
+      "data-action": "confirm-delete-set",
+      onClick: () => perform(ctx, async () => {
+        log.confirmDeleteSetId = null;
+        await ctx.services.logger.deleteSet(row.id);
+      }),
+    }),
+    button("Keep", {
+      class: "small",
+      "data-action": "keep-set",
+      onClick: () => {
+        log.confirmDeleteSetId = null;
+        return ctx.rerender();
+      },
+    }),
+  );
 }
 
 // ---- the rest icon: a ring and a pie, cloned from the template in index.html ----
@@ -80,12 +80,29 @@ function paintIcon(icon, phase, fraction) {
   if (pie !== null) pie.setAttribute("d", phase === "done" ? "" : pieGeometry(fraction).d);
 }
 
+// ---- typing a rest time: digits only, like a microwave timer ----
+
+// The field both rest editors use. It starts with the current rest as digits ("300"
+// for 3:00) and shows, as you type, the time it will be read as.
+function restField(fieldName, label, seconds) {
+  const digits = restToDigits(seconds);
+  const input = h("input", {
+    type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off",
+    "data-field": fieldName, "aria-label": label, value: digits, "data-saved": digits,
+  });
+  const preview = h("span", { class: "rest-preview", "data-region": "rest-preview", "aria-live": "polite" });
+  const show = () => {
+    const read = previewRestEntry(input.value);
+    preview.textContent = read.ok ? `= ${read.label}` : "";
+  };
+  input.addEventListener("input", show);
+  show();
+  return { input, preview };
+}
+
 function restEditor(ctx, row) {
   const log = ctx.state.log;
-  const input = h("input", {
-    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "rest",
-    "aria-label": "Rest time (minutes:seconds)", value: formatRest(row.restSeconds), "data-saved": formatRest(row.restSeconds),
-  });
+  const { input, preview } = restField("rest", "Rest time in digits: 300 means 3:00", row.restSeconds);
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "rest-error" });
   return h(
     "form",
@@ -94,7 +111,7 @@ function restEditor(ctx, row) {
       onSubmit: async (event) => {
         event.preventDefault();
         try {
-          await ctx.services.logger.setRest(row.id, parseRest(input.value));
+          await ctx.services.logger.setRest(row.id, parseRestEntry(input.value));
           log.editingRestId = null;
           await ctx.rerender();
         } catch (caught) {
@@ -104,6 +121,7 @@ function restEditor(ctx, row) {
       },
     },
     input,
+    preview,
     h("button", { type: "submit", class: "small primary", "data-action": "save-rest" }, "Save"),
     button("Cancel", {
       class: "small",
@@ -125,7 +143,7 @@ function restLine(ctx, row, index, exerciseName) {
   paintIcon(icon, row.phase, row.fraction);
   let time;
   if (ctx.state.log.editingRestId === row.id && row.phase !== "done") {
-    return h("div", { class: "rest-line", "data-timer-for": row.id }, restEditor(ctx, row));
+    return h("div", { class: "rest-line editing", "data-timer-for": row.id }, restEditor(ctx, row));
   }
   if (row.phase === "done") {
     time = h("span", { class: "rest-time", "data-region": "rest-time" }, "0:00");
@@ -143,44 +161,60 @@ function restLine(ctx, row, index, exerciseName) {
   return h("div", { class: "rest-line", "data-timer-for": row.id }, time, icon);
 }
 
-function plannedFields(ctx, row, index, exerciseName) {
+// ---- the cells of a row ----
+
+// An unchecked row: a weight field with its unit written after it, and a reps field.
+// The unit is the one the weight will be STORED in: the row's own once it has a weight
+// (a prefilled or restored weight is never silently read in another unit), and the
+// app's kg/lb choice while the weight is still blank. There is no per-row choice.
+function plannedCells(ctx, row, index, exerciseName) {
   const { logger } = ctx.services;
+  const unit = row.weight.trim() === "" ? ctx.unit : row.unit;
   // data-saved is what the plan holds for this input; pull-to-refresh compares it with
   // what is typed to know whether a reload would lose text.
-  const save = (input, field) => {
+  const save = (input, fields) => {
     const sent = input.value;
-    return logger.updatePlannedSet(row.id, { [field]: sent }).then(() => { input.dataset.saved = sent; }, () => {});
+    return logger.updatePlannedSet(row.id, fields(sent)).then(() => { input.dataset.saved = sent; }, () => {});
   };
-  const reps = h("input", {
-    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "reps", value: row.reps, "data-saved": row.reps,
-    "aria-label": `Reps, set ${index + 1} of ${exerciseName}`, onChange: (event) => save(event.target, "reps"),
-  });
   const weight = h("input", {
-    type: "text", inputmode: "decimal", autocomplete: "off", "data-field": "weight", value: row.weight, "data-saved": row.weight,
-    "aria-label": `Weight, set ${index + 1} of ${exerciseName}`, onChange: (event) => save(event.target, "weight"),
+    type: "text", inputmode: "decimal", enterkeyhint: "next", autocomplete: "off", "data-field": "weight",
+    value: row.weight, "data-saved": row.weight, "aria-label": `Weight in ${unit}, set ${index + 1} of ${exerciseName}`,
+    onChange: (event) => save(event.target, (sent) => ({ weight: sent, unit })),
   });
-  const unit = h(
-    "select",
-    {
-      "data-field": "unit", "aria-label": `Weight unit, set ${index + 1} of ${exerciseName}`,
-      onChange: (event) => save(event.target, "unit"),
-    },
-    WEIGHT_UNITS.map((value) => h("option", { value, selected: value === row.unit }, value)),
-  );
-  return { reps, weight, unit, element: h("span", { class: "set-fields" }, reps, " reps ", weight, unit) };
+  const reps = h("input", {
+    type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off", "data-field": "reps",
+    value: row.reps, "data-saved": row.reps, "aria-label": `Reps, set ${index + 1} of ${exerciseName}`,
+    onChange: (event) => save(event.target, (sent) => ({ reps: sent })),
+  });
+  return {
+    weight,
+    reps,
+    unit,
+    weightCell: h("span", { class: "cell cell-weight" }, weight, h("span", { class: "unit-suffix" }, unit)),
+    repsCell: h("span", { class: "cell cell-reps" }, reps),
+  };
+}
+
+// A checked row: the same cells as plain text. The weight is shown in the app's
+// kg/lb choice, with the unit it was entered in on a small line of its own when that differs.
+function loggedCells(ctx, row) {
+  const parts = formatSetWeightParts(row.weight, row.unit, ctx.unit);
+  return {
+    weightCell: h(
+      "span",
+      { class: "cell cell-weight cell-text", "data-cell": "weight" },
+      h("span", { class: "cell-value" }, parts.text),
+      parts.entered === null ? null : h("span", { class: "cell-note" }, `entered ${parts.entered}`),
+    ),
+    repsCell: h("span", { class: "cell cell-reps cell-text", "data-cell": "reps" }, String(row.reps)),
+  };
 }
 
 function setRow(ctx, row, index, exerciseName) {
   const { logger } = ctx.services;
   const logged = row.kind === "logged";
-  let fields = null;
-  let content;
-  if (logged) {
-    content = h("span", { class: "set-text" }, rowLine(row, index, ctx.unit));
-  } else {
-    fields = plannedFields(ctx, row, index, exerciseName);
-    content = h("span", { class: "set-planned" }, h("span", { class: "set-index" }, `${index + 1}.`), fields.element);
-  }
+  const planned = logged ? null : plannedCells(ctx, row, index, exerciseName);
+  const cells = logged ? loggedCells(ctx, row) : planned;
   const toggle = button("✓", {
     class: "check-toggle",
     "data-action": "toggle-set",
@@ -189,25 +223,46 @@ function setRow(ctx, row, index, exerciseName) {
     "aria-label": `${logged ? "Uncheck" : "Check"} set ${index + 1} of ${exerciseName}`,
     onClick: () => perform(ctx, async () => {
       if (logged) await logger.uncheckSet(row.id);
-      else await logger.checkSet(row.id, { reps: fields.reps.value, weight: fields.weight.value, unit: fields.unit.value });
+      else await logger.checkSet(row.id, { reps: planned.reps.value, weight: planned.weight.value, unit: planned.unit });
     }),
   });
   return h(
     "li",
     { class: "set-row", "data-set-id": row.id, "data-phase": row.phase, "data-kind": row.kind, "data-warmup": row.isWarmup ? "true" : null },
-    h("div", { class: "set-main" }, content, toggle, deleteControl(ctx, row, exerciseName, index)),
+    h(
+      "div",
+      { class: "set-main set-grid" },
+      h("span", { class: "set-num" }, String(index + 1)),
+      cells.weightCell,
+      cells.repsCell,
+      toggle,
+      deleteButton(ctx, row, exerciseName, index),
+    ),
+    ctx.state.log.confirmDeleteSetId === row.id ? deleteConfirm(ctx, row) : null,
     restLine(ctx, row, index, exerciseName),
+  );
+}
+
+// The column titles above an exercise's rows. They repeat what each field's own
+// label says, so a screen reader skips them.
+function setHead() {
+  return h(
+    "div",
+    { class: "set-head set-grid", "aria-hidden": "true" },
+    h("span", {}, "Set"),
+    h("span", {}, "Weight"),
+    h("span", {}, "Reps"),
+    h("span", { class: "head-check" }, "Done"),
+    h("span", {}),
   );
 }
 
 // The inline form behind Update Rest Timers: one default rest for the exercise.
 function defaultRestEditor(ctx, block) {
   const log = ctx.state.log;
-  const input = h("input", {
-    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "default-rest",
-    "aria-label": `Default rest for ${block.exerciseName} (minutes:seconds)`, value: formatRest(block.defaultRestSeconds),
-    "data-saved": formatRest(block.defaultRestSeconds),
-  });
+  const { input, preview } = restField(
+    "default-rest", `Default rest for ${block.exerciseName} in digits: 300 means 3:00`, block.defaultRestSeconds,
+  );
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "default-rest-error" });
   return h(
     "form",
@@ -217,7 +272,7 @@ function defaultRestEditor(ctx, block) {
       onSubmit: async (event) => {
         event.preventDefault();
         try {
-          await ctx.services.logger.updateRestTimers(block.exerciseId, parseRest(input.value));
+          await ctx.services.logger.updateRestTimers(block.exerciseId, parseRestEntry(input.value));
           log.editingDefaultFor = null;
           await ctx.rerender();
         } catch (caught) {
@@ -230,9 +285,10 @@ function defaultRestEditor(ctx, block) {
       "p",
       { class: "muted" },
       `Default rest for ${block.exerciseName}. It also applies to this exercise's unchecked sets in this workout. `
-      + "Checked sets keep the rest they were logged with.",
+      + "Checked sets keep the rest they were logged with. Type the time as digits: 300 is 3:00.",
     ),
     input,
+    preview,
     h("button", { type: "submit", class: "small primary", "data-action": "save-default-rest" }, "Save"),
     button("Cancel", {
       class: "small",
@@ -287,7 +343,7 @@ function blockHeader(ctx, block) {
   return header;
 }
 
-// One block per exercise: its rows and an Add set button (which shows no timer).
+// One block per exercise: its header row, its rows and an Add set button (which shows no timer).
 export function exerciseBlocks(ctx, blocks) {
   return h(
     "div",
@@ -297,6 +353,7 @@ export function exerciseBlocks(ctx, blocks) {
       { class: "entry", "data-exercise-id": block.exerciseId },
       blockHeader(ctx, block),
       ctx.state.log.editingDefaultFor === block.exerciseId ? defaultRestEditor(ctx, block) : null,
+      setHead(),
       h("ol", { class: "sets" }, block.rows.map((row, index) => setRow(ctx, row, index, block.exerciseName))),
       button("Add set", {
         class: "small",

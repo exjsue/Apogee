@@ -96,3 +96,48 @@ export function pieGeometry(fraction, { cx = 12, cy = 12, r = 10 } = {}) {
   const largeArc = f > 0.5 ? 1 : 0;
   return { kind: "wedge", d: `M ${cx} ${cy} L ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${cx} ${round(cy - r)} Z` };
 }
+
+// ---- typing a rest time on a phone ----
+//
+// An iPhone's numeric keypad has no ":" key, so a rest time is typed as digits, like
+// a microwave timer: the last two digits are seconds and the digits before them are
+// minutes. "300" is 3:00, "130" is 1:30, "45" is 0:45, "5" is 0:05, "1000" is 10:00.
+// Seconds above 59 roll into minutes ("90" is 1:30). A typed colon ("3:00") still
+// works for hardware keyboards. The longest rest is still 60:00, and 0 is allowed.
+
+export const REST_ENTRY_HELP = "Enter the rest time, e.g. 300 for 3:00";
+const MAX_ENTRY_DIGITS = 6;
+
+// Seconds from what was typed. Throws an Error with a plain message that the
+// screen shows as it is: REST_ENTRY_HELP for anything that is not a time, or the
+// "can't be longer than 60:00" message for a time over the maximum.
+export function parseRestEntry(text) {
+  const value = typeof text === "string" ? text.trim() : "";
+  const colon = /^(\d{1,2}):([0-5]\d)$/.exec(value);
+  if (colon !== null) return requireRest(Number(colon[1]) * 60 + Number(colon[2]));
+  if (!/^\d+$/.test(value)) fail(REST_ENTRY_HELP);
+  if (value.length > MAX_ENTRY_DIGITS) fail("rest can't be longer than 60:00");
+  const minutes = Number(value.slice(0, -2) || 0);
+  const seconds = Number(value.slice(-2));
+  return requireRest(minutes * 60 + seconds);
+}
+
+// What to show next to the field while typing: the time as it will be read, or the
+// reason it cannot be. Blank shows nothing yet.
+export function previewRestEntry(text) {
+  if (typeof text !== "string" || text.trim() === "") return { ok: false, label: "", message: "" };
+  try {
+    const seconds = parseRestEntry(text);
+    return { ok: true, seconds, label: formatRest(seconds), message: "" };
+  } catch (error) {
+    return { ok: false, label: "", message: error.message };
+  }
+}
+
+// A rest in seconds as the digits that read back to it: 180 is "300", 75 is "115",
+// 3600 is "6000". It is what an editor starts with, so saving without changing
+// anything can never change a rest.
+export function restToDigits(seconds) {
+  requireRest(seconds);
+  return String(Math.floor(seconds / 60) * 100 + (seconds % 60));
+}
