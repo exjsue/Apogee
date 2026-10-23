@@ -1,4 +1,4 @@
-// Generates the app icons: a solid dark-green square with an off-white letter G,
+// Generates the app icons: a solid dark-green square with an off-white letter A,
 // as PNG files. Node built-ins only (zlib does the PNG compression).
 // Usage: node tools/make-icons.js     (rewrites icons/icon-180.png, -192, -512)
 //
@@ -15,33 +15,42 @@ export const BACKGROUND = [0x1f, 0x5f, 0x4a];
 export const FOREGROUND = [0xf7, 0xf6, 0xf2];
 export const SIZES = [180, 192, 512];
 
-// The G, in units of the icon's width: a ring around the centre with a gap at
-// the upper right, and a bar from the centre out to the ring on the right.
-// The whole letter stays inside a circle of radius 0.30, so it also survives
-// the cropping that "maskable" icons get.
-const OUTER = 0.30;
-const INNER = 0.19;
-const GAP_FROM_DEGREES = 8;
-const GAP_TO_DEGREES = 52;
-const BAR_HALF_HEIGHT = 0.05;
+// The A, in units of the icon's width, measured from the centre (y points up): two
+// strokes with rounded ends that meet at the top and spread to the feet, and a
+// crossbar between them. The whole letter stays inside a circle of radius 0.30
+// around the centre, so it also survives the cropping that "maskable" icons get.
+const APEX_Y = 0.235; // centre of the rounded top
+const FOOT_X = 0.15;
+const FOOT_Y = -0.2;
+const HALF_WIDTH = 0.045; // half the stroke width
+const BAR_Y = -0.06;
+const BAR_HALF_HEIGHT = 0.035;
 
-export function isInsideG(u, v) {
-  const dx = u - 0.5;
-  const dy = 0.5 - v; // y points up here
-  const radius = Math.hypot(dx, dy);
-  const degrees = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const inRing = radius >= INNER && radius <= OUTER && !(degrees > GAP_FROM_DEGREES && degrees < GAP_TO_DEGREES);
-  const inBar = dx >= 0 && dx <= OUTER && Math.abs(dy) <= BAR_HALF_HEIGHT;
-  return inRing || inBar;
+function distanceToSegment(px, py, ax, ay, bx, by) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / (abx * abx + aby * aby)));
+  return Math.hypot(px - (ax + t * abx), py - (ay + t * aby));
 }
 
-// Fraction of the pixel covered by the G, from a 4 x 4 grid of samples (smooth edges).
+// How far from the middle a leg is at height y.
+const legX = (y) => (FOOT_X * (APEX_Y - y)) / (APEX_Y - FOOT_Y);
+
+export function isInsideA(u, v) {
+  const x = u - 0.5;
+  const y = 0.5 - v;
+  const leg = (sign) => distanceToSegment(x, y, 0, APEX_Y, sign * FOOT_X, FOOT_Y) <= HALF_WIDTH;
+  const bar = Math.abs(y - BAR_Y) <= BAR_HALF_HEIGHT && Math.abs(x) <= legX(BAR_Y);
+  return leg(-1) || leg(1) || bar;
+}
+
+// Fraction of the pixel covered by the A, from a 4 x 4 grid of samples (smooth edges).
 function coverage(x, y, size) {
   const samples = 4;
   let inside = 0;
   for (let sy = 0; sy < samples; sy++) {
     for (let sx = 0; sx < samples; sx++) {
-      if (isInsideG((x + (sx + 0.5) / samples) / size, (y + (sy + 0.5) / samples) / size)) inside += 1;
+      if (isInsideA((x + (sx + 0.5) / samples) / size, (y + (sy + 0.5) / samples) / size)) inside += 1;
     }
   }
   return inside / (samples * samples);

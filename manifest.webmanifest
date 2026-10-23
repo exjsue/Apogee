@@ -1,6 +1,6 @@
 {
-  "name": "GymApp",
-  "short_name": "GymApp",
+  "name": "Apogee",
+  "short_name": "Apogee",
   "description": "A private workout tracker. Your data stays on this device.",
   "start_url": "./",
   "scope": "./",

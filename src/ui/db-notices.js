@@ -2,7 +2,7 @@
 // They are not part of a tab, because they happen while the app is starting or
 // after the connection to the database was closed.
 //
-//   blocked        another GymApp tab or window still has the database open, so the
+//   blocked        another Apogee tab or window still has the database open, so the
 //                  update of its storage cannot start yet. The page carries on by
 //                  itself as soon as the other one closes.
 //   versionchange  another tab updated the database. This page closed its connection
@@ -12,10 +12,10 @@ import { h, button } from "./dom.js";
 
 export const DATABASE_MESSAGES = {
   blocked:
-    "GymApp is waiting for another GymApp tab or window to close so it can update its storage. "
+    "Apogee is waiting for another Apogee tab or window to close so it can update its storage. "
     + "Close the other ones; this page carries on by itself.",
   versionchange:
-    "GymApp was updated in another tab. Reload this page to keep using it. Your workouts are not affected.",
+    "Apogee was updated in another tab. Reload this page to keep using it. Your workouts are not affected.",
 };
 
 // Puts the notice at the top of `root`, replacing an earlier one. `reload` is a

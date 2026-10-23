@@ -60,20 +60,24 @@ test("icons: each is a valid, opaque 8-bit RGB PNG of the right size", () => {
   }
 });
 
-test("icons: a solid color square with a G: background in the corners, letter in the middle", () => {
+test("icons: a solid color square with an A: background in the corners, letter in the middle", () => {
   for (const size of SIZES) {
     const png = decode(fs.readFileSync(iconPath(size)));
     const at = (u, v) => png.pixel(Math.floor(u * size), Math.floor(v * size));
     for (const [u, v] of [[0.01, 0.01], [0.99, 0.01], [0.01, 0.99], [0.99, 0.99], [0.5, 0.05]]) {
       assert.deepEqual(at(u, v), BACKGROUND, `${size}px background at ${u},${v}`);
     }
-    assert.deepEqual(at(0.5 - 0.245, 0.5), FOREGROUND, "the left side of the ring");
-    assert.deepEqual(at(0.5, 0.5 - 0.245), FOREGROUND, "the top of the ring");
-    assert.deepEqual(at(0.5, 0.5 + 0.245), FOREGROUND, "the bottom of the ring");
-    assert.deepEqual(at(0.62, 0.5), FOREGROUND, "the bar of the G");
-    assert.deepEqual(at(0.5, 0.5 - 0.1), BACKGROUND, "the hole inside the ring, above the bar");
-    // the opening at the upper right (about 30 degrees): background, so it reads as a G and not an O
-    assert.deepEqual(at(0.5 + 0.245 * Math.cos(Math.PI / 6), 0.5 - 0.245 * Math.sin(Math.PI / 6)), BACKGROUND, "the gap");
+    assert.deepEqual(at(0.5, 0.265), FOREGROUND, "the top of the A");
+    assert.deepEqual(at(0.419, 0.5), FOREGROUND, "the left leg");
+    assert.deepEqual(at(0.581, 0.5), FOREGROUND, "the right leg");
+    assert.deepEqual(at(0.35, 0.7), FOREGROUND, "the left foot");
+    assert.deepEqual(at(0.65, 0.7), FOREGROUND, "the right foot");
+    assert.deepEqual(at(0.5, 0.56), FOREGROUND, "the crossbar");
+    // the openings that make it an A and not a solid triangle
+    assert.deepEqual(at(0.5, 0.45), BACKGROUND, "the hole above the crossbar");
+    assert.deepEqual(at(0.5, 0.65), BACKGROUND, "the gap between the legs below the crossbar");
+    assert.deepEqual(at(0.3, 0.5), BACKGROUND, "outside the left leg");
+    assert.deepEqual(at(0.5, 0.2), BACKGROUND, "above the top of the A");
   }
 });
 
@@ -94,5 +98,5 @@ test("icons: the letter stays well inside the square, so maskable cropping would
 
 test("icons: the CRC implementation agrees with the standard check value and with zlib", () => {
   assert.equal(crc32(Buffer.from("123456789")), 0xcbf43926);
-  if (typeof zlib.crc32 === "function") assert.equal(crc32(Buffer.from("GymApp")), zlib.crc32(Buffer.from("GymApp")));
+  if (typeof zlib.crc32 === "function") assert.equal(crc32(Buffer.from("Apogee")), zlib.crc32(Buffer.from("Apogee")));
 });

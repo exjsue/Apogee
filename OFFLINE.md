@@ -1,6 +1,6 @@
 # Offline use
 
-GymApp can start and run with no network once it has been opened online one time. A small program in the browser, the **service worker** (`sw.js`), keeps a copy of the app's own files and serves them. Your workouts are not part of that copy: they live in the browser's database (IndexedDB), exactly as before, and the worker never reads or writes them.
+Apogee can start and run with no network once it has been opened online one time. A small program in the browser, the **service worker** (`sw.js`), keeps a copy of the app's own files and serves them. Your workouts are not part of that copy: they live in the browser's database (IndexedDB), exactly as before, and the worker never reads or writes them.
 
 The worker only talks to the same website the app came from, to save the app's files and to check whether a new version exists. It never contacts any other host.
 
@@ -44,7 +44,7 @@ What each action removes:
 | Action | Offline copy | Your workouts |
 |---|---|---|
 | Backup, Offline, **Reset offline copy** | removed (this app's worker and caches only) | **kept** |
-| Developer tools: Unregister the worker, delete the `gymapp-precache-…` caches | removed | **kept** |
+| Developer tools: Unregister the worker, delete the `apogee-precache-…` caches | removed | **kept** |
 | Clear site data / Website Data | removed | **DELETED** |
 
 Try these in order, and stop when it works:
@@ -52,8 +52,8 @@ Try these in order, and stop when it works:
 1. **Backup tab, Offline, Reset offline copy** (it asks first). It removes this app's worker and caches only. Then reload the page while online; the app downloads itself again. Your workouts are untouched.
 2. **If the page itself is broken and the Backup tab will not open:** a fixed version, once published, installs and waits. Close **every** tab and installed window of the app (on an iPhone, swipe the app away in the app switcher), then open it again. The fixed version is in charge from the first file on. No data is deleted by this.
 3. **On a computer, if that does not help:** open the browser's developer tools on the app's page.
-   - Chrome or Edge: Application, **Service Workers**, Unregister the worker of this site; then Application, **Cache Storage**, delete the caches whose names start with `gymapp-precache-` (leave any other caches alone).
-   - Firefox: `about:serviceworkers`, Unregister the entry for this site; then developer tools, Storage, **Cache Storage**, delete the `gymapp-precache-…` caches.
+   - Chrome or Edge: Application, **Service Workers**, Unregister the worker of this site; then Application, **Cache Storage**, delete the caches whose names start with `apogee-precache-` (leave any other caches alone).
+   - Firefox: `about:serviceworkers`, Unregister the entry for this site; then developer tools, Storage, **Cache Storage**, delete the `apogee-precache-…` caches.
    - Do **not** press "Clear site data" in the same panel. Reload afterwards.
 4. **On an iPhone there are no developer tools.** To check whether the site itself works, open it in a **Private** tab: that has separate, empty storage, and your normal data stays where it is.
 5. **Last resort, and only after an export:** clear the site's data, open the app, and **Import** the export file (Backup tab). If you cannot reach the Backup tab to make an export, do not clear anything: try steps 2 and 3 first.
@@ -64,4 +64,4 @@ Keep a recent export. Browsers can remove a site's data on their own, and an exp
 
 - Backup tab, Offline: is it Ready? Which version?
 - Developer tools, Application (Chrome) or Storage (Firefox): the Service Workers list shows the worker's state (activated, waiting) and Cache Storage shows which versions are saved.
-- The first 8 characters of the version are in the Backup tab and are the first 8 characters of the cache's name (`gymapp-precache-<version>`).
+- The first 8 characters of the version are in the Backup tab and are the first 8 characters of the cache's name (`apogee-precache-<version>`).

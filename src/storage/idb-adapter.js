@@ -114,7 +114,7 @@ export function createIdbAdapter({
           onBlocked(); // and keep waiting: the open goes on by itself once the other connection closes
           return;
         }
-        fail(new Error(`Opening database "${name}" is blocked by another open connection to it. Close other GymApp tabs.`));
+        fail(new Error(`Opening database "${name}" is blocked by another open connection to it. Close other Apogee tabs.`));
       };
       idbRequest.onerror = () => {
         const error = idbRequest.error;
@@ -124,7 +124,7 @@ export function createIdbAdapter({
         }
         fail(error && error.name === "VersionError"
           ? new Error(
-            `Database "${name}" was saved by a newer version of GymApp than this code (schema ${version}). `
+            `Database "${name}" was saved by a newer version of Apogee than this code (schema ${version}). `
             + "The data was not changed. Update the app.",
           )
           : error);

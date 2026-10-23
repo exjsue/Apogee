@@ -56,8 +56,8 @@ async function start() {
     persistence.check().then(() => app.render(), () => {});
   } catch (error) {
     root.replaceChildren(
-      h("h1", {}, "GymApp"),
-      h("p", { class: "error", role: "alert" }, `GymApp could not open its database: ${error.message}`),
+      h("h1", {}, "Apogee"),
+      h("p", { class: "error", role: "alert" }, `Apogee could not open its database: ${error.message}`),
     );
   }
 }

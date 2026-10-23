@@ -65,7 +65,7 @@ export async function seedFull(store) {
 export function fileOf(parts = {}, overrides = {}) {
   const { exercises = [], workouts = [], entries = [], sets = [] } = parts;
   return JSON.stringify({
-    app: "gymapp-export",
+    app: "apogee-export",
     exportFormat: 1,
     schemaVersion: SCHEMA_VERSION,
     exportedAt: NOW,
@@ -134,7 +134,7 @@ rule("export: the document has the specified shape", async (ctx) => {
   await seedFull(store);
   const doc = parse(await backup.exportToText({ now: NOW }));
   assert.deepEqual(Object.keys(doc), ["app", "exportFormat", "schemaVersion", "exportedAt", "data"]);
-  assert.equal(doc.app, "gymapp-export");
+  assert.equal(doc.app, "apogee-export");
   assert.equal(doc.exportFormat, 1);
   assert.equal(doc.schemaVersion, SCHEMA_VERSION);
   assert.equal(doc.exportedAt, NOW);
@@ -320,7 +320,7 @@ rule("export: exportForDownload gives a blob, a dated filename and the same text
   const { text, blob, filename } = await backup.exportForDownload({ now: NOW });
   assert.equal(await blob.text(), text);
   assert.equal(blob.type, "application/json");
-  assert.ok(/^gymapp-export-\d{4}-\d{2}-\d{2}\.json$/.test(filename));
+  assert.ok(/^apogee-export-\d{4}-\d{2}-\d{2}\.json$/.test(filename));
   assert.equal(parse(text).exportedAt, NOW);
 });
 
@@ -473,7 +473,7 @@ rule("import: rejects text that is not valid JSON, without quoting it", async (c
   await expectRejected(env, '{"private-note": SECRET-TOKEN-1', /not valid JSON/);
   const message = await messageOf(env.backup.importFromText('{"private-note": SECRET-TOKEN-1', { confirmReplace: true }));
   assert.ok(!message.includes("SECRET-TOKEN-1"));
-  for (const text of ["[]", "null", "42", '"text"']) await expectRejected(env, text, /not a GymApp export/);
+  for (const text of ["[]", "null", "42", '"text"']) await expectRejected(env, text, /not an Apogee export/);
 });
 
 rule("import: rejects a wrong app marker or export format", async (ctx) => {
@@ -481,8 +481,8 @@ rule("import: rejects a wrong app marker or export format", async (ctx) => {
   const env = { assert, ...(await openBackup(ctx)) };
   await seedFull(env.store);
   const good = incomingFile();
-  await expectRejected(env, mutate(good, (d) => { d.app = "strong-export"; }), /not a GymApp export/);
-  await expectRejected(env, mutate(good, (d) => { delete d.app; }), /not a GymApp export/);
+  await expectRejected(env, mutate(good, (d) => { d.app = "strong-export"; }), /not an Apogee export/);
+  await expectRejected(env, mutate(good, (d) => { delete d.app; }), /not an Apogee export/);
   await expectRejected(env, mutate(good, (d) => { d.exportFormat = 2; }), /exportFormat/);
   await expectRejected(env, mutate(good, (d) => { d.exportFormat = "1"; }), /exportFormat/);
 });
@@ -844,7 +844,7 @@ rule("import: a file from a newer schema is refused before anything is written",
   await seedFull(store);
   const before = await backup.exportToText({ now: NOW });
   const future = mutate(incomingFile(), (doc) => { doc.schemaVersion = SCHEMA_VERSION + 1; });
-  await assert.rejects(backup.importFromText(future, { confirmReplace: true }), /newer version of GymApp.*Update the app/);
+  await assert.rejects(backup.importFromText(future, { confirmReplace: true }), /newer version of Apogee.*Update the app/);
   assert.equal(await backup.exportToText({ now: NOW }), before);
   assert.equal((await rawMeta(adapter, "schemaVersion")).value, SCHEMA_VERSION);
 });

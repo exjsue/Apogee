@@ -497,7 +497,7 @@ test("status: reports whether it is switched off on this address", async () => {
 test("reset: removes this app's registration and only the caches with its prefix", async () => {
   const caches = fakeCaches({
     [`${CACHE_PREFIX}old`]: ["a"], [`${CACHE_PREFIX}new`]: ["a"],
-    "other-site-cache": ["x"], "workbox-precache-v2": ["y"], "gymapp-precache": ["z"], "my-gymapp-precache-1": ["w"],
+    "other-site-cache": ["x"], "workbox-precache-v2": ["y"], "apogee-precache": ["z"], "my-apogee-precache-1": ["w"],
   });
   const world = setup({ caches });
   await world.offline.start();
@@ -505,16 +505,16 @@ test("reset: removes this app's registration and only the caches with its prefix
   const result = await world.offline.resetOfflineCopy();
   assert.deepEqual(result, { unregistered: true, cachesDeleted: 2 });
   assert.equal(registration.unregistered, true);
-  assert.deepEqual([...caches.store.keys()].sort(), ["gymapp-precache", "my-gymapp-precache-1", "other-site-cache", "workbox-precache-v2"]);
+  assert.deepEqual([...caches.store.keys()].sort(), ["apogee-precache", "my-apogee-precache-1", "other-site-cache", "workbox-precache-v2"]);
 });
 
 test("reset: with another cache prefix (as the browser test page uses) the app's real caches are out of reach", async () => {
   const caches = fakeCaches({
-    [`${CACHE_PREFIX}real-version`]: ["a"], "gymapp-test-precache-one": ["a"], "gymapp-test-precache-two": ["a"], "other-site-cache": ["x"],
+    [`${CACHE_PREFIX}real-version`]: ["a"], "apogee-test-precache-one": ["a"], "apogee-test-precache-two": ["a"], "other-site-cache": ["x"],
   });
   const location = new URL(PAGE);
   const offline = createOffline({
-    serviceWorker: new FakeServiceWorker(), caches, document: fakeDocument(), location, timers: fakeTimers(), cachePrefix: "gymapp-test-precache-",
+    serviceWorker: new FakeServiceWorker(), caches, document: fakeDocument(), location, timers: fakeTimers(), cachePrefix: "apogee-test-precache-",
   });
   assert.deepEqual(await offline.resetOfflineCopy(), { unregistered: false, cachesDeleted: 2 });
   assert.deepEqual([...caches.store.keys()].sort(), [`${CACHE_PREFIX}real-version`, "other-site-cache"]);
@@ -595,7 +595,7 @@ test("the default timers call the window's own functions, not as methods of anot
 });
 
 test("the cache prefix is the one the worker uses", () => {
-  assert.equal(CACHE_PREFIX, "gymapp-precache-");
+  assert.equal(CACHE_PREFIX, "apogee-precache-");
   assert.ok(UPDATE_CHECK_INTERVAL_MS === 3600000);
 });
 

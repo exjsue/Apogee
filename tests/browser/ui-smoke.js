@@ -131,7 +131,7 @@ const goToTab = async (root, tab) => {
 
 rule("ui: the app mounts with the log screen, tabs and unit toggle", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
-    ctx.assert.ok(root.textContent.includes("GymApp"));
+    ctx.assert.ok(root.textContent.includes("Apogee"));
     ctx.assert.ok(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
     ctx.assert.equal(root.querySelectorAll('[data-action="tab"]').length, 3);
     const pressed = [...root.querySelectorAll('[data-action="set-unit"]')].filter((b) => b.getAttribute("aria-pressed") === "true");
@@ -398,7 +398,7 @@ rule("ui: export warns that the file is unencrypted, downloads, and shows copyab
 
     click(action(root, "download-export"));
     await waitFor(() => calls.downloads.length === 1, "the download to start");
-    ctx.assert.ok(/^gymapp-export-\d{4}-\d{2}-\d{2}\.json$/.test(calls.downloads[0].filename));
+    ctx.assert.ok(/^apogee-export-\d{4}-\d{2}-\d{2}\.json$/.test(calls.downloads[0].filename));
     ctx.assert.equal(calls.downloads[0].blob.type, "application/json");
     await waitFor(() => /started .* not confirmed/.test(region(root, "last-export").textContent), "the export attempt");
     ctx.assert.ok(/No export has been confirmed/.test(region(root, "last-export").textContent));
@@ -410,7 +410,7 @@ rule("ui: export warns that the file is unencrypted, downloads, and shows copyab
     click(action(root, "show-export-text"));
     const box = await waitFor(() => field(root, "export-text"), "the export text box");
     const doc = JSON.parse(box.value);
-    ctx.assert.equal(doc.app, "gymapp-export");
+    ctx.assert.equal(doc.app, "apogee-export");
     ctx.assert.equal(doc.data.exercises.length, SEED_EXERCISES.length);
     ctx.assert.ok(action(root, "select-export-text") && action(root, "copy-export-text"));
   });
@@ -565,7 +565,7 @@ rule("ui: the database notices say what is going on, and the reload button is on
   const root = document.createElement("div");
   let reloads = 0;
   const blocked = showDatabaseNotice(root, "blocked", { reload: () => { reloads += 1; } });
-  ctx.assert.ok(/waiting for another GymApp tab/.test(blocked.textContent));
+  ctx.assert.ok(/waiting for another Apogee tab/.test(blocked.textContent));
   ctx.assert.equal(blocked.querySelector("button"), null);
   const changed = showDatabaseNotice(root, "versionchange", { reload: () => { reloads += 1; } });
   ctx.assert.equal(root.querySelectorAll('[data-region="database-notice"]').length, 1); // replaced, not stacked
@@ -861,8 +861,8 @@ rule("ui: Reset offline copy asks first, Cancel changes nothing, and the workout
 // the app's real worker registration is outside what it unregisters). It also
 // checks that the app's registration and caches are still there afterwards.
 rule("ui: the real reset removes only this app's caches and leaves the database, other caches and the real offline copy alone", async (ctx) => {
-  const prefix = "gymapp-test-precache-";
-  const decoys = ["other-site-cache", "gymapp-test-precache", "my-gymapp-test-precache-1", `${CACHE_PREFIX}decoy-with-the-real-prefix`];
+  const prefix = "apogee-test-precache-";
+  const decoys = ["other-site-cache", "apogee-test-precache", "my-apogee-test-precache-1", `${CACHE_PREFIX}decoy-with-the-real-prefix`];
   const ours = [`${prefix}old`, `${prefix}new`];
   const testScope = new URL("./offline-test-scope/", location.href); // an address no real registration has
   const offline = createOffline({

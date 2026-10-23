@@ -22,7 +22,7 @@ const REMINDER_DISMISSED_KEY = "reminderDismissedUntil";
 const EXPORT_CONFIRMATION_VERSION_KEY = "exportConfirmationVersion";
 export const EXPORT_CONFIRMATION_VERSION = 1;
 
-export const APP_MARKER = "gymapp-export";
+export const APP_MARKER = "apogee-export";
 export const EXPORT_FORMAT = 1;
 
 // Size limit for an import file. UNIT: bytes of UTF-8 text, which is exactly
@@ -144,15 +144,15 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
     // The engine's own message can quote part of the file, so it is not passed on.
     fail("The file is not valid JSON");
   }
-  if (!isPlainObject(doc)) fail("This is not a GymApp export file");
-  if (doc.app !== APP_MARKER) fail("This is not a GymApp export file");
+  if (!isPlainObject(doc)) fail("This is not an Apogee export file");
+  if (doc.app !== APP_MARKER) fail("This is not an Apogee export file");
   if (doc.exportFormat !== EXPORT_FORMAT) fail("This export file format is not supported (exportFormat)");
   if (!Number.isInteger(doc.schemaVersion) || doc.schemaVersion < 1) {
     fail("The file's schemaVersion is not valid");
   }
   if (doc.schemaVersion > SCHEMA_VERSION) {
     fail(
-      `This file was exported by a newer version of GymApp (schema ${doc.schemaVersion}); `
+      `This file was exported by a newer version of Apogee (schema ${doc.schemaVersion}); `
       + `this version understands schema ${SCHEMA_VERSION}. Update the app to import it.`,
     );
   }
@@ -260,7 +260,7 @@ export function createBackup(adapter) {
       text,
       exportedAt,
       blob: new Blob([text], { type: "application/json" }),
-      filename: `gymapp-export-${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}.json`,
+      filename: `apogee-export-${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}.json`,
     };
   }
 

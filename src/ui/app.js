@@ -130,7 +130,7 @@ export async function mountApp(root, services) {
     h(
       "header",
       { class: "top" },
-      h("h1", {}, "GymApp"),
+      h("h1", {}, "Apogee"),
       h("div", { class: "units", role: "group", "aria-label": "Display unit" }, unitButtons),
     ),
     banner,

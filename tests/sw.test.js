@@ -104,7 +104,7 @@ function createWorld({ version = "v2", files = FILES, caches = {}, failing = [],
     },
     importScripts(file) {
       log.imported.push(file);
-      self.GYMAPP_PRECACHE = { version, files };
+      self.APOGEE_PRECACHE = { version, files };
     },
   };
   vm.createContext(sandbox);
@@ -145,7 +145,7 @@ function createWorld({ version = "v2", files = FILES, caches = {}, failing = [],
     setOffline: (value) => {
       offline = value;
     },
-    cacheName: `gymapp-precache-${version}`,
+    cacheName: `apogee-precache-${version}`,
   };
 }
 
@@ -165,10 +165,10 @@ test("sw install: caches every listed file, by absolute address, bypassing the H
   const result = await world.dispatch("install");
   assert.equal(result.error, null);
   assert.equal(world.log.addAll.length, 1);
-  assert.equal(world.log.addAll[0].name, "gymapp-precache-abc");
+  assert.equal(world.log.addAll[0].name, "apogee-precache-abc");
   assert.deepEqual(world.log.addAll[0].requests.map((r) => r.url), FILES.map(url));
   assert.ok(world.log.addAll[0].requests.every((r) => r.init.cache === "reload"));
-  assert.deepEqual([...world.store.get("gymapp-precache-abc").keys()], FILES.map(url));
+  assert.deepEqual([...world.store.get("apogee-precache-abc").keys()], FILES.map(url));
 });
 
 test("sw install: never activates itself (no skipWaiting, no claim) so the new version waits", async () => {
@@ -179,21 +179,21 @@ test("sw install: never activates itself (no skipWaiting, no claim) so the new v
 });
 
 test("sw install: if any one file cannot be cached the install fails, and the old cache and no half-made new one remain", async () => {
-  const old = { "gymapp-precache-v1": FILES.map(url) };
+  const old = { "apogee-precache-v1": FILES.map(url) };
   for (const bad of FILES) {
     const world = createWorld({ version: "v2", caches: old, failing: [url(bad)] });
     const result = await world.dispatch("install");
     assert.ok(result.error instanceof TypeError, `install must fail when ${bad} fails`);
-    assert.ok(!world.store.has("gymapp-precache-v2"), "no partial cache of the new version is left behind");
-    assert.deepEqual([...world.store.get("gymapp-precache-v1").keys()], FILES.map(url), "the old cache is exactly as it was");
+    assert.ok(!world.store.has("apogee-precache-v2"), "no partial cache of the new version is left behind");
+    assert.deepEqual([...world.store.get("apogee-precache-v1").keys()], FILES.map(url), "the old cache is exactly as it was");
     assert.equal(world.log.skipWaiting, 0);
   }
 });
 
 test("sw install: starts the version's cache from empty, so nothing stale from an earlier try survives", async () => {
-  const world = createWorld({ version: "v2", caches: { "gymapp-precache-v2": [url("./leftover.js"), url("./index.html")] } });
+  const world = createWorld({ version: "v2", caches: { "apogee-precache-v2": [url("./leftover.js"), url("./index.html")] } });
   await world.dispatch("install");
-  assert.deepEqual([...world.store.get("gymapp-precache-v2").keys()], FILES.map(url));
+  assert.deepEqual([...world.store.get("apogee-precache-v2").keys()], FILES.map(url));
 });
 
 // ---- activate ----
@@ -202,16 +202,16 @@ test("sw activate: deletes older caches of this app, and only those, and takes o
   const world = createWorld({
     version: "v3",
     caches: {
-      "gymapp-precache-v1": [], "gymapp-precache-v2": [], "gymapp-precache-v3": FILES.map(url),
-      "other-site-cache": [url("./x")], "workbox-precache-v2-https://example.test/": [], "gymapp-precache": [], "my-gymapp-precache-v1": [],
+      "apogee-precache-v1": [], "apogee-precache-v2": [], "apogee-precache-v3": FILES.map(url),
+      "other-site-cache": [url("./x")], "workbox-precache-v2-https://example.test/": [], "apogee-precache": [], "my-apogee-precache-v1": [],
     },
   });
   const result = await world.dispatch("activate");
   assert.equal(result.error, null);
   assert.deepEqual([...world.store.keys()].sort(), [
-    "gymapp-precache", "gymapp-precache-v3", "my-gymapp-precache-v1", "other-site-cache", "workbox-precache-v2-https://example.test/",
+    "apogee-precache", "apogee-precache-v3", "my-apogee-precache-v1", "other-site-cache", "workbox-precache-v2-https://example.test/",
   ]);
-  assert.deepEqual(world.log.deleted.sort(), ["gymapp-precache-v1", "gymapp-precache-v2"]);
+  assert.deepEqual(world.log.deleted.sort(), ["apogee-precache-v1", "apogee-precache-v2"]);
   assert.equal(world.log.claim, 1);
   assert.equal(world.log.skipWaiting, 0);
 });
@@ -251,7 +251,7 @@ test("sw message: GET_VERSION answers on the given port with the version and fil
 // ---- fetch: what it leaves alone ----
 
 test("sw fetch: ignores anything that is not a same-origin GET for a listed file", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   const ignored = [
     world.request(url("./index.html"), { method: "POST" }),
     world.request(url("./src/ui/main.js"), { method: "PUT" }),
@@ -273,20 +273,20 @@ test("sw fetch: ignores anything that is not a same-origin GET for a listed file
 // ---- fetch: listed files ----
 
 test("sw fetch: a listed file is answered from the cache without touching the network", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   for (const file of FILES) {
     const result = await world.fetch(world.request(url(file)), { clientId: "app" });
     assert.equal(result.answered, true);
-    assert.equal(result.response.body, `gymapp-precache-v2:${url(file)}`);
+    assert.equal(result.response.body, `apogee-precache-v2:${url(file)}`);
   }
   assert.deepEqual(world.log.fetched, []);
 });
 
 test("sw fetch: it works with no network at all", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   world.setOffline(true);
   const result = await world.fetch(world.request(url("./src/ui/main.js")), { clientId: "app" });
-  assert.equal(result.response.body, `gymapp-precache-v2:${url("./src/ui/main.js")}`);
+  assert.equal(result.response.body, `apogee-precache-v2:${url("./src/ui/main.js")}`);
   assert.equal(result.error, null);
 });
 
@@ -298,7 +298,7 @@ test("sw fetch: if the cache lacks the file (it was evicted) the network is aske
 });
 
 test("sw fetch: only the current version's cache is used, never an older one", async () => {
-  const world = createWorld({ version: "v2", caches: { "gymapp-precache-v1": FILES.map(url), "other-site-cache": FILES.map(url) } });
+  const world = createWorld({ version: "v2", caches: { "apogee-precache-v1": FILES.map(url), "other-site-cache": FILES.map(url) } });
   const result = await world.fetch(world.request(url("./src/ui/main.js")), { clientId: "app" });
   assert.equal(result.response.body, `network:${url("./src/ui/main.js")}`);
 });
@@ -306,28 +306,28 @@ test("sw fetch: only the current version's cache is used, never an older one", a
 // ---- fetch: navigation ----
 
 test("sw navigation: the app's own address, with or without index.html, a query or a hash, gets the cached index.html", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   world.setOffline(true);
   for (const address of [SCOPE, url("./index.html"), `${SCOPE}?sw=1`, `${SCOPE}index.html?x=1#top`]) {
     const result = await world.fetch(world.navigation(address));
     assert.equal(result.answered, true, address);
-    assert.equal(result.response.body, `gymapp-precache-v2:${url("./index.html")}`, address);
+    assert.equal(result.response.body, `apogee-precache-v2:${url("./index.html")}`, address);
   }
   assert.deepEqual(world.log.fetched, []);
 });
 
 test("sw navigation: other pages under the app go to the network, and fall back to the cached app page when offline", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   const address = `${SCOPE}some/other/page`;
   const online = await world.fetch(world.navigation(address));
   assert.equal(online.response.body, `network:${address}`);
   world.setOffline(true);
   const offline = await world.fetch(world.navigation(address));
-  assert.equal(offline.response.body, `gymapp-precache-v2:${url("./index.html")}`);
+  assert.equal(offline.response.body, `apogee-precache-v2:${url("./index.html")}`);
 });
 
 test("sw navigation: test pages and pages outside the app are never touched", async () => {
-  const world = createWorld({ caches: { "gymapp-precache-v2": FILES.map(url) } });
+  const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
   for (const address of [`${SCOPE}tests/browser/index.html`, `${SCOPE}tests/`, "https://example.test/other-site/", "https://elsewhere.test/GymAppppp/"]) {
     const result = await world.fetch(world.navigation(address));
     assert.equal(result.answered, false, address);
@@ -339,7 +339,7 @@ test("sw navigation: test pages and pages outside the app are never touched", as
 
 test("sw fetch: a request from a test page goes to the network even though the file is cached, nested imports included", async () => {
   const world = createWorld({
-    caches: { "gymapp-precache-v2": FILES.map(url) },
+    caches: { "apogee-precache-v2": FILES.map(url) },
     clients: { page: testsClient, app: appClient },
   });
   // every module a test page loads, including ones imported by other modules, carries the page's clientId
@@ -347,29 +347,29 @@ test("sw fetch: a request from a test page goes to the network even though the f
     const fromTests = await world.fetch(world.request(url(file)), { clientId: "page" });
     assert.equal(fromTests.response.body, `network:${url(file)}`, "test page: current file from the network");
     const fromApp = await world.fetch(world.request(url(file)), { clientId: "app" });
-    assert.equal(fromApp.response.body, `gymapp-precache-v2:${url(file)}`, "app page: installed copy from the cache");
+    assert.equal(fromApp.response.body, `apogee-precache-v2:${url(file)}`, "app page: installed copy from the cache");
   }
 });
 
 test("sw fetch: when the requesting page cannot be identified the installed copy is served", async () => {
   const world = createWorld({
-    caches: { "gymapp-precache-v2": FILES.map(url) },
+    caches: { "apogee-precache-v2": FILES.map(url) },
     clients: { broken: new Error("client lookup failed") },
   });
   for (const props of [{}, { clientId: "" }, { clientId: "unknown-id" }, { clientId: "broken" }]) {
     const result = await world.fetch(world.request(url("./src/ui/main.js")), props);
-    assert.equal(result.response.body, `gymapp-precache-v2:${url("./src/ui/main.js")}`, JSON.stringify(props));
+    assert.equal(result.response.body, `apogee-precache-v2:${url("./src/ui/main.js")}`, JSON.stringify(props));
     assert.equal(result.error, null);
   }
 });
 
 test("sw fetch: a page of another site is not mistaken for a test page", async () => {
   const world = createWorld({
-    caches: { "gymapp-precache-v2": FILES.map(url) },
+    caches: { "apogee-precache-v2": FILES.map(url) },
     clients: { stranger: { url: "https://example.test/other-site/tests/index.html" } },
   });
   const result = await world.fetch(world.request(url("./src/ui/main.js")), { clientId: "stranger" });
-  assert.equal(result.response.body, `gymapp-precache-v2:${url("./src/ui/main.js")}`);
+  assert.equal(result.response.body, `apogee-precache-v2:${url("./src/ui/main.js")}`);
 });
 
 // ---- the source itself ----

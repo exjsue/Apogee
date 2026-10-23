@@ -14,7 +14,7 @@ import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
 import { createIdbAdapter, deleteDatabase, requestPersistentStorage } from "../../src/storage/idb-adapter.js";
 
-const DB_NAME = "gymapp-storage-test";
+const DB_NAME = "apogee-storage-test";
 
 // ---- assertion helper, same shape as node:assert/strict for the methods the rules use ----
 
@@ -149,7 +149,7 @@ async function runAll() {
   report.textContent = "";
   summary.className = "";
   summary.textContent = "Running…";
-  document.title = "Running… GymApp storage tests";
+  document.title = "Running… Apogee storage tests";
 
   if (!globalThis.indexedDB) {
     summary.className = "fail";
@@ -185,7 +185,7 @@ async function runAll() {
   const verdict = failed === 0 ? "ALL PASSED" : `${failed} FAILED`;
   summary.className = failed === 0 ? "pass" : "fail";
   summary.textContent = `${verdict}: ${passed} of ${rules.length} tests passed`;
-  document.title = `${verdict} (${passed}/${rules.length}) GymApp storage tests`;
+  document.title = `${verdict} (${passed}/${rules.length}) Apogee storage tests`;
   report.textContent = [`${verdict}: ${passed} of ${rules.length}`, `User agent: ${navigator.userAgent}`, "", ...lines].join("\n");
   rerun.disabled = false;
 }

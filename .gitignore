@@ -1,4 +1,5 @@
-# the app's own export files (user data)
+# the app's own export files (user data); the old name is kept so a backup made before the rename is never committed by mistake
+apogee-export-*.json
 gymapp-export-*.json
 
 # dependencies and build output

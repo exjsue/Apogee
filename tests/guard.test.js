@@ -152,16 +152,16 @@ test("guard: the HTML scanner flags off-origin and inline content", () => {
 // ---- the app's real database name ----
 //
 // Only src/ui/main.js may open the app's real database. No test may import or
-// use APP_DB_NAME, and none may pass the exact string gymapp as a database name:
+// use APP_DB_NAME, and none may pass the exact string apogee as a database name:
 // a test that did could open, clear or delete a person's real data when the
 // test page runs on the same origin as the app.
 //
 // What is flagged is exact: the identifier APP_DB_NAME, or the exact string
-// gymapp between matching quotes. Longer names such as gymapp-storage-test or
-// gymapp-export-2026.json are different names and are not flagged.
+// apogee between matching quotes. Longer names such as apogee-storage-test or
+// apogee-export-2026.json are different names and are not flagged.
 
 const APP_DB_IDENTIFIER = /\bAPP_DB_NAME\b/;
-const REAL_DB_LITERAL = /(["'`])gymapp\1/;
+const REAL_DB_LITERAL = /(["'`])apogee\1/;
 
 // Returns "line N: reason" for each use of the real database name in the text.
 export function scanForRealDatabase(text) {
@@ -188,11 +188,11 @@ test("guard: nothing under tests/ uses the app's real database name", () => {
 
 test("guard: the database scanner flags the real name and not the names that merely contain it", () => {
   const violations = [
-    'createIdbAdapter({ name: "gymapp" })',
-    "createIdbAdapter({ name: 'gymapp' })",
-    "indexedDB.open(`gymapp`, 1)",
-    'await deleteDatabase("gymapp");',
-    'const DB_NAME = "gymapp";',
+    'createIdbAdapter({ name: "apogee" })',
+    "createIdbAdapter({ name: 'apogee' })",
+    "indexedDB.open(`apogee`, 1)",
+    'await deleteDatabase("apogee");',
+    'const DB_NAME = "apogee";',
     'import { APP_DB_NAME } from "../src/storage/schema.js";',
     "createIdbAdapter({ name: APP_DB_NAME })",
     "const name = schema.APP_DB_NAME;",
@@ -200,24 +200,24 @@ test("guard: the database scanner flags the real name and not the names that mer
   for (const sample of violations) assert.ok(scanForRealDatabase(sample).length > 0, `not flagged: ${sample}`);
 
   const legitimate = [
-    'const DB_NAME = "gymapp-storage-test";',
-    "createIdbAdapter({ name: 'gymapp-storage-test' })",
-    "indexedDB.open(`gymapp-storage-test`)",
-    'await deleteDatabase("gymapp-storage-test");',
-    'app: "gymapp-export",',
-    'assert.equal(doc.app, "gymapp-export");',
-    'const file = "gymapp-export-2026-10-22.json";',
-    "the file gymapp-export-*.json is ignored",
-    '"gymapp-"', '"my-gymapp"', '"gymapp2"', '"Gymapp"', '"GymApp"', '" gymapp"', '"gymapp "',
-    "mixed quotes \"gymapp' are not one string",
+    'const DB_NAME = "apogee-storage-test";',
+    "createIdbAdapter({ name: 'apogee-storage-test' })",
+    "indexedDB.open(`apogee-storage-test`)",
+    'await deleteDatabase("apogee-storage-test");',
+    'app: "apogee-export",',
+    'assert.equal(doc.app, "apogee-export");',
+    'const file = "apogee-export-2026-10-22.json";',
+    "the file apogee-export-*.json is ignored",
+    '"apogee-"', '"my-apogee"', '"apogee2"', '"Apogee"', '"APOGEE"', '" apogee"', '"apogee "',
+    "mixed quotes \"apogee' are not one string",
     "const APP_DB_NAMES = [];", "const MY_APP_DB_NAME = 1;",
   ];
   for (const sample of legitimate) assert.deepEqual(scanForRealDatabase(sample), [], `wrongly flagged: ${sample}`);
 });
 
-test("guard: the app database name is defined once, in schema.js, and still reads gymapp", () => {
+test("guard: the app database name is defined once, in schema.js, and still reads apogee", () => {
   const schema = fs.readFileSync(path.join(ROOT, "src", "storage", "schema.js"), "utf8");
-  assert.equal(schema.match(/export const APP_DB_NAME = "gymapp";/g)?.length, 1);
+  assert.equal(schema.match(/export const APP_DB_NAME = "apogee";/g)?.length, 1);
   // the quoted name appears nowhere else in src/, and the constant only in schema.js and main.js
   const literal = [];
   const identifier = [];
@@ -349,7 +349,7 @@ export function scanGeneratedManifest(text) {
   const findings = [];
   if (/https?:\/\//i.test(text)) findings.push("contains an http(s) URL");
   if (/\b(fetch|indexedDB|importScripts|eval)\b/i.test(blankComments(text))) findings.push("contains code other than the list");
-  const shape = /^\/\/ GENERATED[^\n]*\n\/\/ [^\n]*\nself\.GYMAPP_PRECACHE = \{\n  version: "[0-9a-f]{64}",\n  files: \[\n(?:    "\.\/[A-Za-z0-9._\-/]+",\n)+  \],\n\};\n$/;
+  const shape = /^\/\/ GENERATED[^\n]*\n\/\/ [^\n]*\nself\.APOGEE_PRECACHE = \{\n  version: "[0-9a-f]{64}",\n  files: \[\n(?:    "\.\/[A-Za-z0-9._\-/]+",\n)+  \],\n\};\n$/;
   if (!shape.test(text.replace(/\r\n/g, "\n"))) findings.push("is not exactly a generated list of relative paths");
   return findings;
 }
@@ -375,7 +375,7 @@ const violations = [
   ["fetch reached through self", (s) => s.replace("cached || fetch(request)", "cached || self.fetch(request)"), /through an object/],
   ["fetch under another name", (s) => s.replace("const request = event.request;", "const request = event.request;\n  const f = fetch;"), /something other than the request/],
   ["a request that is not taken from the event", (s) => s.replace("const request = event.request;", "const request = new Request(event.request.url + '?x');"), /does not take the request from the event/],
-  ["IndexedDB used", (s) => `${s}\nself.indexedDB.open("gymapp");\n`, /IndexedDB/],
+  ["IndexedDB used", (s) => `${s}\nself.indexedDB.open("apogee");\n`, /IndexedDB/],
   ["IndexedDB mentioned in a comment", (s) => `${s}\n// opens indexedDB\n`, /IndexedDB/],
   ["a WebSocket", (s) => `${s}\nnew WebSocket("wss://x");\n`, /WebSocket/],
   ["XMLHttpRequest", (s) => `${s}\nnew XMLHttpRequest();\n`, /XMLHttpRequest/],

@@ -27,7 +27,7 @@ export function describePersistence(status) {
   if (!status.supported) {
     return {
       label: "Not guaranteed, back up regularly",
-      detail: "This browser does not let GymApp ask, so it cannot tell whether your data is protected.",
+      detail: "This browser does not let Apogee ask, so it cannot tell whether your data is protected.",
     };
   }
   return {

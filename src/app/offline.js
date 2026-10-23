@@ -14,7 +14,7 @@
 //     here makes a network request of its own.
 
 // Must equal the prefix in sw.js (a test checks that they match).
-export const CACHE_PREFIX = "gymapp-precache-";
+export const CACHE_PREFIX = "apogee-precache-";
 // The worker's cache for one version is named CACHE_PREFIX + the version.
 
 export const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // at most one check an hour

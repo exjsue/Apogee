@@ -151,7 +151,7 @@ server.on("error", (error) => {
 
 server.listen(PORT, HOST, () => {
   const { port } = server.address();
-  console.log(`GymApp server running on port ${port}, 127.0.0.1 only. Press Ctrl+C to stop.`);
+  console.log(`Apogee server running on port ${port}, 127.0.0.1 only. Press Ctrl+C to stop.`);
   console.log(`App:           http://127.0.0.1:${port}/`);
   console.log(`Browser tests: http://127.0.0.1:${port}${TESTS_PATH}`);
 });

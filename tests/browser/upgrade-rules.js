@@ -19,7 +19,7 @@ let counter = 0;
 // A database name of its own, removed before and after the rule.
 async function withDatabase(body) {
   counter += 1;
-  const name = `gymapp-upgrade-test-${Date.now()}-${counter}`;
+  const name = `apogee-upgrade-test-${Date.now()}-${counter}`;
   const adapters = [];
   const track = (adapter) => {
     adapters.push(adapter);
@@ -255,7 +255,7 @@ rule("upgrade: a version 2 database opened by a version 1 build is refused with 
     first.close();
     // What an older build does: it asks for version 1.
     const oldBuild = track(createIdbAdapter({ name, version: 1 }));
-    await assert.rejects(oldBuild.open(), /saved by a newer version of GymApp/);
+    await assert.rejects(oldBuild.open(), /saved by a newer version of Apogee/);
     assert.equal(await rawVersion(name), SCHEMA_VERSION);
     const again = track(createIdbAdapter({ name }));
     await again.open();

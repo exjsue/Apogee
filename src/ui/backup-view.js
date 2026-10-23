@@ -86,12 +86,12 @@ export async function renderBackupView(ctx) {
       "p",
       { class: "warning-text", "data-region": "export-warning" },
       "The export file is not encrypted. Anyone who gets the file can read all of your workout data. "
-      + "GymApp cannot control where your browser or phone saves the file, or who can open it. Keep it somewhere private.",
+      + "Apogee cannot control where your browser or phone saves the file, or who can open it. Keep it somewhere private.",
     ),
     h(
       "p",
       { class: "muted", "data-region": "last-export" },
-      `${lastLine}${attemptLine} GymApp cannot see whether the file was saved; it counts an export only when you confirm.`,
+      `${lastLine}${attemptLine} Apogee cannot see whether the file was saved; it counts an export only when you confirm.`,
     ),
     h(
       "div",

@@ -27,8 +27,8 @@ function pngSize(file) {
 const isRelative = (url) => !url.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(url);
 
 test("manifest: name, standalone display, and a start URL and scope that are relative to the subpath", () => {
-  assert.equal(manifest.name, "GymApp");
-  assert.equal(manifest.short_name, "GymApp");
+  assert.equal(manifest.name, "Apogee");
+  assert.equal(manifest.short_name, "Apogee");
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.start_url, "./");
   assert.equal(manifest.scope, "./");

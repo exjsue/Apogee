@@ -17,7 +17,7 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), "utf8");
 
 // A copy of what the app is made of, so a test can change files without touching the real ones.
 function withAppCopy(body) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "gymapp-sw-test-"));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "apogee-sw-test-"));
   try {
     for (const entry of ["index.html", "manifest.webmanifest", "sw.js", "icons", "src"]) {
       fs.cpSync(path.join(ROOT, entry), path.join(directory, entry), { recursive: true });
@@ -40,9 +40,9 @@ test("sw-manifest.js, run as the worker runs it, defines the same version and fi
   vm.createContext(sandbox);
   vm.runInContext(read(MANIFEST_FILE), sandbox);
   const expected = buildManifest();
-  assert.equal(sandbox.self.GYMAPP_PRECACHE.version, expected.version);
-  assert.deepEqual([...sandbox.self.GYMAPP_PRECACHE.files], expected.files);
-  assert.match(sandbox.self.GYMAPP_PRECACHE.version, /^[0-9a-f]{64}$/);
+  assert.equal(sandbox.self.APOGEE_PRECACHE.version, expected.version);
+  assert.deepEqual([...sandbox.self.APOGEE_PRECACHE.files], expected.files);
+  assert.match(sandbox.self.APOGEE_PRECACHE.version, /^[0-9a-f]{64}$/);
 });
 
 // ---- the list is what the app really loads ----

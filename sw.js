@@ -1,4 +1,4 @@
-// GymApp service worker: lets the installed app start and run without a network.
+// Apogee service worker: lets the installed app start and run without a network.
 //
 // What it does, and nothing more:
 //   - On install it downloads every file in the precache list (sw-manifest.js,
@@ -21,8 +21,8 @@
 
 importScripts("./sw-manifest.js");
 
-const CACHE_PREFIX = "gymapp-precache-";
-const { version, files } = self.GYMAPP_PRECACHE;
+const CACHE_PREFIX = "apogee-precache-";
+const { version, files } = self.APOGEE_PRECACHE;
 const CACHE_NAME = CACHE_PREFIX + version;
 
 const SCOPE = self.registration.scope; // for example the app's folder, ending in a slash

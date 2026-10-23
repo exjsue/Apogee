@@ -138,7 +138,7 @@ export function createStore(adapter) {
           throw new Error(`Stored schema version is not valid: ${JSON.stringify(stored.value)}`);
         } else if (stored.value > SCHEMA_VERSION) {
           throw new Error(
-            `This data was saved by a newer version of GymApp (schema ${stored.value}); `
+            `This data was saved by a newer version of Apogee (schema ${stored.value}); `
             + `this version understands schema ${SCHEMA_VERSION}. The data was not changed. Update the app.`,
           );
         }
