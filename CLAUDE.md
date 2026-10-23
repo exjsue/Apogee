@@ -25,6 +25,13 @@ node --test passes. The browser test page (tests/browser/index.html, including U
 - Primary test browsers: iPhone Safari and Firefox Focus for iOS.
 - Verify that data persists across app restarts in both browsers before relying on it.
 
+## Testing rules (standing)
+- Keep tests focused on data safety: export/import, migrations, schema upgrades, timer logic, and anything that could silently lose or corrupt data.
+- No tests for visual layout or trivial getters. Add only tests that would catch a real regression.
+- Run the existing suite once at the end of a task, not after every small edit.
+- Finish each task's report with one line saying how many tests were added and why.
+- Never delete existing tests. If a deliberate change makes one wrong, say so and get the owner's agreement first; keep the old assertion's intent covered by the new test.
+
 ## How we work
 - Before writing code, state the plan and the main risk. Wait for approval on anything that changes privacy rules or architecture.
 - Build in small verifiable steps: data model, logging, exercise library, import, search, UI polish.
