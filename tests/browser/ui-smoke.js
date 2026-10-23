@@ -8,6 +8,7 @@ import { createBackup } from "../../src/backup/backup.js";
 import { createLogger } from "../../src/app/logger.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { mountApp } from "../../src/ui/app.js";
+import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
 import { EXERCISE, makeDetails, rawCounts } from "../store-rules.js";
 import { incomingFile } from "../backup-rules.js";
 
@@ -48,7 +49,7 @@ async function waitFor(check, what, timeoutMs = 4000) {
 const waitForText = (root, text) => waitFor(() => root.textContent.includes(text), `the text "${text}"`);
 
 // Mounts the app against a fresh seeded database and cleans up afterwards.
-async function withApp(ctx, body, { prepare } = {}) {
+async function withApp(ctx, body, { prepare, offline } = {}) {
   const adapter = ctx.createAdapter();
   const store = createStore(adapter);
   await store.open();
@@ -64,6 +65,7 @@ async function withApp(ctx, body, { prepare } = {}) {
       calls.persist += 1;
       return { supported: true, persisted: false, error: null };
     },
+    ...(offline ? { offline } : {}),
   };
   const root = document.createElement("div");
   document.body.append(root); // forms only submit when they are in the document
@@ -419,6 +421,185 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
     ctx.assert.deepEqual((await store.listExercises()).map((exercise) => exercise.id), ["ex-row"]);
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 2 });
   });
+});
+
+// ---- offline: the update banner and the Offline section ----
+
+// Stands in for src/app/offline.js so each state can be shown on demand and every call counted.
+function stubOffline(status = {}) {
+  const listeners = new Set();
+  const state = { updateAvailable: false, updatedElsewhere: false, error: null };
+  const calls = { apply: 0, reload: 0, reset: 0, applyError: null };
+  return {
+    calls,
+    state,
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getState: () => ({ ...state }),
+    emit: (change) => {
+      Object.assign(state, change);
+      for (const listener of listeners) listener({ ...state });
+    },
+    getStatus: async () => ({
+      ...state, supported: true, enabled: true, registered: true, ready: true,
+      version: "0123456789abcdef0123456789abcdef", versionShort: "01234567", ...status,
+    }),
+    applyUpdate: async () => {
+      calls.apply += 1;
+      if (calls.applyError) throw new Error(calls.applyError);
+    },
+    resetOfflineCopy: async () => {
+      calls.reset += 1;
+      return { unregistered: true, cachesDeleted: 1 };
+    },
+    reload: () => {
+      calls.reload += 1;
+    },
+  };
+}
+
+rule("ui: with no offline service there is no update banner and no Offline section", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "backup");
+    await waitFor(() => action(root, "persist"), "the Backup tab");
+    ctx.assert.equal(region(root, "update-banner").hidden, true);
+    ctx.assert.equal(region(root, "offline-status"), null);
+    ctx.assert.equal(action(root, "reset-offline"), null);
+  });
+});
+
+rule("ui: the Update available banner is hidden until a version is waiting, and only its Reload button applies it", async (ctx) => {
+  const offline = stubOffline();
+  await withApp(ctx, async ({ root }) => {
+    const banner = region(root, "update-banner");
+    ctx.assert.equal(banner.hidden, true);
+    offline.emit({ updateAvailable: true });
+    ctx.assert.equal(banner.hidden, false);
+    ctx.assert.ok(banner.textContent.includes("Update available"));
+    ctx.assert.ok(/not changed/.test(banner.textContent), "says the workouts are not changed");
+    ctx.assert.equal(offline.calls.apply, 0, "showing the banner applies nothing");
+    // the user keeps working: still nothing is applied
+    await goToTab(root, "history");
+    await goToTab(root, "log");
+    ctx.assert.equal(offline.calls.apply, 0);
+    click(action(root, "apply-update"));
+    await waitFor(() => offline.calls.apply === 1, "the click to apply the update");
+    ctx.assert.equal(offline.calls.reload, 0, "reloading is the offline service's job, after the switch");
+    offline.emit({ updateAvailable: false });
+    ctx.assert.equal(banner.hidden, true);
+  }, { offline });
+});
+
+rule("ui: if the update cannot start, the banner says so and stays", async (ctx) => {
+  const offline = stubOffline();
+  offline.calls.applyError = "The update did not start. Reload the page and try again.";
+  await withApp(ctx, async ({ root }) => {
+    offline.emit({ updateAvailable: true });
+    click(action(root, "apply-update"));
+    await waitFor(() => /did not start/.test(region(root, "update-banner").textContent), "the problem to be shown");
+    ctx.assert.equal(region(root, "update-banner").hidden, false);
+  }, { offline });
+});
+
+rule("ui: when another tab updated the app, this tab says so and its Reload only reloads this tab", async (ctx) => {
+  const offline = stubOffline();
+  await withApp(ctx, async ({ root }) => {
+    offline.emit({ updatedElsewhere: true });
+    ctx.assert.ok(region(root, "update-banner").textContent.includes("updated in another tab"));
+    ctx.assert.equal(action(root, "apply-update"), null);
+    click(action(root, "reload-app"));
+    ctx.assert.equal(offline.calls.reload, 1);
+    ctx.assert.equal(offline.calls.apply, 0);
+  }, { offline });
+});
+
+rule("ui: the Offline section shows whether the app is ready and the first 8 characters of the cache version", async (ctx) => {
+  const statusOf = async (offline) => {
+    let shown;
+    await withApp(ctx, async ({ root }) => {
+      await goToTab(root, "backup");
+      await waitFor(() => region(root, "offline-status"), "the Offline section");
+      shown = { status: region(root, "offline-status").textContent, version: region(root, "offline-version").textContent };
+    }, { offline });
+    return shown;
+  };
+  const ready = await statusOf(stubOffline());
+  ctx.assert.ok(/Ready/.test(ready.status));
+  ctx.assert.equal(ready.version, "Offline copy version: 01234567");
+  const notReady = await statusOf(stubOffline({ ready: false, version: null, versionShort: null }));
+  ctx.assert.ok(/Not ready/.test(notReady.status));
+  ctx.assert.equal(notReady.version, "Offline copy version: none");
+  const off = await statusOf(stubOffline({ ready: false, enabled: false, registered: false, version: null, versionShort: null }));
+  ctx.assert.ok(/Switched off on this address.*\?sw=1/.test(off.status));
+  const unsupported = await statusOf(stubOffline({ supported: false, ready: false, registered: false, version: null, versionShort: null }));
+  ctx.assert.ok(/not available/.test(unsupported.status));
+});
+
+rule("ui: Reset offline copy asks first, Cancel changes nothing, and the workout data is untouched afterwards", async (ctx) => {
+  const offline = stubOffline();
+  await withApp(ctx, async ({ root, adapter }) => {
+    const before = await rawCounts(adapter);
+    ctx.assert.deepEqual(before, { workouts: 2, entries: 2, sets: 2 });
+    await goToTab(root, "backup");
+    click(await waitFor(() => action(root, "reset-offline"), "the Reset offline copy button"));
+    const confirm = await waitFor(() => region(root, "confirm-reset-offline"), "the confirmation");
+    ctx.assert.ok(/Your workouts and settings are not affected/.test(confirm.textContent));
+    ctx.assert.equal(offline.calls.reset, 0, "asking resets nothing");
+    click(action(root, "cancel-reset-offline"));
+    await waitFor(() => !region(root, "confirm-reset-offline") && action(root, "reset-offline"), "the confirmation to close");
+    ctx.assert.equal(offline.calls.reset, 0);
+
+    click(action(root, "reset-offline"));
+    click(await waitFor(() => action(root, "confirm-reset-offline"), "the confirm button"));
+    await waitForText(root, "Offline copy removed");
+    ctx.assert.equal(offline.calls.reset, 1);
+    ctx.assert.deepEqual(await rawCounts(adapter), before, "workouts, entries and sets are exactly as they were");
+  }, { offline, prepare: twoFinishedWorkouts });
+});
+
+// This test runs the REAL reset against the browser's real caches and registrations.
+// This page shares its origin with the installed app, so the test must be built
+// not to touch the app's own offline copy: it uses its own cache prefix (so the
+// app's real caches are outside what it deletes) and an address of its own (so
+// the app's real worker registration is outside what it unregisters). It also
+// checks that the app's registration and caches are still there afterwards.
+rule("ui: the real reset removes only this app's caches and leaves the database, other caches and the real offline copy alone", async (ctx) => {
+  const prefix = "gymapp-test-precache-";
+  const decoys = ["other-site-cache", "gymapp-test-precache", "my-gymapp-test-precache-1", `${CACHE_PREFIX}decoy-with-the-real-prefix`];
+  const ours = [`${prefix}old`, `${prefix}new`];
+  const testScope = new URL("./offline-test-scope/", location.href); // an address no real registration has
+  const offline = createOffline({
+    cachePrefix: prefix,
+    location: { hostname: testScope.hostname, search: "", href: testScope.href, reload: () => {} },
+  });
+  const realRegistrationBefore = (await navigator.serviceWorker?.getRegistration())?.scope ?? null;
+  const realCachesBefore = (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX) && !decoys.includes(name));
+  try {
+    // an interrupted earlier run could have left these behind; start from none
+    for (const name of [...decoys, ...ours]) await caches.delete(name);
+    for (const name of [...decoys, ...ours]) await (await caches.open(name)).put(`${testScope.href}x-${name}`, new Response("x"));
+    await withApp(ctx, async ({ root, store, adapter }) => {
+      const before = await rawCounts(adapter);
+      const exercisesBefore = (await store.listExercises()).length;
+      await goToTab(root, "backup");
+      click(await waitFor(() => action(root, "reset-offline"), "the Reset offline copy button"));
+      click(await waitFor(() => action(root, "confirm-reset-offline"), "the confirm button"));
+      await waitForText(root, "Offline copy removed");
+      const names = await caches.keys();
+      for (const name of ours) ctx.assert.ok(!names.includes(name), `${name} should be gone`);
+      for (const name of decoys) ctx.assert.ok(names.includes(name), `${name} must survive`);
+      ctx.assert.deepEqual(await rawCounts(adapter), before);
+      ctx.assert.equal((await store.listExercises()).length, exercisesBefore);
+    }, { offline, prepare: twoFinishedWorkouts });
+    // the app's own offline copy, if this browser has one, is exactly as it was
+    ctx.assert.equal((await navigator.serviceWorker?.getRegistration())?.scope ?? null, realRegistrationBefore);
+    const realCachesAfter = (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX) && !decoys.includes(name));
+    ctx.assert.deepEqual(realCachesAfter, realCachesBefore);
+  } finally {
+    for (const name of [...decoys, ...ours]) await caches.delete(name);
+  }
 });
 
 rule("ui: asking for persistent storage reports the browser's answer", async (ctx) => {

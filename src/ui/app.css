@@ -239,3 +239,21 @@ table.counts th, table.counts td { text-align: right; padding: 6px 8px; border-b
 table.counts th:first-child, table.counts tbody th { text-align: left; font-weight: 400; }
 
 .set-form h2 { margin-bottom: 4px; }
+
+/* update banner (shown only when a new version is waiting) */
+
+[hidden] { display: none !important; }
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.banner > span:first-child { flex: 1 1 14rem; }
+.banner-error { flex-basis: 100%; color: var(--danger); }

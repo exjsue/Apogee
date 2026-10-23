@@ -9,6 +9,7 @@ import { createStore } from "../storage/store.js";
 import { createBackup } from "../backup/backup.js";
 import { downloadBlob, readFileAsText } from "../backup/download.js";
 import { createLogger } from "../app/logger.js";
+import { createOffline } from "../app/offline.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../domain/seed.js";
 
 const root = document.getElementById("app");
@@ -19,13 +20,18 @@ async function start() {
     const store = createStore(adapter);
     await store.open();
     await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
+    // The offline copy needs no database, so a problem with the service worker
+    // can never keep the app itself from opening.
+    const offline = createOffline();
     await mountApp(root, {
       logger: createLogger(store),
       backup: createBackup(adapter),
       downloadBlob,
       readFileAsText,
       requestPersistentStorage,
+      offline,
     });
+    offline.start().catch(() => {}); // registers the worker (see shouldRegister) and watches for updates
   } catch (error) {
     root.replaceChildren(
       h("h1", {}, "GymApp"),

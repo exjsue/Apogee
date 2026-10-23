@@ -13,6 +13,7 @@ export const freshBackupState = () => ({
   error: null,
   notice: null,
   persistResult: null,
+  confirmReset: false,
 });
 
 // What the import preview counts. "exercises" is the library of exercises you
@@ -252,5 +253,88 @@ export async function renderBackupView(ctx) {
     }),
     persistLine,
   ));
+
+  // ---- offline ----
+  if (ctx.services.offline) view.append(await offlineCard(ctx));
   return view;
+}
+
+// The Offline section: whether the app can start without a network, which
+// version of it is stored, and a way to remove the stored copy. The reset only
+// removes the app's files and worker; it never touches workouts or settings.
+async function offlineCard(ctx) {
+  const b = ctx.state.backup;
+  const { offline } = ctx.services;
+  const status = await offline.getStatus();
+
+  let summary;
+  if (!status.supported) summary = "Offline use is not available in this browser or mode.";
+  else if (status.ready) summary = "Ready: the app can start without a network.";
+  else if (!status.enabled && !status.registered) summary = "Switched off on this address. Add ?sw=1 to the address to turn it on.";
+  else summary = "Not ready yet. Keep the app open while online for a moment, then look again.";
+
+  const card = h(
+    "section",
+    { class: "card", "aria-label": "Offline" },
+    h("h2", {}, "Offline"),
+    h("p", { "data-region": "offline-status" }, summary),
+    h(
+      "p",
+      { class: "muted", "data-region": "offline-version" },
+      `Offline copy version: ${status.versionShort ?? "none"}`,
+    ),
+  );
+  if (status.updateAvailable) {
+    card.append(h("p", { "data-region": "offline-update" }, "An update is waiting. Use the Reload button at the top of the page to switch to it."));
+  }
+  if (status.error) card.append(h("p", { class: "error", role: "alert" }, status.error));
+
+  if (!b.confirmReset) {
+    card.append(h(
+      "div",
+      { class: "actions" },
+      button("Reset offline copy", {
+        "data-action": "reset-offline",
+        onClick: () => {
+          b.confirmReset = true;
+          return ctx.rerender();
+        },
+      }),
+    ));
+    return card;
+  }
+  card.append(h(
+    "div",
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm reset", "data-region": "confirm-reset-offline" },
+    h(
+      "p",
+      {},
+      "Remove the offline copy of the app from this device? Your workouts and settings are not affected. "
+      + "To use the app offline again you will need to open it once while online.",
+    ),
+    button("Reset offline copy", {
+      class: "danger",
+      "data-action": "confirm-reset-offline",
+      onClick: async () => {
+        try {
+          const result = await offline.resetOfflineCopy();
+          b.notice = result.unregistered || result.cachesDeleted > 0
+            ? "Offline copy removed. Reload the app while online to install it again."
+            : "There was no offline copy to remove.";
+        } catch (error) {
+          b.error = error.message;
+        }
+        b.confirmReset = false;
+        await ctx.rerender();
+      },
+    }),
+    button("Cancel", {
+      "data-action": "cancel-reset-offline",
+      onClick: () => {
+        b.confirmReset = false;
+        return ctx.rerender();
+      },
+    }),
+  ));
+  return card;
 }

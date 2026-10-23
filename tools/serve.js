@@ -22,12 +22,19 @@ const DEFAULT_PORT = 8080;
 const PORT = process.argv[2] === undefined ? DEFAULT_PORT : Number(process.argv[2]);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVED_FOLDERS = ["src", "tests", "icons"];
-const ROOT_FILES = ["index.html", "manifest.webmanifest"];
+const ROOT_FILES = ["index.html", "manifest.webmanifest", "sw.js", "sw-manifest.js"];
 const TESTS_PATH = "/tests/browser/index.html";
 
 // Blocks every network request from the page. Kept identical to the policy in
 // the meta tag of index.html (a test checks that they match).
-const CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'";
+const CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'";
+
+// The service worker obeys the policy sent with ITS OWN script, not the page's.
+// The page's policy has connect-src 'none', which would stop the worker from
+// fetching the app's files to cache them. So sw.js gets this one instead: still
+// nothing but this origin, and nothing else allowed.
+const WORKER_CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; connect-src 'self'";
+const WORKER_SCRIPT = "sw.js";
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   console.error(`Not a valid port: ${process.argv[2]}`);
@@ -112,8 +119,10 @@ const server = http.createServer((req, res) => {
     send(res, 404, "Not found");
     return;
   }
+  const isWorkerScript = file === path.join(ROOT, WORKER_SCRIPT);
   res.writeHead(200, {
     ...HEADERS,
+    ...(isWorkerScript ? { "Content-Security-Policy": WORKER_CONTENT_SECURITY_POLICY } : {}),
     "Content-Type": TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",
     "Content-Length": stat.size,
   });
