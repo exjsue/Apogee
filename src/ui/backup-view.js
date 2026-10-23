@@ -15,11 +15,14 @@ export const freshBackupState = () => ({
   persistResult: null,
 });
 
+// What the import preview counts. "exercises" is the library of exercises you
+// can choose from (the built-in lifts plus your own), not the exercises done in
+// workouts, so the label says so. The per-workout "entries" count is left out:
+// it is an internal grouping, and workouts and sets logged say what matters.
 const SECTIONS = [
-  ["exercises", "Exercises"],
+  ["exercises", "Exercise library (includes the built-in lifts)"],
   ["workouts", "Workouts"],
-  ["entries", "Exercises in workouts"],
-  ["sets", "Sets"],
+  ["sets", "Sets logged"],
 ];
 
 function countsTable(file, current) {
@@ -181,7 +184,7 @@ export async function renderBackupView(ctx) {
         confirmButton.disabled = true;
         try {
           const counts = await backup.importFromText(b.previewText, { confirmReplace: true });
-          b.notice = `Imported ${formatCount(counts.workouts, "workout")}, ${formatCount(counts.sets, "set")} and ${formatCount(counts.exercises, "exercise")}. Everything else was replaced.`;
+          b.notice = `Imported ${formatCount(counts.workouts, "workout")} and ${formatCount(counts.sets, "logged set")}, with an exercise library of ${counts.exercises}. Everything else was replaced.`;
           b.importText = "";
           b.previewText = null;
           b.preview = null;

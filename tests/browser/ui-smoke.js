@@ -396,6 +396,14 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
     click(action(root, "check-import"));
     const table = await waitFor(() => region(root, "import-counts"), "the counts table");
     ctx.assert.ok(table.textContent.includes("In the file") && table.textContent.includes("On this device now"));
+    // each row is a label with the file's count and the current count; the library is not "exercises done"
+    const rows = [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((cell) => cell.textContent));
+    ctx.assert.deepEqual(rows, [
+      ["Exercise library (includes the built-in lifts)", "1", String(SEED_EXERCISES.length)],
+      ["Workouts", "1", "0"],
+      ["Sets logged", "2", "0"],
+    ]);
+    ctx.assert.ok(!/Exercises in workouts/.test(table.textContent));
     ctx.assert.ok(action(root, "export-first"));
     const confirmButton = action(root, "confirm-import");
     ctx.assert.equal(confirmButton.disabled, true);
@@ -407,7 +415,7 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
     tick.dispatchEvent(new Event("change", { bubbles: true }));
     ctx.assert.equal(confirmButton.disabled, false);
     click(confirmButton);
-    await waitForText(root, "Imported 1 workout");
+    await waitForText(root, "Imported 1 workout and 2 logged sets, with an exercise library of 1.");
     ctx.assert.deepEqual((await store.listExercises()).map((exercise) => exercise.id), ["ex-row"]);
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 2 });
   });
