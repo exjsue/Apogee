@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. A finished workout can be deleted from History (with a confirmation). No editing of logged sets, no offline support yet.
+First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. A finished workout can be deleted from History (with a confirmation). No editing of logged sets, no offline support yet. The repo is prepared for GitHub Pages at the subpath https://exjsue.github.io/GymAppppp/ (public repo, .nojekyll, every path in the page relative) but is not published or tested there yet; the owner makes the repo public and turns Pages on. The app's real database name is defined once in src/storage/schema.js, createIdbAdapter requires a name, and tests/guard.test.js fails if a test uses the app's database or its name.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -36,3 +36,4 @@ First screen implemented: a minimal workout logger (index.html, src/ui/) over th
 - Run: node tools/serve.js, then open http://127.0.0.1:8080/ (fixed port; the server stops if it is taken, because browser storage is per origin including the port)
 - Test: node --test
 - Browser tests (IndexedDB adapter, storage, backup, logger and UI smoke tests): with the server running, open http://127.0.0.1:8080/tests/browser/index.html
+- Live site (once the owner turns Pages on): https://exjsue.github.io/GymAppppp/ and, for the browser tests, https://exjsue.github.io/GymAppppp/tests/browser/index.html. It is served at a subpath, so every URL and import path must stay relative. Data on the live site is separate from data on 127.0.0.1:8080 (different origin); move it with Export and Import.
