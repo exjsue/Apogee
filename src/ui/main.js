@@ -4,6 +4,7 @@
 import { h } from "./dom.js";
 import { mountApp } from "./app.js";
 import { createIdbAdapter, requestPersistentStorage } from "../storage/idb-adapter.js";
+import { APP_DB_NAME } from "../storage/schema.js";
 import { createStore } from "../storage/store.js";
 import { createBackup } from "../backup/backup.js";
 import { downloadBlob, readFileAsText } from "../backup/download.js";
@@ -14,7 +15,7 @@ const root = document.getElementById("app");
 
 async function start() {
   try {
-    const adapter = createIdbAdapter();
+    const adapter = createIdbAdapter({ name: APP_DB_NAME });
     const store = createStore(adapter);
     await store.open();
     await store.seedExercises(SEED_EXERCISES, SEED_VERSION);

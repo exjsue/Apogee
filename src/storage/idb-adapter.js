@@ -46,7 +46,13 @@ function makeHandle(tx) {
   };
 }
 
-export function createIdbAdapter({ name = "gymapp", version = SCHEMA_VERSION, indexedDB = globalThis.indexedDB } = {}) {
+// The database name is required and has no default. A default would let a test
+// that forgot to name its database open, and possibly delete, the app's real one.
+// The app passes the name defined in schema.js; tests pass a name of their own.
+export function createIdbAdapter({ name, version = SCHEMA_VERSION, indexedDB = globalThis.indexedDB } = {}) {
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new Error("createIdbAdapter needs an explicit database name (the app passes its real one from schema.js; tests must pass a separate name)");
+  }
   let db = null;
   let opening = null;
 

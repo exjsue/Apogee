@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { storeRules } from "./store-rules.js";
 import { createMemoryAdapter } from "../src/storage/memory-adapter.js";
-import { requestPersistentStorage } from "../src/storage/idb-adapter.js";
+import { requestPersistentStorage, createIdbAdapter } from "../src/storage/idb-adapter.js";
 
 // The shared rules, against the memory adapter.
 for (const { name, run } of storeRules) {
@@ -97,4 +97,31 @@ test("requestPersistentStorage: reports the browser's answer without assuming su
     await requestPersistentStorage({ persist: async () => { throw new Error("denied"); } }),
     { supported: true, persisted: false, error: "denied" },
   );
+});
+
+// ---- the IndexedDB adapter must be told which database to use ----
+
+test("createIdbAdapter: with no name it throws, so nothing can open a database by accident", () => {
+  assert.throws(() => createIdbAdapter(), /needs an explicit database name/);
+  assert.throws(() => createIdbAdapter({}), /needs an explicit database name/);
+  assert.throws(() => createIdbAdapter({ version: 1 }), /needs an explicit database name/);
+  assert.throws(() => createIdbAdapter({ name: undefined }), /needs an explicit database name/);
+});
+
+test("createIdbAdapter: an empty, blank or non-text name is refused too", () => {
+  for (const name of ["", " ", "   ", "\t\n", null, 0, 5, true, {}, ["x"]]) {
+    assert.throws(() => createIdbAdapter({ name }), /needs an explicit database name/, JSON.stringify(name));
+  }
+});
+
+test("createIdbAdapter: the error says what to pass, and the check happens at creation, not at open", () => {
+  assert.throws(() => createIdbAdapter(), /tests must pass a separate name/);
+  // a named adapter is created without touching IndexedDB (Node has none)
+  const adapter = createIdbAdapter({ name: "some-test-database" });
+  assert.deepEqual(Object.keys(adapter).sort(), ["close", "open", "transaction"]);
+});
+
+test("createIdbAdapter: a named adapter reports a missing IndexedDB when opened, not before", async () => {
+  const adapter = createIdbAdapter({ name: "some-test-database", indexedDB: undefined });
+  await assert.rejects(adapter.open(), /IndexedDB is not available/);
 });

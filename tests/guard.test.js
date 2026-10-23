@@ -148,3 +148,101 @@ test("guard: the HTML scanner flags off-origin and inline content", () => {
   const good = '<script type="module" src="./src/ui/main.js"></script><link rel="icon" href="data:,"><link rel="stylesheet" href="./a.css">';
   assert.deepEqual(scanHtml(good), []);
 });
+
+// ---- the app's real database name ----
+//
+// Only src/ui/main.js may open the app's real database. No test may import or
+// use APP_DB_NAME, and none may pass the exact string gymapp as a database name:
+// a test that did could open, clear or delete a person's real data when the
+// test page runs on the same origin as the app.
+//
+// What is flagged is exact: the identifier APP_DB_NAME, or the exact string
+// gymapp between matching quotes. Longer names such as gymapp-storage-test or
+// gymapp-export-2026.json are different names and are not flagged.
+
+const APP_DB_IDENTIFIER = /\bAPP_DB_NAME\b/;
+const REAL_DB_LITERAL = /(["'`])gymapp\1/;
+
+// Returns "line N: reason" for each use of the real database name in the text.
+export function scanForRealDatabase(text) {
+  const found = [];
+  text.split("\n").forEach((line, index) => {
+    if (APP_DB_IDENTIFIER.test(line)) found.push(`line ${index + 1}: uses APP_DB_NAME`);
+    if (REAL_DB_LITERAL.test(line)) found.push(`line ${index + 1}: names the app's real database as a quoted string`);
+  });
+  return found;
+}
+
+test("guard: nothing under tests/ uses the app's real database name", () => {
+  const problems = [];
+  const own = path.join(ROOT, "tests", "guard.test.js"); // has to name what it forbids
+  const files = filesUnder(path.join(ROOT, "tests")).filter((file) => file !== own);
+  assert.ok(files.length >= 15, "expected to scan the whole of tests/ (16 files, 15 without this one)");
+  for (const file of files) {
+    for (const finding of scanForRealDatabase(fs.readFileSync(file, "utf8"))) {
+      problems.push(`${path.relative(ROOT, file).replaceAll("\\", "/")} ${finding}`);
+    }
+  }
+  assert.deepEqual(problems, []);
+});
+
+test("guard: the database scanner flags the real name and not the names that merely contain it", () => {
+  const violations = [
+    'createIdbAdapter({ name: "gymapp" })',
+    "createIdbAdapter({ name: 'gymapp' })",
+    "indexedDB.open(`gymapp`, 1)",
+    'await deleteDatabase("gymapp");',
+    'const DB_NAME = "gymapp";',
+    'import { APP_DB_NAME } from "../src/storage/schema.js";',
+    "createIdbAdapter({ name: APP_DB_NAME })",
+    "const name = schema.APP_DB_NAME;",
+  ];
+  for (const sample of violations) assert.ok(scanForRealDatabase(sample).length > 0, `not flagged: ${sample}`);
+
+  const legitimate = [
+    'const DB_NAME = "gymapp-storage-test";',
+    "createIdbAdapter({ name: 'gymapp-storage-test' })",
+    "indexedDB.open(`gymapp-storage-test`)",
+    'await deleteDatabase("gymapp-storage-test");',
+    'app: "gymapp-export",',
+    'assert.equal(doc.app, "gymapp-export");',
+    'const file = "gymapp-export-2026-10-22.json";',
+    "the file gymapp-export-*.json is ignored",
+    '"gymapp-"', '"my-gymapp"', '"gymapp2"', '"Gymapp"', '"GymApp"', '" gymapp"', '"gymapp "',
+    "mixed quotes \"gymapp' are not one string",
+    "const APP_DB_NAMES = [];", "const MY_APP_DB_NAME = 1;",
+  ];
+  for (const sample of legitimate) assert.deepEqual(scanForRealDatabase(sample), [], `wrongly flagged: ${sample}`);
+});
+
+test("guard: the app database name is defined once, in schema.js, and still reads gymapp", () => {
+  const schema = fs.readFileSync(path.join(ROOT, "src", "storage", "schema.js"), "utf8");
+  assert.equal(schema.match(/export const APP_DB_NAME = "gymapp";/g)?.length, 1);
+  // the quoted name appears nowhere else in src/, and the constant only in schema.js and main.js
+  const literal = [];
+  const identifier = [];
+  for (const file of filesUnder(path.join(ROOT, "src"))) {
+    const relative = path.relative(ROOT, file).replaceAll("\\", "/");
+    const text = fs.readFileSync(file, "utf8");
+    if (REAL_DB_LITERAL.test(text)) literal.push(relative);
+    if (APP_DB_IDENTIFIER.test(text)) identifier.push(relative);
+  }
+  assert.deepEqual(literal, ["src/storage/schema.js"]);
+  assert.deepEqual(identifier.sort(), ["src/storage/schema.js", "src/ui/main.js"]);
+});
+
+test("guard: main.js opens the app database with the explicit name", () => {
+  const main = fs.readFileSync(path.join(ROOT, "src", "ui", "main.js"), "utf8");
+  assert.match(main, /import \{ APP_DB_NAME \} from "\.\.\/storage\/schema\.js";/);
+  assert.match(main, /createIdbAdapter\(\{ name: APP_DB_NAME \}\)/);
+});
+
+test("guard: no code in src/, tools/ or the browser test page calls createIdbAdapter without a name", () => {
+  const problems = [];
+  const folders = [path.join(ROOT, "src"), path.join(ROOT, "tools"), path.join(ROOT, "tests", "browser")];
+  for (const file of folders.flatMap((folder) => filesUnder(folder))) {
+    const text = fs.readFileSync(file, "utf8");
+    if (/createIdbAdapter\(\s*\)/.test(text)) problems.push(path.relative(ROOT, file).replaceAll("\\", "/"));
+  }
+  assert.deepEqual(problems, []);
+});
