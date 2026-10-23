@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createOffline, shouldRegister, browserTimers, CACHE_PREFIX, UPDATE_CHECK_INTERVAL_MS, APPLY_TIMEOUT_MS } from "../src/app/offline.js";
 
-const PAGE = "https://exjsue.github.io/GymAppppp/";
+const PAGE = "https://exjsue.github.io/Apogee/";
 const SCOPE = PAGE;
 const MINUTE = 60 * 1000;
 
@@ -522,7 +522,7 @@ test("reset: with another cache prefix (as the browser test page uses) the app's
 
 test("reset: another site's registration on the same origin is left alone, whatever its scope", async () => {
   const serviceWorker = new FakeServiceWorker();
-  const neighbours = ["https://exjsue.github.io/", "https://exjsue.github.io/OtherSite/", "https://exjsue.github.io/GymAppppp2/"].map((scope) => {
+  const neighbours = ["https://exjsue.github.io/", "https://exjsue.github.io/OtherSite/", "https://exjsue.github.io/Apogee2/"].map((scope) => {
     const registration = new FakeRegistration(scope);
     serviceWorker.registrations.set(scope, registration);
     return registration;

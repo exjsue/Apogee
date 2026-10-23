@@ -1,13 +1,13 @@
 # TODO
 
 ## Owner actions
-- [ ] Make the repo public and turn on GitHub Pages (Settings, Pages, deploy from branch `main`, folder `/ (root)`). Only the owner does this; the site would be https://exjsue.github.io/GymAppppp/
+- [ ] Make the repo public and turn on GitHub Pages (Settings, Pages, deploy from branch `main`, folder `/ (root)`). Only the owner does this; the site would be https://exjsue.github.io/Apogee/
 - [ ] Do not host any other site on the exjsue.github.io account until the app has a custom domain (see DECISIONS.md: every Pages site on the account shares one origin and can read the app's IndexedDB)
 - [ ] Restart the dev server if it was started before the first screen was added (an older `node tools/serve.js` keeps port 8080 and serves the old files)
 - [ ] Data logged at http://127.0.0.1:8080/ stays on that origin: move it to the live site with Export, then Import
 
 ## After the first deploy
-- [ ] Open the live site and the test page (/tests/browser/index.html) and confirm the app loads at the /GymAppppp/ subpath and the browser tests pass (every path is relative, but this is untested on Pages)
+- [ ] Open the live site and the test page (/tests/browser/index.html) and confirm the app loads at the /Apogee/ subpath and the browser tests pass (every path is relative, but this is untested on Pages)
 - [ ] Check what Pages actually sends: the JavaScript content type, cache lifetime (modules could be cached for minutes after a deploy), and that nothing is requested from another origin
 - [ ] Confirm the page's CSP (meta tag only on Pages) blocks nothing the app needs
 - [ ] Offline on the live site: open it once, check Backup, Offline says Ready, then switch the network off and reload

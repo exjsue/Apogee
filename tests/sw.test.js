@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SW_SOURCE = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
 
-const SCOPE = "https://example.test/GymAppppp/";
+const SCOPE = "https://example.test/Apogee/";
 const FILES = ["./index.html", "./manifest.webmanifest", "./src/ui/app.css", "./src/ui/main.js", "./icons/icon-180.png"];
 const url = (file) => new URL(file, SCOPE).href;
 
@@ -255,7 +255,7 @@ test("sw fetch: ignores anything that is not a same-origin GET for a listed file
   const ignored = [
     world.request(url("./index.html"), { method: "POST" }),
     world.request(url("./src/ui/main.js"), { method: "PUT" }),
-    world.request("https://elsewhere.test/GymAppppp/src/ui/main.js"),
+    world.request("https://elsewhere.test/Apogee/src/ui/main.js"),
     world.request(url("./src/ui/not-listed.js")),
     world.request(url("./sw.js")),
     world.request(url("./sw-manifest.js")),
@@ -328,7 +328,7 @@ test("sw navigation: other pages under the app go to the network, and fall back 
 
 test("sw navigation: test pages and pages outside the app are never touched", async () => {
   const world = createWorld({ caches: { "apogee-precache-v2": FILES.map(url) } });
-  for (const address of [`${SCOPE}tests/browser/index.html`, `${SCOPE}tests/`, "https://example.test/other-site/", "https://elsewhere.test/GymAppppp/"]) {
+  for (const address of [`${SCOPE}tests/browser/index.html`, `${SCOPE}tests/`, "https://example.test/other-site/", "https://elsewhere.test/Apogee/"]) {
     const result = await world.fetch(world.navigation(address));
     assert.equal(result.answered, false, address);
   }
