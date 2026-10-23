@@ -21,13 +21,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131311;
+    --bg: #000000;
     --surface: #1d1d1a;
     --text: #ecebe4;
     --muted: #a3a298;
     --line: #34332e;
-    --accent: #78c7a8;
-    --accent-text: #0c1f18;
+    --accent: #ffffff;
+    --accent-text: #000000;
     --danger: #ff9196;
     --warn-bg: #2b2413;
     --warn-line: #7a6320;
