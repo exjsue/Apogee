@@ -44,6 +44,10 @@ export async function mountApp(root, services) {
     "data-action": "tab",
     "data-tab": tab.id,
     onClick: async () => {
+      if (state.tab !== tab.id) {
+        state.log.seen = null; // a new screen: its rows do not animate one by one
+        state.enter = true; // the new tab fades in, once
+      }
       state.tab = tab.id;
       await render();
     },
@@ -175,6 +179,10 @@ export async function mountApp(root, services) {
       content = h("p", { class: "error", role: "alert" }, `Something went wrong: ${error.message}`);
     }
     if (mine !== latest) return; // a newer render has taken over
+    if (state.enter) {
+      content.dataset.anim = "tab"; // see the motion block in app.css
+      state.enter = false;
+    }
     view.replaceChildren(content);
     // A failed read only hides the reminder; it never blocks the tab.
     await refreshReminder().catch(() => { reminder.hidden = true; });

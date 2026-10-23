@@ -258,6 +258,52 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 .banner > span:first-child { flex: 1 1 14rem; }
 .banner-error { flex-basis: 100%; color: var(--danger); }
 
+/* motion: short fades and pops, opacity and transform only, each under 200 ms, and none of it
+   when the person asks for reduced motion. Nothing here changes a size or a position.
+   The page is rebuilt on every change, so the code marks only the thing that changed
+   (data-anim) and its animation plays once, as that thing is created. This block sits before
+   the set rows on purpose: a test keeps the word opacity out of the set row styles, so the
+   done state can never depend on it. */
+
+/* The filled part of the check is a disc behind the tick, so it can fade and scale
+   (a background colour cannot be animated with these two properties alone). */
+button.check-toggle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--check-fill, var(--text));
+  opacity: 0;
+}
+button.check-toggle[aria-pressed="true"]::before { opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes row-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  @keyframes disc-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+  @keyframes disc-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.6); } }
+  @keyframes check-pop { 0% { transform: scale(0.94); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+  /* checking and unchecking: the disc fills in or out, and the circle gives a slight pop */
+  button.check-toggle[data-anim="check"],
+  button.check-toggle[data-anim="uncheck"] { animation: check-pop 160ms ease-out; }
+  button.check-toggle[data-anim="check"]::before { animation: disc-in 160ms ease-out; }
+  button.check-toggle[data-anim="uncheck"]::before { animation: disc-out 160ms ease-out; }
+
+  /* a set's rest line changing state (template, resting, done) */
+  .rest-line[data-anim="phase"] { animation: fade-in 160ms ease-out; }
+
+  /* a set row being added */
+  li.set-row[data-anim="add"] { animation: row-in 150ms ease-out; }
+
+  /* switching tabs */
+  .view[data-anim="tab"] { animation: fade-in 120ms ease-out; }
+
+  /* the three-dot menu and the questions and forms that open in place */
+  .menu, .confirm, .delete-confirm, .pull-confirm, .rest-editor { animation: fade-in 120ms ease-out; }
+}
+
 /* set rows: a header row, then one grid row per set (set number, weight, reps, the check, a small delete) */
 
 .set-grid {
@@ -301,6 +347,8 @@ button.check-toggle {
   height: 44px;
   min-height: 44px;
   padding: 0;
+  position: relative;
+  isolation: isolate; /* the disc sits behind the tick, inside the button */
   border: 2px solid var(--text);
   border-radius: 50%;
   background: transparent;
@@ -309,7 +357,7 @@ button.check-toggle {
   font-weight: 700;
   line-height: 1;
 }
-button.check-toggle[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+button.check-toggle[aria-pressed="true"] { color: var(--bg); }
 
 /* Delete: a small x, still a 44 px target; the question appears on a line of its own. */
 button.delete-button {
@@ -362,8 +410,7 @@ button.rest-time {
 /* Done: the whole row is greyed with the muted colour (checked for contrast in
    tests/rest-timer.test.js), the time reads 0:00 and the outline is gone. */
 .set-row[data-phase="done"] { color: var(--muted); }
-.set-row[data-phase="done"] button.check-toggle { border-color: var(--muted); }
-.set-row[data-phase="done"] button.check-toggle[aria-pressed="true"] { background: var(--muted); color: var(--bg); }
+.set-row[data-phase="done"] button.check-toggle { border-color: var(--muted); --check-fill: var(--muted); }
 .set-row[data-phase="done"] .rest-icon { color: var(--muted); }
 
 /* the exercise heading with its three-dot menu */

@@ -20,6 +20,7 @@ export const freshLogState = () => ({
   editingRestId: null,
   menuExerciseId: null,
   editingDefaultFor: null,
+  seen: null, // the rows of the last drawing, so only what changed animates
   stopTicker: null,
 });
 

@@ -213,6 +213,13 @@ function loggedCells(ctx, row) {
 function setRow(ctx, row, index, exerciseName) {
   const { logger } = ctx.services;
   const logged = row.kind === "logged";
+  // What changed since the last drawing, so that only that animates (see the motion block in
+  // app.css). `seen` is null on the first drawing and after a tab switch: nothing animates then.
+  const seen = ctx.state.log.seen;
+  const was = seen === null ? undefined : seen.get(row.id);
+  const added = seen !== null && was === undefined;
+  const toggled = was !== undefined && was.kind !== row.kind;
+  const phaseChanged = was !== undefined && was.phase !== row.phase;
   const planned = logged ? null : plannedCells(ctx, row, index, exerciseName);
   const cells = logged ? loggedCells(ctx, row) : planned;
   const toggle = button("✓", {
@@ -221,14 +228,20 @@ function setRow(ctx, row, index, exerciseName) {
     "data-set-id": row.id,
     "aria-pressed": String(logged),
     "aria-label": `${logged ? "Uncheck" : "Check"} set ${index + 1} of ${exerciseName}`,
+    "data-anim": toggled ? (logged ? "check" : "uncheck") : null,
     onClick: () => perform(ctx, async () => {
       if (logged) await logger.uncheckSet(row.id);
       else await logger.checkSet(row.id, { reps: planned.reps.value, weight: planned.weight.value, unit: planned.unit });
     }),
   });
+  const line = restLine(ctx, row, index, exerciseName);
+  if (line !== null && phaseChanged) line.dataset.anim = "phase";
   return h(
     "li",
-    { class: "set-row", "data-set-id": row.id, "data-phase": row.phase, "data-kind": row.kind, "data-warmup": row.isWarmup ? "true" : null },
+    {
+      class: "set-row", "data-set-id": row.id, "data-phase": row.phase, "data-kind": row.kind,
+      "data-warmup": row.isWarmup ? "true" : null, "data-anim": added ? "add" : null,
+    },
     h(
       "div",
       { class: "set-main set-grid" },
@@ -239,7 +252,7 @@ function setRow(ctx, row, index, exerciseName) {
       deleteButton(ctx, row, exerciseName, index),
     ),
     ctx.state.log.confirmDeleteSetId === row.id ? deleteConfirm(ctx, row) : null,
-    restLine(ctx, row, index, exerciseName),
+    line,
   );
 }
 
@@ -345,7 +358,7 @@ function blockHeader(ctx, block) {
 
 // One block per exercise: its header row, its rows and an Add set button (which shows no timer).
 export function exerciseBlocks(ctx, blocks) {
-  return h(
+  const element = h(
     "div",
     { class: "entries", "data-region": "exercise-blocks" },
     blocks.map((block) => h(
@@ -363,6 +376,9 @@ export function exerciseBlocks(ctx, blocks) {
       }),
     )),
   );
+  // Remembered for the next drawing, which animates only what differs from this one.
+  ctx.state.log.seen = new Map(blocks.flatMap((block) => block.rows.map((row) => [row.id, { kind: row.kind, phase: row.phase }])));
+  return element;
 }
 
 // ---- the ticker ----
