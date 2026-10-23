@@ -1,7 +1,7 @@
 # Project: GymApp (privacy-first workout tracker, web app)
 
 ## Status
-First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. A finished workout can be deleted from History (with a confirmation). No editing of logged sets, no offline support yet. The repo is prepared for GitHub Pages at the subpath https://exjsue.github.io/GymAppppp/ (public repo, .nojekyll, every path in the page relative) but is not published or tested there yet; the owner makes the repo public and turns Pages on. The app's real database name is defined once in src/storage/schema.js, createIdbAdapter requires a name, and tests/guard.test.js fails if a test uses the app's database or its name.
+First screen implemented: a minimal workout logger (index.html, src/ui/) over the domain model (src/domain/), storage layer (src/storage/), logging rules (src/app/) and export/import (src/backup/). node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. A finished workout can be deleted from History (with a confirmation). No editing of logged sets. Offline use: a service worker (sw.js) precaches the app and serves it cache-first; a new version waits until the user clicks Reload on the Update available banner; the Backup tab has an Offline section with a confirmed Reset offline copy. This is verified end to end in headless Chrome (install, offline reload with data intact, the update flow, an install that fails as a whole, reset) but not in Firefox or Safari, and not installed on an iPhone. The repo is prepared for GitHub Pages at the subpath https://exjsue.github.io/GymAppppp/ (public repo, .nojekyll, every path in the page relative) but is not published or tested there yet; the owner makes the repo public and turns Pages on. The app's real database name is defined once in src/storage/schema.js, createIdbAdapter requires a name, and tests/guard.test.js fails if a test uses the app's database or its name.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -15,7 +15,7 @@ First screen implemented: a minimal workout logger (index.html, src/ui/) over th
 ## Technical direction
 - Stack: plain HTML, CSS, and JavaScript. No frameworks and no build tools yet. Adding either needs owner approval.
 - Storage: IndexedDB, with all data on-device. Request persistent storage with `navigator.storage.persist()`.
-- Offline-capable. No network calls at runtime.
+- Offline-capable. No network calls at runtime except same-origin requests by the service worker, to cache the app's own files and check for updates. No third-party hosts, ever.
 - Export and import of user data is required in v1, not optional.
 - Domain logic lives in JavaScript modules with no DOM access.
 - Keep the data layer (domain model, storage, importers, search) separate from the UI, so it can be reused later.
@@ -34,6 +34,9 @@ First screen implemented: a minimal workout logger (index.html, src/ui/) over th
 
 ## Commands
 - Run: node tools/serve.js, then open http://127.0.0.1:8080/ (fixed port; the server stops if it is taken, because browser storage is per origin including the port)
+- Offline copy on this computer: the service worker registers by itself on every address except 127.0.0.1, localhost and [::1], where it needs ?sw=1 on the address (http://127.0.0.1:8080/?sw=1). Without it, an installed copy would keep showing old files after every edit. Once registered it stays until you use Backup, Offline, Reset offline copy.
+- After changing ANY file the app loads (anything under src/, index.html, the manifest, the icons) or sw.js: node tools/build-sw-manifest.js. It rewrites sw-manifest.js (the precache list and the version, found from the real import graph). node --test fails while sw-manifest.js is stale. To redraw the icons: node tools/make-icons.js.
+- Recovery from a broken worker, how updates work, and what clearing site data does (it also deletes your workouts): OFFLINE.md.
 - Test: node --test
 - Browser tests (IndexedDB adapter, storage, backup, logger and UI smoke tests): with the server running, open http://127.0.0.1:8080/tests/browser/index.html
 - Live site (once the owner turns Pages on): https://exjsue.github.io/GymAppppp/ and, for the browser tests, https://exjsue.github.io/GymAppppp/tests/browser/index.html. It is served at a subpath, so every URL and import path must stay relative. Data on the live site is separate from data on 127.0.0.1:8080 (different origin); move it with Export and Import.
