@@ -51,6 +51,8 @@
 - [ ] **Verify on iPhone (first launch after the update):** the database upgrades in place with your existing workouts (export first and confirm it, because a failed upgrade is undone but an export is your safety net), then History and the Backup tab show the same data, and Update Rest Timers in an exercise's three-dot menu changes only its unchecked sets
 - [ ] A tab does not redraw by itself when another tab changes the workout (it shows the old state until its next action or tab change); consider a storage event or BroadcastChannel to refresh open tabs, without any network use
 - [ ] The History delete and the old logSet path do not use the session revision (see DECISIONS.md on two tabs); route them through it if they ever run while a session is open in another tab
+- [ ] **Verify on iPhone (pull-to-refresh):** see the checklist in the report of this change: does iOS fire touchmove while the page rubber-bands at the top, is there any native pull-to-refresh in the installed app, does overscroll-behavior-y: contain on html change anything, and do the guards (typing, menu, timer, unsaved text) hold on a real phone
+- [ ] Pull-to-refresh in a Safari tab (not the installed app) may also trigger Safari's own reload; that bypasses the unsaved-text question (the timer and logged sets survive). Decide whether that matters
 - [ ] **Verify on iPhone (rest timer):** the check and the three row states, the countdown and the pie in the Home Screen app, leaving the app and coming back after the rest ended, locking the phone mid-rest, editing a time by tapping it, Add set showing no timer, finishing with unchecked sets, and the grey done state in daylight
 
 ## Deferred

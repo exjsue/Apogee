@@ -218,7 +218,7 @@ function checkboxGroup(legend, values, group) {
 function customForm(ctx) {
   const log = ctx.state.log;
   const name = h("input", {
-    type: "text", "data-field": "custom-name", maxlength: NAME_MAX_LENGTH, autocomplete: "off",
+    type: "text", "data-field": "custom-name", "data-saved": "", maxlength: NAME_MAX_LENGTH, autocomplete: "off",
   });
   const primary = checkboxGroup("Primary muscles (at least one)", MUSCLES, "primary");
   const secondary = checkboxGroup("Secondary muscles", MUSCLES, "secondary");

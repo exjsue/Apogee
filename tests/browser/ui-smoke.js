@@ -8,6 +8,7 @@ import { createBackup } from "../../src/backup/backup.js";
 import { createLogger } from "../../src/app/logger.js";
 import { checkPersistence } from "../../src/app/persistence.js";
 import { showDatabaseNotice } from "../../src/ui/db-notices.js";
+import { installPullToRefresh } from "../../src/ui/pull-refresh.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
@@ -578,6 +579,94 @@ rule("ui: the database notices say what is going on, and the reload button is on
     message = error.message;
   }
   ctx.assert.ok(/unknown notice/.test(message));
+});
+
+rule("ui: pull-to-refresh never reloads without an update, asks first when a timer runs or text is unsaved, and stays out of typing", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const calls = { checks: 0, applied: 0, reloaded: 0 };
+    let result = { status: "current" };
+    const offline = {
+      checkNow: async () => { calls.checks += 1; return result; },
+      applyUpdate: async () => { calls.applied += 1; },
+      reload: () => { calls.reloaded += 1; },
+    };
+    const pull = installPullToRefresh({ offline, logger: services.logger, host: root, getScrollTop: () => 0 });
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const touch = (type, y) => {
+      const event = new Event(type, { bubbles: true });
+      event.touches = type === "touchend" ? [] : [{ clientX: 50, clientY: y }];
+      document.dispatchEvent(event);
+    };
+    const pullDown = () => {
+      touch("touchstart", 100);
+      touch("touchmove", 160);
+      touch("touchmove", 320);
+      touch("touchend", 320);
+    };
+    const label = () => root.querySelector(".pull-text").textContent;
+    const question = () => root.querySelector('[data-region="pull-confirm"]');
+    try {
+      // nothing newer: a message, and no reload
+      pullDown();
+      await waitFor(() => label() === "Up to date", "the Up to date message");
+      ctx.assert.deepEqual([calls.applied, calls.reloaded], [0, 0]);
+
+      // a short pull does not even check
+      const checksBefore = calls.checks;
+      touch("touchstart", 100);
+      touch("touchmove", 140);
+      touch("touchend", 140);
+      await pause(60);
+      ctx.assert.equal(calls.checks, checksBefore);
+
+      // an update and nothing at risk: applied without asking
+      result = { status: "update" };
+      pullDown();
+      await waitFor(() => calls.applied === 1, "the update to be applied");
+      ctx.assert.equal(question(), null);
+
+      // a running timer: it asks, says the timer keeps running, and "Not now" changes nothing
+      await pickExercise(root, "bench", BENCH);
+      await logOneSet(root, "8", "100", "kg");
+      pullDown();
+      const first = await waitFor(question, "the question");
+      ctx.assert.ok(/keeps running through the reload/.test(first.textContent));
+      ctx.assert.ok(!/lost/.test(first.textContent));
+      ctx.assert.equal(calls.applied, 1);
+      click(root.querySelector('[data-action="pull-cancel-reload"]'));
+      await waitFor(() => !question(), "the question to close");
+      ctx.assert.equal(calls.applied, 1);
+      ctx.assert.equal(loggedRows(root).length, 1);
+
+      // ... and "Reload now" goes through the update
+      pullDown();
+      await waitFor(question, "the question again");
+      click(root.querySelector('[data-action="pull-confirm-reload"]'));
+      await waitFor(() => calls.applied === 2, "the update to be applied after the answer");
+
+      // text typed and not saved yet: the question warns that it would be lost, and the text stays
+      click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+      const reps = (await waitFor(() => lastPlanned(root), "a new row")).querySelector('[data-field="reps"]');
+      setValue(reps, "12"); // typed, not yet saved to the plan
+      pullDown();
+      const second = await waitFor(question, "the question about the text");
+      ctx.assert.ok(/will be lost/.test(second.textContent));
+      click(root.querySelector('[data-action="pull-cancel-reload"]'));
+      await waitFor(() => !question(), "the question to close");
+      ctx.assert.equal(reps.value, "12");
+      ctx.assert.equal(calls.applied, 2);
+
+      // while an input is focused a pull does nothing at all
+      reps.focus();
+      const checksWhileTyping = calls.checks;
+      pullDown();
+      await pause(60);
+      ctx.assert.equal(calls.checks, checksWhileTyping);
+      reps.blur();
+    } finally {
+      pull.uninstall();
+    }
+  });
 });
 
 rule("ui: the backup reminder shows with a logged workout and no confirmed export, and dismiss hides it", async (ctx) => {

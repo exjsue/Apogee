@@ -169,7 +169,7 @@ export async function renderBackupView(ctx) {
   // ---- import ----
   const previewRegion = h("div", { "data-region": "import-preview" });
   const textarea = h("textarea", {
-    rows: 5, "data-field": "import-text", spellcheck: "false", "aria-label": "Export text to import",
+    rows: 5, "data-field": "import-text", "data-saved": "", spellcheck: "false", "aria-label": "Export text to import",
   });
   textarea.value = b.importText;
   textarea.addEventListener("input", () => {

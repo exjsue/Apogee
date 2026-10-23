@@ -4,6 +4,7 @@
 import { h } from "./dom.js";
 import { mountApp } from "./app.js";
 import { showDatabaseNotice } from "./db-notices.js";
+import { installPullToRefresh } from "./pull-refresh.js";
 import { createIdbAdapter, requestPersistentStorage } from "../storage/idb-adapter.js";
 import { APP_DB_NAME } from "../storage/schema.js";
 import { createStore } from "../storage/store.js";
@@ -39,8 +40,9 @@ async function start() {
     // Runs before the UI reads any export time. A failure only means it is tried
     // again next launch; it never keeps the app from opening.
     await backup.migrateExportConfirmation().catch(() => {});
+    const logger = createLogger(store);
     const app = await mountApp(root, {
-      logger: createLogger(store),
+      logger,
       backup,
       downloadBlob,
       readFileAsText,
@@ -48,6 +50,7 @@ async function start() {
       offline,
     });
     offline.start().catch(() => {}); // registers the worker (see shouldRegister) and watches for updates
+    installPullToRefresh({ offline, logger }); // pull down at the top of the page to check for an update
     // Asked on every launch and not awaited: a browser prompt must never hold up
     // the app. When the answer is stored, the open tab is redrawn to show it.
     persistence.check().then(() => app.render(), () => {});

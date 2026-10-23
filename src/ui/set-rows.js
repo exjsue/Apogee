@@ -84,7 +84,7 @@ function restEditor(ctx, row) {
   const log = ctx.state.log;
   const input = h("input", {
     type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "rest",
-    "aria-label": "Rest time (minutes:seconds)", value: formatRest(row.restSeconds),
+    "aria-label": "Rest time (minutes:seconds)", value: formatRest(row.restSeconds), "data-saved": formatRest(row.restSeconds),
   });
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "rest-error" });
   return h(
@@ -145,20 +145,25 @@ function restLine(ctx, row, index, exerciseName) {
 
 function plannedFields(ctx, row, index, exerciseName) {
   const { logger } = ctx.services;
-  const save = (field, value) => logger.updatePlannedSet(row.id, { [field]: value }).catch(() => {});
+  // data-saved is what the plan holds for this input; pull-to-refresh compares it with
+  // what is typed to know whether a reload would lose text.
+  const save = (input, field) => {
+    const sent = input.value;
+    return logger.updatePlannedSet(row.id, { [field]: sent }).then(() => { input.dataset.saved = sent; }, () => {});
+  };
   const reps = h("input", {
-    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "reps", value: row.reps,
-    "aria-label": `Reps, set ${index + 1} of ${exerciseName}`, onChange: (event) => save("reps", event.target.value),
+    type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "reps", value: row.reps, "data-saved": row.reps,
+    "aria-label": `Reps, set ${index + 1} of ${exerciseName}`, onChange: (event) => save(event.target, "reps"),
   });
   const weight = h("input", {
-    type: "text", inputmode: "decimal", autocomplete: "off", "data-field": "weight", value: row.weight,
-    "aria-label": `Weight, set ${index + 1} of ${exerciseName}`, onChange: (event) => save("weight", event.target.value),
+    type: "text", inputmode: "decimal", autocomplete: "off", "data-field": "weight", value: row.weight, "data-saved": row.weight,
+    "aria-label": `Weight, set ${index + 1} of ${exerciseName}`, onChange: (event) => save(event.target, "weight"),
   });
   const unit = h(
     "select",
     {
       "data-field": "unit", "aria-label": `Weight unit, set ${index + 1} of ${exerciseName}`,
-      onChange: (event) => save("unit", event.target.value),
+      onChange: (event) => save(event.target, "unit"),
     },
     WEIGHT_UNITS.map((value) => h("option", { value, selected: value === row.unit }, value)),
   );
@@ -201,6 +206,7 @@ function defaultRestEditor(ctx, block) {
   const input = h("input", {
     type: "text", inputmode: "numeric", autocomplete: "off", "data-field": "default-rest",
     "aria-label": `Default rest for ${block.exerciseName} (minutes:seconds)`, value: formatRest(block.defaultRestSeconds),
+    "data-saved": formatRest(block.defaultRestSeconds),
   });
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "default-rest-error" });
   return h(

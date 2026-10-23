@@ -598,3 +598,72 @@ test("the cache prefix is the one the worker uses", () => {
   assert.equal(CACHE_PREFIX, "gymapp-precache-");
   assert.ok(UPDATE_CHECK_INTERVAL_MS === 3600000);
 });
+
+// ---- checkNow: the check behind pull-to-refresh only looks, it never activates ----
+
+test("checkNow: forces a check even within the hour, says current when nothing is newer, and activates nothing", async () => {
+  const { offline, serviceWorker, reloads } = setup();
+  serviceWorker.controller = new FakeWorker("activated");
+  await offline.start();
+  const registration = serviceWorker.registrations.get(SCOPE);
+  assert.deepEqual(await offline.checkNow(), { status: "current" });
+  assert.equal(registration.updateCalls, 1); // a check was made although one had just happened
+  assert.deepEqual(reloads, []);
+  registration.updateError = new Error("offline");
+  assert.deepEqual(await offline.checkNow(), { status: "unreachable" });
+});
+
+test("checkNow: waits for a new version that is still installing, reports it as an update, and still sends nothing", async () => {
+  const { offline, serviceWorker, reloads } = setup();
+  serviceWorker.controller = new FakeWorker("activated");
+  await offline.start();
+  const registration = serviceWorker.registrations.get(SCOPE);
+  const incoming = new FakeWorker("installing");
+  registration.update = async () => {
+    registration.installing = incoming;
+    registration.dispatchEvent(new Event("updatefound"));
+  };
+  const checking = offline.checkNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  incoming.setState("installed"); // the download finished
+  registration.waiting = incoming;
+  assert.deepEqual(await checking, { status: "update" });
+  assert.deepEqual(incoming.posted, []); // looking never activates
+  assert.deepEqual(reloads, []);
+});
+
+test("checkNow: a version that is still downloading when the wait ends is 'installing', never 'current'; a failed install is 'current'", async () => {
+  const { offline, serviceWorker, timers } = setup();
+  serviceWorker.controller = new FakeWorker("activated");
+  await offline.start();
+  const registration = serviceWorker.registrations.get(SCOPE);
+  const slow = new FakeWorker("installing");
+  registration.update = async () => {
+    registration.installing = slow;
+    registration.dispatchEvent(new Event("updatefound"));
+  };
+  const checking = offline.checkNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  timers.fireAll(); // the wait runs out
+  assert.deepEqual(await checking, { status: "installing" });
+  const broken = new FakeWorker("installing");
+  registration.update = async () => {
+    registration.installing = broken;
+    registration.dispatchEvent(new Event("updatefound"));
+    broken.state = "redundant";
+  };
+  assert.deepEqual(await offline.checkNow(), { status: "current" });
+});
+
+test("checkNow: 'off' when update checking is not available or not switched on here, and an update already waiting is found", async () => {
+  const unsupported = setup({ serviceWorker: null });
+  await unsupported.offline.start();
+  assert.deepEqual(await unsupported.offline.checkNow(), { status: "off" });
+  const local = setup({ address: "http://127.0.0.1:8080/" }); // needs ?sw=1 on this address
+  await local.offline.start();
+  assert.deepEqual(await local.offline.checkNow(), { status: "off" });
+
+  const { offline, waiting } = await withWaitingUpdate();
+  assert.deepEqual(await offline.checkNow(), { status: "update" });
+  assert.deepEqual(waiting.posted, []);
+});

@@ -333,3 +333,48 @@ button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem
   border-radius: var(--radius);
   background: var(--surface);
 }
+
+/* pull-to-refresh: a small label that slides in as the pull grows (steps, not inline styles) */
+
+html { overscroll-behavior-y: contain; }
+
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.pull-text {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  transform: translateY(-100%);
+}
+.pull-indicator[data-level="1"] .pull-text { transform: translateY(-75%); }
+.pull-indicator[data-level="2"] .pull-text { transform: translateY(-50%); }
+.pull-indicator[data-level="3"] .pull-text { transform: translateY(-25%); }
+.pull-indicator[data-level="4"] .pull-text { transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  .pull-text { transition: transform 0.12s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-text { transform: none !important; transition: none; }
+}
+
+.pull-confirm {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 6;
+  max-width: 40rem;
+  margin: 0 auto;
+}

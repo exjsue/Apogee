@@ -5,7 +5,9 @@
 //
 // Rules this module keeps:
 //   - A waiting worker is only told to activate by applyUpdate(), which the UI
-//     calls when the user clicks Reload. Nothing else ever sends that message.
+//     calls when the user clicks Reload, or releases a pull-to-refresh past its
+//     threshold and (if something would be lost) confirms. checkNow() only looks;
+//     nothing else ever sends that message.
 //   - Resetting removes this app's registration and this app's caches only, and
 //     never reads or writes IndexedDB or any other stored data of the app.
 //   - Every request goes through the browser's own worker mechanism; nothing
@@ -18,6 +20,7 @@ export const CACHE_PREFIX = "gymapp-precache-";
 export const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // at most one check an hour
 export const APPLY_TIMEOUT_MS = 10 * 1000;
 export const VERSION_TIMEOUT_MS = 2 * 1000;
+export const INSTALL_WAIT_MS = 20 * 1000; // how long checkNow waits for a new worker to finish installing
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]", "::1"];
 
@@ -108,6 +111,41 @@ export function createOffline({
     } catch {
       return false; // offline, or the server is not reachable: try again later
     }
+  }
+
+  // Pull-to-refresh: looks for a new worker NOW (even within the hour), waits for
+  // one that is installing to finish (it downloads every file of the new version),
+  // and says what it found. It never activates anything: only applyUpdate does.
+  //   "off"          no update checking here (no worker support, or switched off on this address)
+  //   "unreachable"  the check could not run (offline, or the server did not answer)
+  //   "installing"   a new version is still downloading
+  //   "update"       a new version is waiting (the Reload button's case)
+  //   "elsewhere"    another tab already updated; this tab runs older code
+  //   "current"      nothing newer
+  async function checkNow({ timeoutMs = INSTALL_WAIT_MS } = {}) {
+    if (!supported || (!registration && !enabled)) return { status: "off" };
+    if (!registration) return { status: "unreachable" };
+    if (!(await checkForUpdate({ force: true }))) return { status: "unreachable" };
+    const finished = (worker) => worker.state === "installed" || worker.state === "activated" || worker.state === "redundant";
+    const installing = registration.installing;
+    if (installing && !finished(installing)) {
+      await new Promise((resolve) => {
+        const timer = timers.setTimeout(done, timeoutMs);
+        function done() {
+          timers.clearTimeout(timer);
+          installing.removeEventListener("statechange", onState);
+          resolve();
+        }
+        function onState() {
+          if (finished(installing)) done();
+        }
+        installing.addEventListener("statechange", onState);
+      });
+      if (!finished(installing)) return { status: "installing" };
+    }
+    if (state.updatedElsewhere) return { status: "elsewhere" };
+    if (state.updateAvailable || (registration.waiting && serviceWorker.controller)) return { status: "update" };
+    return { status: "current" };
   }
 
   function onVisibilityChange() {
@@ -218,6 +256,6 @@ export function createOffline({
   }
 
   return {
-    start, onChange, getState: snapshot, getStatus, applyUpdate, checkForUpdate, resetOfflineCopy, reload: () => reloadPage(),
+    start, onChange, getState: snapshot, getStatus, applyUpdate, checkForUpdate, checkNow, resetOfflineCopy, reload: () => reloadPage(),
   };
 }
