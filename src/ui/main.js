@@ -53,7 +53,7 @@ async function start() {
     installPullToRefresh({ offline, logger }); // pull down at the top of the page to check for an update
     // Asked on every launch and not awaited: a browser prompt must never hold up
     // the app. When the answer is stored, the open tab is redrawn to show it.
-    persistence.check().then(() => app.render(), () => {});
+    persistence.check().then(() => app.renderInBackground(), () => {});
   } catch (error) {
     root.replaceChildren(
       h("h1", {}, "Apogee"),

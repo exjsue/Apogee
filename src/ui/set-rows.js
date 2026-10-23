@@ -387,6 +387,26 @@ export function stopTicker(ctx) {
   if (typeof ctx.state.log.stopTicker === "function") ctx.state.log.stopTicker();
 }
 
+// A timer that ran out: the set's row becomes "done" and its rest line shows 0:00 with no pie,
+// exactly what restLine draws for a done set, without touching any other element (so a field
+// being typed in keeps its text, cursor and focus). Returns false when there is no such row.
+// A rest line that is open for editing is left alone (its text is the user's); the next
+// drawing, which the editor's Save or Cancel causes, shows the set as done.
+function settleExpired(ctx, container, setId) {
+  const row = [...container.querySelectorAll("li.set-row")].find((el) => el.dataset.setId === setId);
+  if (row === undefined) return false;
+  const line = row.querySelector(".rest-line");
+  if (line === null || line.classList.contains("editing")) return line !== null;
+  const icon = newIcon();
+  paintIcon(icon, "done", 0);
+  line.replaceChildren(h("span", { class: "rest-time", "data-region": "rest-time" }, "0:00"), icon);
+  line.dataset.anim = "phase";
+  row.dataset.phase = "done";
+  const seen = ctx.state.log.seen;
+  if (seen !== null && seen.has(setId)) seen.set(setId, { ...seen.get(setId), phase: "done" });
+  return true;
+}
+
 // Keeps the running timer's line current. Each tick reads the clock and computes
 // the remaining time from the timer's absolute end; it also runs when the page
 // becomes visible again, so a timer that ran out in the background shows as
@@ -404,7 +424,10 @@ export function startTicker(ctx, container, timer) {
     const at = Date.now();
     if (!isRunning(timer, at)) {
       stop();
-      ctx.rerender();
+      // Nobody tapped, so the view is not redrawn over a field being typed in: only this
+      // set's rest line changes, in place. If it cannot (the row is gone), a redraw that
+      // waits for typing to finish.
+      if (!settleExpired(ctx, container, timer.setId)) ctx.rerenderInBackground();
       return;
     }
     const element = line();

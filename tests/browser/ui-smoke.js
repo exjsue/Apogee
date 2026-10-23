@@ -489,6 +489,45 @@ rule("ui: the running timer counts down, and checking another set puts the earli
   });
 });
 
+rule("ui: a timer running out while you type changes only its own rest line, never the field you are typing in", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await pickExercise(root, "bench", BENCH);
+    click(root.querySelector("li.set-row").querySelector('[data-action="edit-rest"]'));
+    setValue(await waitFor(() => field(root, "rest"), "the rest editor"), "2"); // 0:02
+    click(action(root, "save-rest"));
+    await waitFor(() => root.querySelector("li.set-row button.rest-time")?.textContent === "0:02", "the new rest");
+    await logOneSet(root, "8", "100", "kg");
+    const first = () => loggedRows(root)[0];
+    await waitFor(() => first().dataset.phase === "resting", "the timer to start");
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    const reps = (await waitFor(() => lastPlanned(root), "the new row")).querySelector('[data-field="reps"]');
+    reps.focus();
+    setValue(reps, "12");
+    reps.setSelectionRange(1, 1); // the cursor sits between the digits
+    await waitFor(() => first().dataset.phase === "done", "the timer to run out", 6000);
+    ctx.assert.equal(first().querySelector(".rest-time").textContent, "0:00");
+    ctx.assert.equal(lastPlanned(root).querySelector('[data-field="reps"]'), reps); // the same element, not a copy
+    ctx.assert.deepEqual([reps.value, document.activeElement === reps, reps.selectionStart], ["12", true, 1]);
+  });
+});
+
+rule("ui: a redraw nobody asked for waits while text is unsaved, then draws and keeps the text", async (ctx) => {
+  await withApp(ctx, async ({ root, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    const reps = lastPlanned(root).querySelector('[data-field="reps"]');
+    setValue(reps, "12"); // typed, not yet saved (the field is not focused)
+    await app.renderInBackground();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    ctx.assert.equal(lastPlanned(root).querySelector('[data-field="reps"]'), reps); // not replaced
+    reps.dispatchEvent(new Event("change", { bubbles: true })); // leaving the field saves it
+    const drawn = await waitFor(() => {
+      const now = lastPlanned(root).querySelector('[data-field="reps"]');
+      return now !== reps ? now : null;
+    }, "the waiting redraw");
+    ctx.assert.equal(drawn.value, "12"); // saved, so the redraw shows it
+  });
+});
+
 rule("ui: Add set shows no timer; finishing with unchecked sets asks first, then keeps only the checked ones", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     await pickExercise(root, "bench", BENCH);

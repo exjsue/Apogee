@@ -147,10 +147,36 @@ export async function mountApp(root, services) {
   // has finished reading from the database before the database is closed.
   const inFlight = new Set();
   function render() {
+    if (waiting !== null) {
+      clearInterval(waiting); // this drawing is the one a waiting background redraw was for
+      waiting = null;
+    }
     const running = renderNow();
     inFlight.add(running);
     running.finally(() => inFlight.delete(running)).catch(() => {});
     return running;
+  }
+  // A redraw nobody asked for (a timer running out, the storage answer arriving) must never
+  // replace a field being typed in or discard unsaved text. While one exists it waits, and
+  // draws when the person has left the field and what they typed is saved.
+  function typingInView() {
+    const active = document.activeElement;
+    if (active !== null && view.contains(active) && active.matches("input, textarea, select")) return true;
+    if (view.querySelector(".custom-form") !== null) return true; // its ticked boxes are not saved anywhere
+    return [...view.querySelectorAll("input[data-saved], textarea[data-saved]")].some((el) => el.value !== el.dataset.saved);
+  }
+  let waiting = null;
+  function renderInBackground() {
+    if (!typingInView()) return render();
+    if (waiting === null) {
+      waiting = setInterval(() => {
+        if (!view.isConnected) {
+          clearInterval(waiting);
+          waiting = null;
+        } else if (!typingInView()) render(); // render() ends the wait
+      }, 250);
+    }
+    return Promise.resolve();
   }
   async function idle() {
     while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
@@ -164,6 +190,7 @@ export async function mountApp(root, services) {
       state,
       unit: state.unit,
       rerender: render,
+      rerenderInBackground: renderInBackground,
       // The import itself already removed the planned sets and the running timer
       // (in its own transaction); this resets what the screens remember.
       resetAfterImport: () => {
@@ -199,5 +226,5 @@ export async function mountApp(root, services) {
   }
 
   await render();
-  return { render, state, idle };
+  return { render, renderInBackground, state, idle };
 }
