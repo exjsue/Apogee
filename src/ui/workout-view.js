@@ -2,7 +2,7 @@
 // and the workout actions. Only builds elements and passes input to the logger.
 // Parsing, validation and every decision happen in src/app and src/domain.
 
-import { h, button } from "./dom.js";
+import { h, button, exerciseHeading } from "./dom.js";
 import { MUSCLES, EQUIPMENT, ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { isRunning } from "../domain/rest-timer.js";
@@ -41,7 +41,7 @@ function loggedList(ctx, entries) {
     entries.map((entry) => h(
       "div",
       { class: "entry" },
-      h("h3", {}, entry.exerciseName),
+      exerciseHeading(entry.exerciseName, entry.markCustom),
       h(
         "ol",
         { class: "sets" },

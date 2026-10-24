@@ -1,6 +1,6 @@
 // The History tab: finished workouts, newest first, with a detail that can be deleted.
 
-import { h, button } from "./dom.js";
+import { h, button, exerciseHeading } from "./dom.js";
 import { formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 
 export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, notice: null, error: null });
@@ -82,7 +82,7 @@ async function detail(ctx, id) {
     view.append(h(
       "div",
       { class: "card entry" },
-      h("h3", {}, entry.exerciseName),
+      exerciseHeading(entry.exerciseName, entry.markCustom),
       h(
         "ol",
         { class: "sets" },

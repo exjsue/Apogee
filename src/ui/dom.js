@@ -31,3 +31,9 @@ export function h(tag, props = {}, ...children) {
 export function button(label, props = {}) {
   return h("button", { type: "button", ...props }, label);
 }
+
+// An exercise's name as a heading, with a small "Custom" marker when markCustom is set (the logger sets it
+// only when a custom exercise shares its name with another stored exercise).
+export function exerciseHeading(name, markCustom) {
+  return h("h3", {}, name, markCustom ? [" ", h("span", { class: "name-mark" }, "Custom")] : null);
+}

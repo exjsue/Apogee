@@ -5,6 +5,7 @@
 import { createWorkout, createWorkoutEntry, createWorkSet, createExercise } from "../domain/model.js";
 import { parseDecimal, parseWholeNumber } from "../domain/format.js";
 import { searchExercises } from "../domain/search.js";
+import { ambiguousCustomIds } from "../domain/exercise-names.js";
 import {
   DEFAULT_REST_SECONDS, startTimer, rescheduleTimer, isRunning, requireRest,
 } from "../domain/rest-timer.js";
@@ -51,15 +52,22 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   async function detailWithNames(workoutId) {
     const details = await store.getWorkoutWithDetails(workoutId);
     if (details === null) return null;
-    const names = new Map((await store.listExercises()).map((exercise) => [exercise.id, exercise.name]));
+    const exercises = await store.listExercises();
+    const names = new Map(exercises.map((exercise) => [exercise.id, exercise.name]));
+    const marked = ambiguousCustomIds(exercises);
     return {
       ...details,
       setCount: details.entries.reduce((total, entry) => total + entry.sets.length, 0),
-      entries: details.entries.map((entry) => ({ ...entry, exerciseName: names.get(entry.exerciseId) ?? UNKNOWN_EXERCISE })),
+      entries: details.entries.map((entry) => ({
+        ...entry,
+        exerciseName: names.get(entry.exerciseId) ?? UNKNOWN_EXERCISE,
+        markCustom: marked.has(entry.exerciseId), // false for an id that is not stored
+      })),
     };
   }
 
-  // The status plus the workout's entries and sets (with exercise names).
+  // The status plus the workout's entries and sets (with exercise names, and markCustom: true when the entry's
+  // exercise is a custom that shares its name with another stored exercise; see src/domain/exercise-names.js).
   async function getCurrent() {
     const status = await getStatus();
     if (status.kind === "none") return { status };
@@ -138,6 +146,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       ).catch(() => {});
     }
     const names = new Map(session.exercises.map((exercise) => [exercise.id, exercise.name]));
+    const marked = ambiguousCustomIds(session.exercises);
     const at = nowMs();
     return {
       status: session.status,
@@ -145,7 +154,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       blocks: buildExerciseBlocks({
         entries: session.entries, sets: session.sets, plan: session.plan, names, timer: session.timer, nowMs: at,
         defaults: new Map(session.exercises.map((exercise) => [exercise.id, exercise.defaultRestSeconds])),
-      }),
+      }).map((block) => ({ ...block, markCustom: marked.has(block.exerciseId) })),
       timer: session.timer,
       nowMs: at,
       plannedCount: session.plan.rows.length,

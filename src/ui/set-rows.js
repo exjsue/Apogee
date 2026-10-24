@@ -4,7 +4,7 @@
 // passes input to the logger; every rule (what can be checked, how a timer
 // behaves) lives in src/app and src/domain.
 
-import { h, button } from "./dom.js";
+import { h, button, exerciseHeading } from "./dom.js";
 import { formatSetWeightParts } from "../domain/format.js";
 import {
   formatRest, parseRestEntry, previewRestEntry, restToDigits, pieGeometry, isRunning, remainingSeconds, fractionRemaining,
@@ -322,7 +322,7 @@ function blockHeader(ctx, block) {
   const header = h(
     "div",
     { class: "entry-head" },
-    h("h3", {}, block.exerciseName),
+    exerciseHeading(block.exerciseName, block.markCustom),
     button("⋮", {
       class: "menu-button",
       "data-action": "exercise-menu",
