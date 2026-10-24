@@ -2,7 +2,7 @@
 // Changing this file by hand is undone by the next run, and a test compares it with a fresh run.
 // Catalog version 1. Entries: 830.
 // Derived from the free-exercise-db project (yuhonas/free-exercise-db), file dist/exercises.json, commit 79ca7b47d77cd5a6dd7a50440e9f0bf24da6a142,
-// released under the Unlicense, plus entries written for Apogee (origin apogee). See NOTICE.md.
+// released under the Unlicense, plus entries written for Apogee (origin authored). See NOTICE.md.
 // Only the fields the app stores are here; no instructions, no images. The app does not import this file yet.
 
 export const CATALOG_VERSION = 1;

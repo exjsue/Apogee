@@ -5,7 +5,7 @@ project (yuhonas/free-exercise-db), file dist/exercises.json at commit 79ca7b47d
 instructions and images are not included. That project says it derives from wrkout/exercises.json, also under the
 Unlicense. Where the names, tags and text originally came from was not independently verified.
 
-The Unlicense statement below covers only the entries with origin upstream. Entries with origin apogee were
+The Unlicense statement below covers only the entries with origin upstream. Entries with origin authored were
 written by hand for Apogee and are not covered by it.
 
 The licence text of free-exercise-db, as read at that commit (its last line, which only gives the licence's web address,

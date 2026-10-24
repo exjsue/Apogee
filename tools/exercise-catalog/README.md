@@ -55,13 +55,13 @@ curated: they never pass through the upstream rules or overrides.json, and an up
 - Names are compared with the upstream names, the seed names and earlier additions. When one is close (word overlap
   of 0.60, or a shorter name of two or more words fully inside a longer one; both are in NAME_SIMILARITY in
   lib/additions.js) the build asks Did you mean ...? and continues only if the block lists those ids in similar-ok.
-- Derived for you: equipmentTags, sorted lists, source builtin, origin apogee. Upstream entries get origin upstream.
+- Derived for you: equipmentTags, sorted lists, source builtin, origin authored. Upstream entries get origin upstream.
   An empty unplacedMuscles list is left out, as it is for upstream entries.
 
 ## Licensing
 
 The Unlicense statement of the upstream project covers only the entries with origin "upstream". Entries with origin
-"apogee" were written by hand for Apogee and are not covered by it. catalog.json says so in its notice field; the
+"authored" were written by hand for Apogee and are not covered by it. catalog.json says so in its notice field; the
 data notice file planned for the day the catalog is vendored (see TODO.md) must say the same.
 
 ## Base-movement families

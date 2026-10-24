@@ -265,3 +265,22 @@ test("emit: an upstream entry that a seed now owns counts as dropped, so it need
   assert.deepEqual(emitted.summary.retiredKept, ["Now_Paired"]);
   assert.match(emitted.files[0].text, /"id":"Now_Paired".*"retired":true/);
 });
+
+test("emit: a hand-written addition is emitted with origin authored, keeps its apogee- id, and its retired flag, with no quoted app database name in the files", async () => {
+  await withFixture(async ({ dir, emitFolder }) => {
+    const write = (name, value) => { const file = path.join(dir, name); fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value)); return file; };
+    const bytes = fs.readFileSync(path.join(FIXTURES, "sample-110.json"));
+    const pin = JSON.parse(fs.readFileSync(path.join(dir, "pin.json"), "utf8"));
+    assert.equal(pin.bytes, bytes.length);
+    run([
+      "--input", path.join(dir, "input.json"), "--pin", path.join(dir, "pin.json"), "--overrides", write("o.json", { [TURKISH]: { exclude: true, note: "left out for the test" } }),
+      "--pairs", write("p.json", PAIRS), "--retired", write("r.json", {}), "--additions", path.join(FIXTURES, "additions-sample.txt"),
+      "--out", path.join(dir, "out"), "--emit", emitFolder,
+    ], { emitFolder, emitSeeds: SEEDS });
+    const { CATALOG } = await load(dir, "catalog.js");
+    const mine = CATALOG.filter((e) => e.id.startsWith("apogee-"));
+    assert.deepEqual(mine.map((e) => [e.id, e.origin, e.retired]), [["apogee-pin-squat", "authored", false], ["apogee-zercher-deadlift", "authored", true]]);
+    assert.ok(CATALOG.filter((e) => !e.id.startsWith("apogee-")).every((e) => e.origin === "upstream"));
+    for (const name of fs.readdirSync(emitFolder)) assert.doesNotMatch(text(emitFolder, name), /["']apogee["']/, `${name} has the quoted app database name`);
+  });
+});

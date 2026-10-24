@@ -115,7 +115,7 @@ export function run(argv, { emitFolder = path.join(repoRoot, "src", "catalog"), 
   const files = [
     ["catalog.json", stringify({
       source: { repo: pin.repo, file: pin.file, commit: pin.commit, sha256: pin.sha256 },
-      notice: "Entries with origin \"upstream\" are derived from the source above, which is released under the Unlicense. Entries with origin \"apogee\" were written by hand for Apogee and are not covered by that statement.",
+      notice: "Entries with origin \"upstream\" are derived from the source above, which is released under the Unlicense. Entries with origin \"authored\" were written by hand for Apogee and are not covered by that statement.",
       modelNeeds: missingFromModel(),
       exercises: everyEntry,
     })],

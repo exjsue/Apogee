@@ -76,7 +76,7 @@ export function summarize({ upstreamCount, result, overrideCount, strict, additi
   return {
     upstreamEntries: upstreamCount,
     catalogEntries: entries.length,
-    ...(additionsCount > 0 ? { additionsEntries: additionsCount } : {}), // hand-written, origin apogee; shown only when there are some
+    ...(additionsCount > 0 ? { additionsEntries: additionsCount } : {}), // hand-written, origin authored; shown only when there are some
     excludedByOverride: excludedByOverride.length,
     excludedForSeeds: excludedForSeeds.length,
     overridesApplied: overrideCount,
@@ -114,7 +114,7 @@ export function renderSummary(summary) {
     "",
     `Upstream entries: ${summary.upstreamEntries}`,
     `Catalog entries: ${summary.catalogEntries} (left out: ${summary.excludedByOverride} by override, ${summary.excludedForSeeds} for confirmed seed pairs)`,
-    ...(summary.additionsEntries > 0 ? [`Hand-written additions (origin apogee): ${summary.additionsEntries}, on top of the catalog entries above`] : []),
+    ...(summary.additionsEntries > 0 ? [`Hand-written additions (origin authored): ${summary.additionsEntries}, on top of the catalog entries above`] : []),
     `Overrides applied: ${summary.overridesApplied}`,
     "",
     "Equipment, decided by:",

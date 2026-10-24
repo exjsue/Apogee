@@ -15,7 +15,7 @@ export const NAME_SIMILARITY = Object.freeze({
 
 // The two values of the `origin` field of a catalog entry. Tests import these instead of spelling them out.
 export const ORIGIN_UPSTREAM = "upstream";
-export const ORIGIN_APOGEE = "apogee";
+export const ORIGIN_AUTHORED = "authored";
 
 export const ADDITION_ID_PATTERN = /^apogee-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const ADDITION_ID_MAX_LENGTH = 60;
@@ -329,7 +329,7 @@ export function buildAdditions({ text, upstream, curated, seeds, vocabulary }) {
         mechanic: value("mechanic") === "" ? null : value("mechanic"),
         force: value("force") === "" ? null : value("force"),
         source: "builtin",
-        origin: ORIGIN_APOGEE,
+        origin: ORIGIN_AUTHORED,
         ...(retired === "yes" ? { retired: true } : {}),
       });
       keys.set(keyOf(base, value("equipment"), finalVariations), { id, name });

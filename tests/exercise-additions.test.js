@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { curate } from "../tools/exercise-catalog/lib/curate.js";
 import { loadVocabulary } from "../tools/exercise-catalog/lib/vocabulary.js";
 import {
-  buildAdditions, parseAdditions, formatProblems, nameScore, slugFor, NAME_SIMILARITY, ORIGIN_UPSTREAM, ORIGIN_APOGEE,
+  buildAdditions, parseAdditions, formatProblems, nameScore, slugFor, NAME_SIMILARITY, ORIGIN_UPSTREAM, ORIGIN_AUTHORED,
 } from "../tools/exercise-catalog/lib/additions.js";
 import { run } from "../tools/exercise-catalog/build-catalog.js";
 import { SEED_EXERCISES } from "../src/domain/seed.js";
@@ -38,12 +38,12 @@ const withoutLine = (lines, key) => lines.filter((l) => !l.startsWith(`${key}:`)
 
 // ---- merging ----
 
-test("additions: valid additions are appended with origin apogee, source builtin and the derived fields", () => {
+test("additions: valid additions are appended with origin authored, source builtin and the derived fields", () => {
   const result = check(sampleText);
   assert.deepEqual(result.problems, []);
   assert.equal(result.entries.length, 2);
   const pin = result.entries.find((e) => e.id === "apogee-pin-squat");
-  assert.equal(pin.origin, ORIGIN_APOGEE);
+  assert.equal(pin.origin, ORIGIN_AUTHORED);
   assert.equal(pin.source, "builtin");
   assert.equal(pin.baseMovementId, "squat");
   assert.deepEqual(pin.equipmentTags, ["barbell"]);
@@ -66,10 +66,10 @@ test("additions: through the build, upstream entries say origin upstream, additi
     const catalog = JSON.parse(fs.readFileSync(path.join(out, "catalog.json"), "utf8"));
     assert.equal(catalog.exercises.length, 112);
     assert.ok(catalog.exercises.slice(0, 110).every((e) => e.origin === ORIGIN_UPSTREAM));
-    assert.deepEqual(catalog.exercises.slice(110).map((e) => [e.id, e.origin]), [["apogee-pin-squat", ORIGIN_APOGEE], ["apogee-zercher-deadlift", ORIGIN_APOGEE]]);
-    assert.ok(catalog.notice.includes(`origin "${ORIGIN_UPSTREAM}"`) && catalog.notice.includes(`origin "${ORIGIN_APOGEE}"`));
+    assert.deepEqual(catalog.exercises.slice(110).map((e) => [e.id, e.origin]), [["apogee-pin-squat", ORIGIN_AUTHORED], ["apogee-zercher-deadlift", ORIGIN_AUTHORED]]);
+    assert.ok(catalog.notice.includes(`origin "${ORIGIN_UPSTREAM}"`) && catalog.notice.includes(`origin "${ORIGIN_AUTHORED}"`));
     assert.match(catalog.notice, /Unlicense.*not covered/);
-    assert.match(fs.readFileSync(path.join(out, "summary.txt"), "utf8"), /Hand-written additions \(origin apogee\): 2/);
+    assert.match(fs.readFileSync(path.join(out, "summary.txt"), "utf8"), /Hand-written additions \(origin authored\): 2/);
   });
 });
 

@@ -8,7 +8,7 @@
 
 export const CATALOG_VERSION = 1;
 
-export const ORIGINS = Object.freeze(["upstream", "apogee"]);
+export const ORIGINS = Object.freeze(["upstream", "authored"]);
 
 // The licence text of free-exercise-db as read at the pinned commit, without its last line. That line only
 // gives the licence's web address, and nothing shipped under src/ may contain one (tests/guard.test.js).
@@ -160,7 +160,7 @@ export function buildEmission({ entries, pairedEntries, pairs, manual, seeds, vo
     "// Changing this file by hand is undone by the next run, and a test compares it with a fresh run.",
     `// Catalog version ${catalogVersion}. Entries: ${records.length}.`,
     `// Derived from the free-exercise-db project (${pin.repo}), file ${pin.file}, commit ${pin.commit},`,
-    "// released under the Unlicense, plus entries written for Apogee (origin apogee). See NOTICE.md.",
+    "// released under the Unlicense, plus entries written for Apogee (origin authored). See NOTICE.md.",
     "// Only the fields the app stores are here; no instructions, no images. The app does not import this file yet.",
   ];
   const catalogJs = [
@@ -196,7 +196,7 @@ export function buildEmission({ entries, pairedEntries, pairs, manual, seeds, vo
     "instructions and images are not included. That project says it derives from wrkout/exercises.json, also under the",
     "Unlicense. Where the names, tags and text originally came from was not independently verified.",
     "",
-    "The Unlicense statement below covers only the entries with origin upstream. Entries with origin apogee were",
+    "The Unlicense statement below covers only the entries with origin upstream. Entries with origin authored were",
     "written by hand for Apogee and are not covered by it.",
     "",
     "The licence text of free-exercise-db, as read at that commit (its last line, which only gives the licence's web address,",
