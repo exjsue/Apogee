@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadVocabulary, missingFromModel } from "./lib/vocabulary.js";
 import { curate, entriesWithoutPrimary, stringify } from "./lib/curate.js";
-import { renderReviewBatches, renderAudit, renderExcluded, summarize, renderSummary } from "./lib/review.js";
+import { renderReviewBatches, renderAudit, renderExcluded, renderFamilies, renderOutliers, summarize, renderSummary } from "./lib/review.js";
 import { candidatePairs, renderSeedPairs } from "./lib/seed-pairs.js";
 import { buildAdditions, formatProblems, formatWarnings } from "./lib/additions.js";
 import { SEED_EXERCISES } from "../../src/domain/seed.js";
@@ -97,6 +97,8 @@ export function run(argv) {
     ["seed-pairs.md", renderSeedPairs(candidatePairs(SEED_EXERCISES, result.entries))],
     ["audit-sample.md", renderAudit(result.audit)],
     ["excluded.md", renderExcluded(result.excludedDetails)],
+    ["families.md", renderFamilies(everyEntry)],
+    ["outliers.md", renderOutliers(everyEntry, vocabulary.baseMovements)],
     ["key-clashes.json", stringify({ keyClashes: result.keyClashes, nameClashes: result.nameClashes })],
     ...renderReviewBatches(result.review).map((b) => [b.name, b.text]),
   ];

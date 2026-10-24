@@ -338,3 +338,38 @@ test("additions: the same key as an existing entry still stops the build in ever
   const data = JSON.parse(fs.readFileSync(path.join(here, "..", "tools", "exercise-catalog", "vocab.json"), "utf8"));
   assert.deepEqual(data.keyClashWarningFamilies, vocabulary.keyClashWarningFamilies);
 });
+
+// ---- the family audit files ----
+
+test("families: the build writes families.md and outliers.md, the same on every run, with every entry that has a base listed exactly once", async () => {
+  const fs2 = await import("node:fs");
+  const os = await import("node:os");
+  const crypto = await import("node:crypto");
+  const { run } = await import("../tools/exercise-catalog/build-catalog.js");
+  const dir = fs2.mkdtempSync(path.join(os.tmpdir(), "apogee-audit-test-"));
+  try {
+    const bytes = fs2.readFileSync(path.join(FIXTURES, "sample-110.json"));
+    const input = path.join(dir, "input.json");
+    fs2.writeFileSync(input, bytes);
+    const pin = path.join(dir, "pin.json");
+    fs2.writeFileSync(pin, JSON.stringify({ repo: "fixture", file: "sample-110.json", commit: "none", bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), entries: 110 }));
+    const all = JSON.parse(fs2.readFileSync(path.join(here, "..", "tools", "exercise-catalog", "overrides.json"), "utf8"));
+    const overridesFile = path.join(dir, "overrides.json");
+    fs2.writeFileSync(overridesFile, JSON.stringify(Object.fromEntries(["Bench_Press_-_With_Bands", "Chair_Squat", "Split_Squats", "Squats_-_With_Bands"].map((id) => [id, all[id]]))));
+    const args = (name) => ["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, name)];
+    run(args("a"));
+    run(args("b"));
+    for (const file of ["families.md", "outliers.md"]) {
+      assert.ok(fs2.readFileSync(path.join(dir, "a", file)).equals(fs2.readFileSync(path.join(dir, "b", file))), `${file} differs between runs`);
+    }
+    const catalog = JSON.parse(fs2.readFileSync(path.join(dir, "a", "catalog.json"), "utf8")).exercises.filter((e) => e.baseMovementId !== null);
+    const listed = fs2.readFileSync(path.join(dir, "a", "families.md"), "utf8").split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).split(" | ")[0]);
+    assert.deepEqual([...listed].sort(), catalog.map((e) => e.name).sort());
+    assert.match(fs2.readFileSync(path.join(dir, "a", "outliers.md"), "utf8"), /not a verdict/);
+    assert.match(fs2.readFileSync(path.join(dir, "a", "outliers.md"), "utf8"), /defined in vocab.json that no entry uses/);
+    // "Clean Deadlift" contains the family word "clean" but is a deadlift: the nearly-caught list must find it.
+    assert.match(fs2.readFileSync(path.join(dir, "a", "outliers.md"), "utf8"), /\| clean \| Clean Deadlift \| deadlift \|/);
+  } finally {
+    fs2.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -73,6 +73,7 @@
   - Wiring the catalog into the app requires model.js (createExercise currently drops baseMovementId, equipment, variations, upstreamId), import validation, and the export format to be updated together. Needs approval. Also: add neck and abductors to the app muscle vocabulary.
   - Revisit the excluded entries (rotator cuff, circles, throws, get-ups, conflicting-evidence cases) when deciding a general shoulders value. Rotator cuff prehab is commonly logged, so excluding it means users will create custom exercises; pair those with builtins later. Smith/Dumbbell_Incline_Shoulder_Raise may be serratus or chest movements, so the upstream shoulders label may be wrong.
   - Review the null base-movement list (59 entries, the review files marked null-base-movement) and the multi-family review list (72 entries, "Other families that also matched"); add families in small passes, one rule and its tests at a time.
+  - Audit families.md and outliers.md before wiring the catalog into the app.
 - [ ] More animations across the app.
 - [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.

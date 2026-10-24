@@ -139,3 +139,107 @@ export function renderSummary(summary) {
   ];
   return `${lines.join("\n")}\n`;
 }
+
+// ---- family audit: two files for reading by eye; they never change a base or any other output ----
+
+const SHARE = (n, total) => `${Math.round((n / total) * 100)}%`;
+const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1);
+const primaryOf = (e) => (e.primaryMuscles.length === 0 ? "none" : e.primaryMuscles.join("+"));
+
+// Most common value of a list; ties go to the alphabetically first value, so the output never changes.
+function commonest(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const [value, count] = [...counts].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+  return { value, count, counts };
+}
+
+function groupByBase(entries) {
+  const groups = new Map();
+  for (const e of entries) {
+    if (e.baseMovementId === null) continue;
+    if (!groups.has(e.baseMovementId)) groups.set(e.baseMovementId, []);
+    groups.get(e.baseMovementId).push(e);
+  }
+  return [...groups].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
+export function renderFamilies(entries) {
+  const groups = groupByBase(entries);
+  const lines = [`# Families (${groups.length} base movements in use, ${groups.reduce((n, [, m]) => n + m.length, 0)} entries with a base)`, "", "For skimming: each section is one base movement, with every member. Nothing here is a verdict.", ""];
+  for (const [base, members] of groups) {
+    const eq = commonest(members.map((m) => m.equipment));
+    const mu = commonest(members.map(primaryOf));
+    lines.push(
+      `## ${base} (${members.length})`,
+      "",
+      `Most common equipment: ${eq.value} (${SHARE(eq.count, members.length)}). Most common primary muscle: ${mu.value} (${SHARE(mu.count, members.length)}).`,
+      "",
+    );
+    for (const m of [...members].sort(byName)) lines.push(`- ${m.name} | ${m.equipment} | ${primaryOf(m)} | ${list(m.variations)}`);
+    lines.push("");
+  }
+  return `${lines.join("\n")}`;
+}
+
+const NEARLY_CAUGHT_CAP = 60;
+const OUTLIER_MIN_MEMBERS = 5;
+const RARE_EQUIPMENT_SHARE = 0.1;
+
+// The words of a base movement id as they would appear in a name: "pull-up" -> pull[- ]up, plural allowed.
+const keywordPattern = (base) => new RegExp(String.raw`\b${base.split("-").join("[- ]?")}s?\b`, "i");
+
+export function renderOutliers(entries, definedBases) {
+  const groups = groupByBase(entries);
+  const lines = [
+    "# Outliers",
+    "",
+    "A lead list, not a verdict: an entry here differs from its family's usual pattern, and may be right. Look at the strongest first.",
+    `Families with ${OUTLIER_MIN_MEMBERS} or more members only. An entry is listed when its primary muscle differs from the family's most common one, or when its equipment differs and is rare (under ${RARE_EQUIPMENT_SHARE * 100}% of the family).`,
+    "",
+    "## Entries that deviate",
+    "",
+    "| Strength | Base movement | Entry | Family usually has | This entry has |",
+    "|---|---|---|---|---|",
+  ];
+  const rows = [];
+  for (const [base, members] of groups) {
+    if (members.length < OUTLIER_MIN_MEMBERS) continue;
+    const eq = commonest(members.map((m) => m.equipment));
+    const mu = commonest(members.map(primaryOf));
+    for (const m of members) {
+      const muShare = (mu.counts.get(primaryOf(m)) ?? 0) / members.length;
+      const eqShare = (eq.counts.get(m.equipment) ?? 0) / members.length;
+      const primaryDiffers = primaryOf(m) !== mu.value;
+      const equipmentDiffers = m.equipment !== eq.value && eqShare < RARE_EQUIPMENT_SHARE;
+      if (!primaryDiffers && !equipmentDiffers) continue;
+      const strength = (primaryDiffers ? 1 - muShare : 0) + (equipmentDiffers ? 1 - eqShare : 0);
+      const has = [primaryDiffers ? `primary ${primaryOf(m)} (${SHARE(muShare, 1)})` : null, equipmentDiffers ? `equipment ${m.equipment} (${SHARE(eqShare, 1)})` : null].filter(Boolean).join("; ");
+      rows.push({ strength, base, m, usually: `primary ${mu.value} (${SHARE(mu.count, members.length)}); equipment ${eq.value} (${SHARE(eq.count, members.length)})`, has });
+    }
+  }
+  rows.sort((a, b) => b.strength - a.strength || (a.base < b.base ? -1 : a.base > b.base ? 1 : byName(a.m, b.m)));
+  for (const r of rows) lines.push(`| ${r.strength.toFixed(2)} | ${r.base} | ${r.m.name} | ${r.usually} | ${r.has} |`);
+
+  const used = new Set(groups.map(([base]) => base));
+  const unused = definedBases.filter((b) => !used.has(b));
+  lines.push("", `## Base movements defined in vocab.json that no entry uses (${unused.length})`, "", unused.length === 0 ? "None." : unused.map((b) => `- ${b}`).join("\n"));
+
+  const nearly = [];
+  for (const base of [...definedBases].sort()) {
+    const pattern = keywordPattern(base);
+    for (const e of entries) {
+      if (e.baseMovementId !== base && pattern.test(e.name)) nearly.push({ base, e });
+    }
+  }
+  nearly.sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : byName(a.e, b.e)));
+  lines.push(
+    "",
+    `## Nearly caught: the name contains a family's words but the entry is not in that family (${nearly.length} found, first ${Math.min(NEARLY_CAUGHT_CAP, nearly.length)} shown)`,
+    "",
+    "| Family keyword | Entry | Its base movement |",
+    "|---|---|---|",
+    ...nearly.slice(0, NEARLY_CAUGHT_CAP).map(({ base, e }) => `| ${base} | ${e.name} | ${e.baseMovementId ?? "null"} |`),
+  );
+  return `${lines.join("\n")}\n`;
+}
