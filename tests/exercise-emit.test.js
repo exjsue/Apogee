@@ -102,6 +102,12 @@ test("emit: catalog.js is a module whose entries match catalog.json field for fi
     assert.deepEqual(module.MUSCLE_IDS, [...new Set(module.CATALOG.flatMap((e) => [...e.primaryMuscles, ...e.secondaryMuscles]))].sort());
     assert.deepEqual(module.EQUIPMENT_IDS, [...new Set(module.CATALOG.flatMap((e) => [e.equipment, ...e.equipmentTags]))].sort());
     assert.ok(fs.existsSync(path.join(emitFolder, "NOTICE.md")));
+    // catalog-info.js: the version and the number of entries, nothing else
+    const info = text(emitFolder, "catalog-info.js");
+    assert.ok(info.includes(`export const CATALOG_VERSION = ${module.CATALOG_VERSION};`));
+    assert.ok(info.includes(`export const CATALOG_COUNT = ${module.CATALOG.length};`));
+    assert.ok(!/https?:\/\//.test(info));
+    assert.deepEqual(fs.readdirSync(emitFolder).sort(), ["NOTICE.md", "catalog-info.js", "catalog.js", "seed-grouping.js"]);
   });
 });
 
@@ -238,12 +244,14 @@ test("emit: nothing outside src/catalog imports catalog.js, only the seed code i
     return found.sort();
   };
   assert.deepEqual(referring(/catalog\/catalog(\.js)?["']/), []); // catalog.js: nothing
+  assert.deepEqual(referring(/catalog-info/), []); // catalog-info.js: nothing either, until the wiring step
   const groupingUsers = referring(/seed-grouping/);
   assert.ok(groupingUsers.length > 0 && groupingUsers.every((file) => MAY_IMPORT_SEED_GROUPING.includes(file)), `seed-grouping.js is used by: ${groupingUsers.join(", ")}`);
   assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), ["src/catalog/seed-grouping.js"]);
   const manifest = fs.readFileSync(path.join(ROOT, "sw-manifest.js"), "utf8");
   assert.ok(manifest.includes('"./src/catalog/seed-grouping.js"'));
   assert.ok(!manifest.includes("catalog.js"));
+  assert.ok(!manifest.includes("catalog-info"));
 });
 
 // ---- the committed module is what a fresh run writes ----

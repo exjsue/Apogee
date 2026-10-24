@@ -218,3 +218,124 @@ test("compare-exports: a path inside the repository is refused even when nothing
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---- --allow-added-builtins ----
+
+const FLAG = "--allow-added-builtins";
+const runWith = (a, b, ...flags) => {
+  let out = "";
+  let err = "";
+  const code = main([a, b, ...flags], { write: (t) => { out += t; } }, { write: (t) => { err += t; } });
+  return { code, out, err };
+};
+// a schema 3 file: the exercises carry the seven fields, so two such files can be identical
+const v3Data = () => upgraded().data;
+const builtin = (id, origin) => exercise(id, { ...NEW_VALUES, origin, upstreamId: origin === "upstream" ? id : null, catalogVersion: 1 });
+const FIVE = [builtin("lib-1", "upstream"), builtin("lib-2", "upstream"), builtin("lib-3", "upstream"), builtin("apogee-lib-4", "authored"), builtin("apogee-lib-5", "authored")];
+
+test("compare-exports --allow-added-builtins: five added built-in records are counted, not listed, and everything else identical gives exit 0", () => {
+  const after = v3Data();
+  after.exercises.push(...FIVE);
+  withFiles(file(3, v3Data()), file(3, after), ({ a, b }) => {
+    const { code, out, err } = runWith(a, b, FLAG);
+    assert.equal(code, 0, err + out);
+    assert.match(out, /exercises: 0 only in the first file, 5 added built-in records, 0 other ids only in the second, 0 in both with differences/);
+    assert.match(out, /^5 added built-in records$/m);
+    assert.match(out, /Exercises: the only difference is 5 added built-in records; every other exercise is identical\./);
+    assert.match(out, /RESULT: workouts, entries and sets are identical, and the only change to exercises is added built-in records\./);
+    assert.match(out, /exercises: 2 \/ 7/);
+    for (const hidden of ["lib-1", "lib-5", SECRET_NAME, SECRET_NOTE]) assert.ok(!out.includes(hidden), hidden); // counted, never listed
+    assert.equal(runWith(a, b, FLAG).out, out); // the flag may also come first
+    assert.equal(main([FLAG, a, b], { write() {} }, { write() {} }), 0);
+  });
+});
+
+test("compare-exports --allow-added-builtins: an added custom exercise or an added seed is NOT allowed, and is named by id", () => {
+  for (const extra of [exercise("ex-new", { ...NEW_VALUES, origin: "custom", isCustom: true }), exercise("seed-new", { ...NEW_VALUES, origin: "seed" })]) {
+    const after = v3Data();
+    after.exercises.push(...FIVE, extra);
+    withFiles(file(3, v3Data()), file(3, after), ({ a, b }) => {
+      const { code, out } = runWith(a, b, FLAG);
+      assert.equal(code, 1);
+      assert.match(out, /5 added built-in records, 1 other ids only in the second/);
+      assert.match(out, new RegExp(`${extra.id}: only in the second file, and not a built-in record`));
+      assert.match(out, /Exercises: NOT only added built-in records/);
+      assert.match(out, /RESULT: there are differences beyond added built-in records/);
+    });
+  }
+});
+
+test("compare-exports --allow-added-builtins: a changed field on an exercise both files have fails, even one of the seven new fields", () => {
+  const changedNote = v3Data();
+  changedNote.exercises[0].notes = "another note";
+  changedNote.exercises.push(...FIVE);
+  withFiles(file(3, v3Data()), file(3, changedNote), ({ a, b }) => {
+    const { code, out } = runWith(a, b, FLAG);
+    assert.equal(code, 1);
+    assert.match(out, /seed-a: notes/);
+    assert.match(out, /fields that differ: notes \(1\)/);
+    assert.ok(!out.includes("another note"));
+  });
+  // a version 2 file against a version 3 file differs in the seven fields: allowed by default, not with this flag
+  withFiles(file(2, baseData()), upgraded(), ({ a, b }) => {
+    assert.equal(runWith(a, b).code, 0);
+    const { code, out } = runWith(a, b, FLAG);
+    assert.equal(code, 1);
+    assert.match(out, /fields that differ: baseMovementId \(2\), catalogVersion \(2\)/);
+  });
+});
+
+test("compare-exports --allow-added-builtins: changed history or a removed exercise still fails", () => {
+  const history = v3Data();
+  history.sets[0].reps = 99;
+  history.exercises.push(...FIVE);
+  withFiles(file(3, v3Data()), file(3, history), ({ a, b }) => {
+    const { code, out } = runWith(a, b, FLAG);
+    assert.equal(code, 1);
+    assert.match(out, /sets: NOT identical/);
+    assert.match(out, /s1: differs in reps/);
+  });
+  const removed = v3Data();
+  removed.exercises.pop();
+  withFiles(file(3, v3Data()), file(3, removed), ({ a, b }) => {
+    const { code, out } = runWith(a, b, FLAG);
+    assert.equal(code, 1);
+    assert.match(out, /ex-b: only in the first file/);
+  });
+});
+
+test("compare-exports: without the flag, added built-in records are reported exactly as before", () => {
+  const after = v3Data();
+  after.exercises.push(...FIVE);
+  withFiles(file(3, v3Data()), file(3, after), ({ a, b }) => {
+    const { code, out } = run(a, b);
+    assert.equal(code, 1);
+    assert.match(out, /exercises: 0 only in the first file, 5 only in the second, 0 in both with differences/);
+    assert.match(out, /lib-1: only in the second file/);
+    assert.match(out, /Exercises: NOT limited to the seven new fields; some ids are in one file only\./);
+    assert.ok(!/added built-in records/.test(out));
+  });
+});
+
+test("compare-exports: an unknown option, or the flag twice, or the wrong number of files, is a usage error with exit status 2", () => {
+  withFiles(file(2, baseData()), file(2, baseData()), ({ a, b }) => {
+    for (const args of [[a, b, "--allow-everything"], [a, b, FLAG, FLAG], [a, FLAG], [a, b, b]]) {
+      let usage = "";
+      assert.equal(main(args, { write() {} }, { write: (t) => { usage += t; } }), 2, args.join(" "));
+      assert.match(usage, /Usage: node tools\/compare-exports\.js <before\.json> <after\.json> \[--allow-added-builtins\]/);
+    }
+  });
+});
+
+test("compare-exports: run as a program, the flag works and the repository check still applies", () => {
+  const after = v3Data();
+  after.exercises.push(...FIVE);
+  withFiles(file(3, v3Data()), file(3, after), ({ a, b }) => {
+    const ok = spawnSync(process.execPath, [TOOL, a, b, FLAG], { encoding: "utf8" });
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.match(ok.stdout, /^5 added built-in records$/m);
+    const refused = spawnSync(process.execPath, [TOOL, TOOL, b, FLAG], { encoding: "utf8" });
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /inside the repository folder/);
+  });
+});

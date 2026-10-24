@@ -143,7 +143,7 @@ export function variationsFor(name, equipment, family = null) {
     for (let i = tags.length - 1; i >= 0; i -= 1) if (tags[i].endsWith("-grip") && !/grip/.test(n)) tags.splice(i, 1);
     tags.push(...FAMILY_VARIATION_RULES.filter(([, pattern]) => pattern.test(n)).map(([tag]) => tag));
     // Stretches and foam rolling are told apart by the muscle they work; cardio by its kind.
-    if (family.id === "stretch" || family.id === "foam-roll") tags.push(...family.primary.map((m) => `target-${m}`));
+    if (family.id === "stretch" || family.id === "foam-roll") tags.push(...family.primary.map((m) => `target-${m.replaceAll("_", "-")}`));
     if (family.id === "cardio") tags.push(...CARDIO_MODALITY_RULES.filter(([, pattern]) => pattern.test(n)).map(([tag]) => tag));
   }
   return [...new Set(tags)].sort();

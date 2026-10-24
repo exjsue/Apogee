@@ -72,7 +72,7 @@ matches wins, so specific families come before general ones. A name rule never f
 machine, "row" in narrow, "sled" in sledgehammer). An entry two or more families match goes on the review list, with
 the other families in the column "Other families that also matched". An entry no family fits stays null; so do
 strongman events and the names in `STAYS_NULL` (owner decisions). Variation tags that tell family entries apart
-(`lying`, `standing`, `target-<muscle>` for stretch and foam-roll, the cardio kind for cardio) are added to family
+(`lying`, `standing`, `target-<muscle>` for stretch and foam-roll, with hyphens (`target-lower-back`; the app refuses underscores in a tag), the cardio kind for cardio) are added to family
 entries only. `vocab.json` lists `keyClashWarningFamilies`: for those families a shared key is not a reason to review,
 and in additions.txt it is a warning (additions-warnings.txt) and not an error.
 
@@ -86,6 +86,8 @@ and in additions.txt it is a warning (additions-warnings.txt) and not an error.
   retired). Sorted by id, sorted keys, LF, no timestamps.
 - `seed-grouping.js`: `SEED_GROUPING`, the grouping fields (base movement, equipment, variations) of each of the 16 seeds:
   from the paired upstream entry (which is left out of `CATALOG`), or set by hand in `seed-grouping-manual.json`.
+- `catalog-info.js`: `CATALOG_VERSION` and `CATALOG_COUNT` (retired entries included), so the app can check whether the
+  catalog is already stored without loading `catalog.js`.
 - `NOTICE.md`: the Unlicense text, the upstream commit, and what the statement covers.
 
 The files are committed on purpose. The app does not import them yet. Regenerate with the pinned input and commit the
