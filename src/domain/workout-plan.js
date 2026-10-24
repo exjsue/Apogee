@@ -13,8 +13,11 @@
 //   row        { id, exerciseId, order, reps, weight, unit, restSeconds, isWarmup }
 //              reps and weight are the TEXT typed so far (blank allowed);
 //              they are parsed strictly only when the row is checked.
+//
+// A ghost is what an unchecked row would be checked with when a field is left
+// blank: shown in the field, never stored (see ghostFor). Checking takes it.
 
-import { WEIGHT_UNITS } from "./model.js";
+import { WEIGHT_UNITS, convertWeight } from "./model.js";
 import { DEFAULT_REST_SECONDS, setPhase, remainingSeconds, fractionRemaining } from "./rest-timer.js";
 
 const UNKNOWN_EXERCISE = "Unknown exercise";
@@ -138,6 +141,61 @@ function loggedRow(set, fallback) {
   };
 }
 
+// The heaviest set of a list (one exercise in one workout), as ghost text { reps, weight, unit },
+// or null if it has none. Warm-ups never count. Weights are compared in kg, so 100 kg beats
+// 220 lb; equal weights go to more reps, then to the earlier set (lower order). The weight
+// stays in the number and unit it was entered in: it is never converted here.
+export function heaviestSet(sets) {
+  let best = null;
+  let bestKg = 0;
+  for (const set of sets) {
+    if (set.isWarmup) continue;
+    const kg = convertWeight(set.weightValue, set.weightUnit, "kg");
+    const better = best === null || kg > bestKg
+      || (kg === bestKg && (set.reps > best.reps || (set.reps === best.reps && set.order < best.order)));
+    if (better) {
+      best = set;
+      bestKg = kg;
+    }
+  }
+  return best === null ? null : { reps: String(best.reps), weight: String(best.weightValue), unit: best.weightUnit };
+}
+
+const isBlank = (text) => text.trim() === "";
+
+// What a row stands for, as text: a logged set's numbers; for an unchecked row, what
+// is typed in each field, else that field's ghost, else blank.
+function filledIn(row, ghost) {
+  if (row.kind === "logged") return { reps: String(row.reps), weight: String(row.weight), unit: row.unit };
+  return {
+    reps: isBlank(row.reps) ? (ghost === null ? "" : ghost.reps) : row.reps.trim(),
+    weight: isBlank(row.weight) ? (ghost === null ? "" : ghost.weight) : row.weight.trim(),
+    unit: isBlank(row.weight) && ghost !== null ? ghost.unit : row.unit,
+  };
+}
+
+// The ghost of rows[index] (one exercise's rows, in order): { reps, weight, unit } or null.
+// Only an unchecked row has one, and only in a field left blank. It copies the row
+// directly above (field by field: what is typed there, else that row's own ghost); the
+// first row copies lastBest, the heaviest set of the exercise's last session (or null).
+// A row above with a weight but no reps gives a ghost with the weight only.
+// unit is the unit the ghost's weight was entered in; showing it in another unit is the
+// screen's business, and checking stores this number in this unit.
+export function ghostFor(rows, index, lastBest = null) {
+  const row = rows[index];
+  if (row === undefined || row.kind === "logged") return null;
+  const source = index === 0 ? lastBest : filledIn(rows[index - 1], ghostFor(rows, index - 1, lastBest));
+  if (source === null) return null;
+  const reps = isBlank(row.reps) ? source.reps : "";
+  const weight = isBlank(row.weight) ? source.weight : "";
+  return reps === "" && weight === "" ? null : { reps, weight, unit: source.unit };
+}
+
+// Is the ghost the same one? Compares the stored form (number text and unit), never what is shown.
+export const sameGhost = (a, b) => (a === null || b === null
+  ? a === b
+  : a.reps === b.reps && a.weight === b.weight && a.unit === b.unit);
+
 function plannedRow(row, fallback) {
   return { kind: "planned", ...row, restSeconds: row.restSeconds ?? fallback };
 }
@@ -146,7 +204,9 @@ function plannedRow(row, fallback) {
 // and, for every row that has a timer line, its phase, the seconds to show and
 // the fraction of the pie. Warm-up rows have no timer line (hasTimer false).
 //   defaults  exerciseId -> that exercise's defaultRestSeconds (null or missing = 3:00)
-export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, defaults = new Map() }) {
+//   lastBest  exerciseId -> the heaviest set of its last session (heaviestSet), for the first row's ghost
+// Every row has a ghost (see ghostFor): null for logged rows.
+export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, defaults = new Map(), lastBest = new Map() }) {
   const entryOf = new Map(entries.map((entry) => [entry.exerciseId, entry]));
   const loggedFirst = [...entries].sort((a, b) => a.order - b.order).map((entry) => entry.exerciseId);
   const ids = [...loggedFirst.filter((id) => !plan.exercises.includes(id)), ...plan.exercises];
@@ -156,9 +216,10 @@ export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, 
     const fallback = defaults.get(exerciseId) ?? DEFAULT_REST_SECONDS;
     const logged = entry === null ? [] : sets.filter((set) => set.entryId === entry.id).map((set) => loggedRow(set, fallback));
     const planned = plan.rows.filter((row) => row.exerciseId === exerciseId).map((row) => plannedRow(row, fallback));
-    const rows = [...logged, ...planned]
-      .sort((a, b) => a.order - b.order || (a.kind === b.kind ? 0 : a.kind === "logged" ? -1 : 1))
-      .map((row) => {
+    const ordered = [...logged, ...planned]
+      .sort((a, b) => a.order - b.order || (a.kind === b.kind ? 0 : a.kind === "logged" ? -1 : 1));
+    const rows = ordered
+      .map((row, index) => {
         const phase = setPhase({ logged: row.kind === "logged", setId: row.id, timer, nowMs });
         const hasTimer = !row.isWarmup;
         let seconds = 0;
@@ -170,7 +231,8 @@ export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, 
           seconds = remainingSeconds(timer, nowMs);
           fraction = fractionRemaining(timer, nowMs);
         }
-        return { ...row, phase, hasTimer, seconds, fraction };
+        const ghost = ghostFor(ordered, index, lastBest.get(exerciseId) ?? null);
+        return { ...row, phase, hasTimer, seconds, fraction, ghost };
       });
     return {
       exerciseId,

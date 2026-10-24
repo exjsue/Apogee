@@ -25,6 +25,7 @@ export const freshLogState = () => ({
   confirmFinish: false,
   confirmDeleteSetId: null,
   editingRestId: null,
+  editingSetId: null, // the checked set whose edit form is open
   menuExerciseId: null,
   editingDefaultFor: null,
   seen: null, // the rows of the last drawing, so only what changed animates

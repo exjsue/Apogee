@@ -191,6 +191,9 @@ input[type="text"], input[type="search"], input[type="file"], select, textarea {
   font: inherit;
 }
 textarea { min-height: 120px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.875rem; }
+/* Placeholders (a set's ghost among them) in the muted colour, checked for 4.5:1 on the page colour
+   that fields use; opacity 1 because Firefox fades placeholders by default. */
+input::placeholder { color: var(--muted); opacity: 1; }
 input[type="file"] { padding: 8px; }
 
 fieldset.checks { border: 1px solid var(--line); border-radius: var(--radius); margin: 12px 0 0; padding: 8px 12px 12px; }
@@ -357,6 +360,23 @@ button.check-toggle[aria-pressed="true"]::before { opacity: 1; }
   font-variant-numeric: tabular-nums;
 }
 .cell-value { white-space: nowrap; }
+/* A ghost is in italics as well as muted, so it does not read as a typed or logged value. */
+.cell input::placeholder { font-style: italic; }
+/* A checked set's values are buttons that open its edit form; they look like the text they hold. */
+button.cell-edit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.set-editor .cell input { width: 5rem; }
 .cell-note { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 
 /* The check: an outlined circle; checked, a filled circle with a check in the page colour. */

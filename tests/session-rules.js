@@ -8,7 +8,8 @@
 import { createStore } from "../src/storage/store.js";
 import { createLogger } from "../src/app/logger.js";
 import { createBackup } from "../src/backup/backup.js";
-import { createWorkSet } from "../src/domain/model.js";
+import { createWorkSet, createWorkout, createWorkoutEntry } from "../src/domain/model.js";
+import { formatWeight } from "../src/domain/format.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
 import { rawCounts, failAfter, makeDetails, EXERCISE } from "./store-rules.js";
 import { incomingFile } from "./backup-rules.js";
@@ -50,7 +51,7 @@ rule("session: Add set makes an unchecked row prefilled from the last one, and s
   assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
   await logger.updatePlannedSet(first.id, { reps: "8", weight: "100", unit: "kg" });
   const second = await logger.addSet(BENCH);
-  assert.deepEqual([second.reps, second.weight, second.unit, second.order], ["8", "100", "kg", 1]);
+  assert.deepEqual([second.order, rowOf(await logger.getSession(), second.id).ghost], [1, { reps: "8", weight: "100", unit: "kg" }]);
   await assert.rejects(logger.addSet("no-such-exercise"), /no exercise/);
 });
 
@@ -412,14 +413,15 @@ rule("session: a prefilled row can be checked untouched; a blank one cannot", as
   const first = await logger.addSet(BENCH);
   await logger.checkSet(first.id, FIELDS);
   const second = await logger.addSet(BENCH); // prefilled from the set just logged
-  assert.deepEqual([second.reps, second.weight, second.unit], ["8", "100", "kg"]);
+  assert.deepEqual(rowOf(await logger.getSession(), second.id).ghost, { reps: "8", weight: "100", unit: "kg" });
   const set = await logger.checkSet(second.id); // nothing typed
   assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [8, 100, "kg"]);
   // prefilled from a planned row that was typed into but never checked
   const third = await logger.addSet(BENCH);
   await logger.updatePlannedSet(third.id, { reps: "6", weight: "90" });
   const fourth = await logger.addSet(BENCH);
-  assert.deepEqual([fourth.reps, fourth.weight], ["6", "90"]);
+  const fourthGhost = rowOf(await logger.getSession(), fourth.id).ghost;
+  assert.deepEqual([fourthGhost.reps, fourthGhost.weight], ["6", "90"]);
   assert.equal((await logger.checkSet(fourth.id)).weightValue, 90);
   // a different exercise has nothing to prefill from: only a truly blank field is refused
   const blank = await logger.addSet(SQUAT);
@@ -427,6 +429,272 @@ rule("session: a prefilled row can be checked untouched; a blank one cannot", as
   await logger.updatePlannedSet(blank.id, { reps: "5" });
   await assert.rejects(logger.checkSet(blank.id), /weight is required/);
   assert.equal((await store.getSet(second.id)).reps, 8);
+});
+
+// ---- ghosts: what an unchecked row would be checked with, shown and never stored ----
+
+const DAY = 24 * 60 * 60 * SECOND;
+const daysBefore = (days) => new Date(T0 - days * DAY).toISOString();
+
+// A finished workout in the past with sets of one exercise: [reps, weight, unit, isWarmup] each.
+async function pastWorkout(store, id, startedAt, exerciseId, sets) {
+  const workout = createWorkout({ id, startedAt, endedAt: startedAt });
+  const entry = createWorkoutEntry({ id: `${id}-e`, workoutId: id, exerciseId, order: 0 });
+  await store.saveWorkoutWithDetails(workout, [entry], sets.map(([reps, weightValue, weightUnit, isWarmup = false], order) => createWorkSet({
+    id: `${id}-s${order}`, entryId: entry.id, order, reps, weightValue, weightUnit, isWarmup, completedAt: startedAt,
+  })));
+}
+
+const rawMeta = (adapter) => adapter.transaction(["meta"], "readonly", (tx) => tx.getAll("meta"));
+
+rule("ghost: Add set writes a blank row; no ghost value reaches meta, the sets store or the export", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger } = await setup(ctx);
+  const backup = createBackup(adapter);
+  const first = await logger.addSet(BENCH);
+  await logger.checkSet(first.id, { reps: "7", weight: "123.5", unit: "kg" });
+  const row = await logger.addSet(BENCH);
+  assert.deepEqual([row.reps, row.weight], ["", ""]);
+  assert.deepEqual(rowOf(await logger.getSession(), row.id).ghost, { reps: "7", weight: "123.5", unit: "kg" });
+  const planned = (await store.getWorkoutPlan()).rows.find((candidate) => candidate.id === row.id);
+  assert.deepEqual([planned.reps, planned.weight], ["", ""]);
+  const meta = JSON.stringify(await rawMeta(adapter));
+  assert.equal(meta.includes("123.5"), false); // the checked set's weight lives only in the sets store
+  await logger.getSession(); // working the ghost out again writes nothing
+  assert.equal(JSON.stringify(await rawMeta(adapter)), meta);
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
+  const text = await backup.exportToText();
+  assert.deepEqual(parse(text).data.sets.map((set) => set.id), [first.id]);
+  assert.equal(text.includes(row.id), false);
+});
+
+rule("ghost: checking an untouched row stores the ghost exactly, in the ghost's own unit", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  const first = await logger.addSet(BENCH);
+  await logger.checkSet(first.id, { reps: "5", weight: "62,5", unit: "kg" });
+  const row = await logger.addSet(BENCH);
+  const shownGhost = rowOf(await logger.getSession(), row.id).ghost;
+  // the screen sends blank fields and the app's unit (lb here); the ghost's kg wins for a weight taken from it
+  const set = await logger.checkSet(row.id, { reps: "", weight: "", unit: "lb" }, { shownGhost });
+  assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [5, 62.5, "kg"]);
+  const stored = await store.getSet(row.id);
+  assert.deepEqual([stored.reps, stored.weightValue, stored.weightUnit], [5, 62.5, "kg"]);
+});
+
+rule("ghost: a typed field wins over its ghost field by field; a weight-only row above leaves reps blank and the check is refused", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger } = await setup(ctx);
+  const first = await logger.addSet(BENCH);
+  await logger.checkSet(first.id, FIELDS); // 8 x 100 kg
+  const typedReps = await logger.addSet(BENCH);
+  const a = await logger.checkSet(typedReps.id, { reps: "6", weight: "", unit: "kg" });
+  assert.deepEqual([a.reps, a.weightValue, a.weightUnit], [6, 100, "kg"]);
+  const typedWeight = await logger.addSet(BENCH);
+  const b = await logger.checkSet(typedWeight.id, { reps: "", weight: "90", unit: "lb" });
+  assert.deepEqual([b.reps, b.weightValue, b.weightUnit], [6, 90, "lb"]); // typed weight in the app's unit; reps from the row above
+  // the row above has a weight and no reps: the ghost has the weight only
+  const above = await logger.addSet(SQUAT);
+  await logger.updatePlannedSet(above.id, { weight: "140", unit: "kg" });
+  const below = await logger.addSet(SQUAT);
+  assert.deepEqual(rowOf(await logger.getSession(), below.id).ghost, { reps: "", weight: "140", unit: "kg" });
+  const before = await rawCounts(adapter);
+  await assert.rejects(logger.checkSet(below.id), /reps is required/);
+  assert.equal(await store.getSet(below.id), null);
+  assert.deepEqual(await rawCounts(adapter), before);
+});
+
+rule("ghost: the first row takes the heaviest non-warm-up set of the last session (ties: more reps, then earlier)", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  await pastWorkout(store, "older", daysBefore(3), BENCH, [[1, 200, "kg"]]); // heavier, but not the last session
+  // 160 kg is a warm-up; 220.5 lb (100.02 kg) beats 100 kg; at 220.5 lb, 6 reps beat 3
+  await pastWorkout(store, "last", daysBefore(2), BENCH, [[10, 160, "kg", true], [5, 100, "kg"], [3, 220.5, "lb"], [6, 220.5, "lb"]]);
+  await pastWorkout(store, "warm-ups-only", daysBefore(1), BENCH, [[10, 60, "kg", true]]); // newer, but nothing to copy
+  const row = await logger.addSet(BENCH);
+  assert.deepEqual(rowOf(await logger.getSession(), row.id).ghost, { reps: "6", weight: "220.5", unit: "lb" });
+  const set = await logger.checkSet(row.id, { reps: "4", weight: "", unit: "kg" });
+  assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [4, 220.5, "lb"]);
+  // later rows copy the row above in this workout, not the last session
+  const next = await logger.addSet(BENCH);
+  assert.deepEqual(rowOf(await logger.getSession(), next.id).ghost, { reps: "4", weight: "220.5", unit: "lb" });
+});
+
+rule("ghost: the current workout is not the last session; a session beyond the newest 30 workouts, or no history, gives no ghost", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  const first = await logger.addSet(SQUAT);
+  const second = await logger.addSet(SQUAT);
+  assert.equal(rowOf(await logger.getSession(), first.id).ghost, null); // no history at all
+  await pastWorkout(store, "bench-long-ago", daysBefore(40), BENCH, [[5, 100, "kg"]]);
+  for (let i = 1; i <= 30; i += 1) await pastWorkout(store, `squat-${i}`, daysBefore(i), SQUAT, [[5, 100 + i, "kg"]]);
+  // the current workout gets a heavier squat (the second row), while the first row stays unchecked
+  await logger.checkSet(second.id, { reps: "3", weight: "150", unit: "kg" });
+  // the first row's last session is squat-1 (101 kg), not the current workout's 150 kg
+  assert.deepEqual(rowOf(await logger.getSession(), first.id).ghost, { reps: "5", weight: "101", unit: "kg" });
+  // bench was last done 31 workouts ago (beyond the newest 30): no ghost
+  const bench = await logger.addSet(BENCH);
+  assert.equal(rowOf(await logger.getSession(), bench.id).ghost, null);
+});
+
+rule("ghost: shown in the selected unit when the stored ghost is in the other unit; an untouched check stores the original number and unit", async (ctx) => {
+  const { assert } = ctx;
+  const { logger } = await setup(ctx);
+  const first = await logger.addSet(BENCH);
+  await logger.checkSet(first.id, FIELDS); // 8 x 100 kg
+  await logger.setPreferredUnit("lb");
+  const row = await logger.addSet(BENCH);
+  const ghost = rowOf(await logger.getSession(), row.id).ghost;
+  assert.deepEqual(ghost, { reps: "8", weight: "100", unit: "kg" }); // the ghost keeps its number and unit
+  assert.equal(formatWeight(Number(ghost.weight), ghost.unit, "lb"), "220.5"); // what the field shows (set-rows.js uses formatWeight)
+  const set = await logger.checkSet(row.id, { reps: "", weight: "", unit: "lb" }, { shownGhost: ghost });
+  assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [8, 100, "kg"]); // never 220.5 lb: no drift
+  // a weight typed over the ghost is stored in the selected unit
+  const typed = await logger.addSet(BENCH);
+  const typedGhost = rowOf(await logger.getSession(), typed.id).ghost;
+  const t = await logger.checkSet(typed.id, { reps: "", weight: "225", unit: "lb" }, { shownGhost: typedGhost });
+  assert.deepEqual([t.reps, t.weightValue, t.weightUnit], [8, 225, "lb"]);
+});
+
+rule("ghost: changing the row above between display and check refuses the check and stores nothing", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger, make } = await setup(ctx);
+  const above = await logger.addSet(BENCH);
+  await logger.updatePlannedSet(above.id, FIELDS);
+  const row = await logger.addSet(BENCH);
+  const shownGhost = rowOf(await logger.getSession(), row.id).ghost; // 8 x 100 kg
+  const otherTab = make();
+  await otherTab.updatePlannedSet(above.id, { weight: "110" });
+  await assert.rejects(
+    logger.checkSet(row.id, { reps: "", weight: "", unit: "kg" }, { shownGhost }),
+    /^Error: The suggestion changed\. Check again\.$/,
+  );
+  assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+  const redrawn = rowOf(await logger.getSession(), row.id);
+  assert.deepEqual([redrawn.kind, redrawn.ghost], ["planned", { reps: "8", weight: "110", unit: "kg" }]);
+  // a field the person typed is not compared: a changed weight ghost does not matter once the weight is typed
+  await otherTab.updatePlannedSet(above.id, { weight: "120" });
+  const set = await logger.checkSet(row.id, { reps: "", weight: "105", unit: "kg" }, { shownGhost: redrawn.ghost });
+  assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [8, 105, "kg"]);
+});
+
+// ---- editing a checked set ----
+
+rule("edit: editing a completed set keeps the running timer, completedAt, id, order, rest and checked state", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger, clock } = await setup(ctx);
+  const row = await logger.addSet(BENCH);
+  await logger.setRest(row.id, 120);
+  const set = await logger.checkSet(row.id, FIELDS);
+  const planned = await logger.addSet(BENCH);
+  const timerBefore = await store.getRunningTimer();
+  const rowsBefore = (await store.getWorkoutPlan()).rows;
+  clock.time += 30 * SECOND;
+  const edited = await logger.editSet(set.id, { reps: "10", weight: "102.5" });
+  assert.deepEqual(edited, { ...set, reps: 10, weightValue: 102.5 });
+  assert.deepEqual(await store.getSet(set.id), { ...set, reps: 10, weightValue: 102.5 }); // same id, order, rest, warm-up flag, completedAt
+  assert.deepEqual(await store.getRunningTimer(), timerBefore);
+  assert.deepEqual((await store.getWorkoutPlan()).rows, rowsBefore); // no row came back: still checked
+  const session = await logger.getSession();
+  const shown = rowOf(session, set.id);
+  assert.deepEqual([shown.kind, shown.phase, shown.seconds], ["logged", "resting", 90]);
+  assert.deepEqual(rowOf(session, planned.id).ghost, { reps: "10", weight: "102.5", unit: "kg" }); // the row below copies the edit
+  await logger.editSet(set.id, { weight: "100", unit: "lb" }); // the unit it was entered in is kept
+  assert.equal((await store.getSet(set.id)).weightUnit, "kg");
+  assert.equal((await store.getSet(set.id)).completedAt, set.completedAt);
+});
+
+rule("edit: the edit path makes zero deletes and never calls deleteSet", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger, make } = await setup(ctx);
+  const a = await logger.checkSet((await logger.addSet(BENCH)).id, FIELDS);
+  await logger.checkSet((await logger.addSet(BENCH)).id, FIELDS);
+  const c = await logger.checkSet((await logger.addSet(SQUAT)).id, FIELDS);
+  await logger.addSet(SQUAT); // an unchecked row too
+  const before = await rawCounts(adapter);
+  // any delete inside a transaction fails it, and the store's deleteSet throws
+  const noDeletes = createStore(failAfter(adapter, { deletes: 0, clears: 0 }));
+  const guarded = make({ ...noDeletes, deleteSet: () => { throw new Error("deleteSet must not be called"); } });
+  await guarded.editSet(a.id, { reps: "9" });
+  await guarded.editSet(c.id, { weight: "150" });
+  assert.deepEqual(await rawCounts(adapter), before);
+  assert.deepEqual([(await store.getSet(a.id)).reps, (await store.getSet(c.id)).weightValue], [9, 150]);
+  // the guard is real: unchecking does go through deleteSet
+  await assert.rejects(guarded.uncheckSet(a.id), /deleteSet must not be called/);
+});
+
+rule("edit: blank, zero, negative or non-whole reps and a bad weight are refused, and the set is unchanged", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  const set = await logger.checkSet((await logger.addSet(BENCH)).id, FIELDS);
+  const planBefore = await store.getWorkoutPlan();
+  for (const [fields, message] of [
+    [{ reps: "" }, /reps is required/],
+    [{ reps: "   " }, /reps is required/],
+    [{ reps: "0" }, /reps must be at least 1/],
+    [{ reps: "-3" }, /reps can't be negative/],
+    [{ reps: "7.5" }, /reps must be a whole number/],
+    [{ reps: "1001" }, /maximum of 1000/],
+    [{ weight: "" }, /weight is required/], // exactly as checkSet treats a blank weight
+    [{ weight: "-5" }, /weight can't be negative/],
+    [{ weight: "abc" }, /weight must be a number/],
+    [{ weight: "2600" }, /weight is above the maximum/],
+    [{ reps: "9", weight: "" }, /weight is required/], // one bad field refuses the whole edit
+  ]) {
+    await assert.rejects(logger.editSet(set.id, fields), message);
+    assert.deepEqual(await store.getSet(set.id), set);
+  }
+  assert.deepEqual(await store.getWorkoutPlan(), planBefore);
+});
+
+rule("upgrade: planned rows from the old version that already hold pre-filled values still load, show as typed, check as before, and ghost the row below", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  // what the previous version stored: Add set copied the last row's text into the new row
+  const oldRow = { id: "old-row", exerciseId: BENCH, order: 0, reps: "8", weight: "100", unit: "kg", restSeconds: null, isWarmup: false };
+  await adapter.transaction(["meta"], "readwrite", (tx) => tx.put("meta", { key: "workoutPlan", value: { exercises: [BENCH], rows: [oldRow], rev: 3 } }));
+  const shown = rowOf(await logger.getSession(), "old-row");
+  assert.deepEqual([shown.kind, shown.reps, shown.weight, shown.unit, shown.ghost], ["planned", "8", "100", "kg", null]);
+  const below = await logger.addSet(BENCH);
+  assert.deepEqual(rowOf(await logger.getSession(), below.id).ghost, { reps: "8", weight: "100", unit: "kg" });
+  const set = await logger.checkSet("old-row"); // untouched, as before
+  assert.deepEqual([set.reps, set.weightValue, set.weightUnit], [8, 100, "kg"]);
+  const next = await logger.checkSet(below.id);
+  assert.deepEqual([next.reps, next.weightValue, next.weightUnit], [8, 100, "kg"]);
+});
+
+rule("edit: a planned row, an unknown id, a stale workout, a finished workout and a stale-tab write are refused or redone, never overwriting", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger, clock, make } = await setup(ctx);
+  const set = await logger.checkSet((await logger.addSet(BENCH)).id, FIELDS);
+  const planned = await logger.addSet(BENCH);
+  await assert.rejects(logger.editSet(planned.id, { reps: "5" }), /not in the current workout/);
+  await assert.rejects(logger.editSet("no-such-set", { reps: "5" }), /not in the current workout/);
+  // another tab checks a row between this tab's read and its write: the edit is redone on fresh data
+  const otherTab = make();
+  let fired = false;
+  const interleaved = {
+    ...store,
+    getRunningTimer: async () => {
+      if (!fired) {
+        fired = true;
+        await otherTab.checkSet(planned.id, { reps: "3", weight: "80", unit: "kg" });
+      }
+      return store.getRunningTimer();
+    },
+  };
+  await make(interleaved).editSet(set.id, { reps: "12" });
+  assert.equal(fired, true);
+  assert.deepEqual([(await store.getSet(set.id)).reps, (await store.getSet(planned.id)).weightValue], [12, 80]); // both kept
+  assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 2 });
+  // a stale workout must be resolved first
+  clock.time += 13 * 60 * 60 * SECOND;
+  await assert.rejects(logger.editSet(set.id, { reps: "6" }), /Finish, continue or discard/);
+  assert.equal((await store.getSet(set.id)).reps, 12);
+  // a finished workout is not the current one
+  await logger.finishWorkout();
+  await assert.rejects(logger.editSet(set.id, { reps: "6" }), /not in the current workout/);
+  assert.equal((await store.getSet(set.id)).reps, 12);
 });
 
 // ---- import and the session ----

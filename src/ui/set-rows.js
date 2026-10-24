@@ -5,7 +5,7 @@
 // behaves) lives in src/app and src/domain.
 
 import { h, button, exerciseHeading } from "./dom.js";
-import { formatSetWeightParts } from "../domain/format.js";
+import { formatSetWeightParts, formatWeight, parseDecimal } from "../domain/format.js";
 import {
   formatRest, parseRestEntry, previewRestEntry, restToDigits, pieGeometry, isRunning, remainingSeconds, fractionRemaining,
 } from "../domain/rest-timer.js";
@@ -163,13 +163,29 @@ function restLine(ctx, row, index, exerciseName) {
 
 // ---- the cells of a row ----
 
+// A ghost's weight as shown: in the app's kg/lb, converted and rounded the way a logged
+// weight is shown when it was entered in the other unit. Display only: checking stores
+// the ghost's own number and unit (see checkSet).
+function ghostWeightText(ghost, unit) {
+  if (ghost === null || ghost.weight === "") return "";
+  try {
+    return formatWeight(parseDecimal(ghost.weight, "weight"), ghost.unit, unit);
+  } catch {
+    return ghost.weight; // text the check refuses anyway; shown as it is
+  }
+}
+
 // An unchecked row: a weight field with its unit written after it, and a reps field.
 // The unit is the one the weight will be STORED in: the row's own once it has a weight
-// (a prefilled or restored weight is never silently read in another unit), and the
-// app's kg/lb choice while the weight is still blank. There is no per-row choice.
+// (a restored weight is never silently read in another unit), and the app's kg/lb
+// choice while the weight is still blank. There is no per-row choice.
+// A blank field shows the row's ghost as its placeholder (never its value, so nothing
+// is saved and data-saved stays ""), and its label says so.
 function plannedCells(ctx, row, index, exerciseName) {
   const { logger } = ctx.services;
   const unit = row.weight.trim() === "" ? ctx.unit : row.unit;
+  const ghostWeight = row.weight.trim() === "" ? ghostWeightText(row.ghost, ctx.unit) : "";
+  const ghostReps = row.reps.trim() === "" && row.ghost !== null ? row.ghost.reps : "";
   // data-saved is what the plan holds for this input; pull-to-refresh compares it with
   // what is typed to know whether a reload would lose text.
   const save = (input, fields) => {
@@ -178,12 +194,15 @@ function plannedCells(ctx, row, index, exerciseName) {
   };
   const weight = h("input", {
     type: "text", inputmode: "decimal", enterkeyhint: "next", autocomplete: "off", "data-field": "weight",
-    value: row.weight, "data-saved": row.weight, "aria-label": `Weight in ${unit}, set ${index + 1} of ${exerciseName}`,
+    value: row.weight, "data-saved": row.weight, placeholder: ghostWeight === "" ? null : ghostWeight,
+    "aria-label": `Weight in ${unit}, set ${index + 1} of ${exerciseName}`
+      + (ghostWeight === "" ? "" : `, suggested ${ghostWeight} ${ctx.unit}, not logged yet`),
     onChange: (event) => save(event.target, (sent) => ({ weight: sent, unit })),
   });
   const reps = h("input", {
     type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off", "data-field": "reps",
-    value: row.reps, "data-saved": row.reps, "aria-label": `Reps, set ${index + 1} of ${exerciseName}`,
+    value: row.reps, "data-saved": row.reps, placeholder: ghostReps === "" ? null : ghostReps,
+    "aria-label": `Reps, set ${index + 1} of ${exerciseName}` + (ghostReps === "" ? "" : `, suggested ${ghostReps} reps, not logged yet`),
     onChange: (event) => save(event.target, (sent) => ({ reps: sent })),
   });
   return {
@@ -195,19 +214,83 @@ function plannedCells(ctx, row, index, exerciseName) {
   };
 }
 
-// A checked row: the same cells as plain text. The weight is shown in the app's
-// kg/lb choice, with the unit it was entered in on a small line of its own when that differs.
-function loggedCells(ctx, row) {
+// A checked row: the same cells as text. The weight is shown in the app's kg/lb choice,
+// with the unit it was entered in on a small line of its own when that differs. Each
+// value is a button that opens the edit form for the set (setEditor).
+function loggedCells(ctx, row, index, exerciseName) {
   const parts = formatSetWeightParts(row.weight, row.unit, ctx.unit);
+  const edit = (label, ...content) => button(content, {
+    class: "cell-edit",
+    "data-action": "edit-set",
+    "aria-label": `Edit set ${index + 1} of ${exerciseName}: ${label}`,
+    onClick: () => {
+      ctx.state.log.editingSetId = row.id;
+      return ctx.rerender();
+    },
+  });
   return {
     weightCell: h(
       "span",
       { class: "cell cell-weight cell-text", "data-cell": "weight" },
-      h("span", { class: "cell-value" }, parts.text),
-      parts.entered === null ? null : h("span", { class: "cell-note" }, `entered ${parts.entered}`),
+      edit(
+        `weight ${parts.entered === null ? parts.text : `${parts.text}, entered ${parts.entered}`}`,
+        h("span", { class: "cell-value" }, parts.text),
+        parts.entered === null ? null : h("span", { class: "cell-note" }, `entered ${parts.entered}`),
+      ),
     ),
-    repsCell: h("span", { class: "cell cell-reps cell-text", "data-cell": "reps" }, String(row.reps)),
+    repsCell: h("span", { class: "cell cell-reps cell-text", "data-cell": "reps" }, edit(`${row.reps} reps`, String(row.reps))),
   };
+}
+
+// The form for changing a checked set, on a line of its own under the row. The weight
+// field holds the number as it was entered, in the unit it was entered in (written after
+// it, and noted when the app shows the other unit), so nothing is rounded by editing.
+// Save changes the set in place (logger.editSet): it stays checked and keeps its time
+// and timer. A refused value is shown here and changes nothing.
+function setEditor(ctx, row, index, exerciseName) {
+  const log = ctx.state.log;
+  const weightText = String(row.weight);
+  const repsText = String(row.reps);
+  const weight = h("input", {
+    type: "text", inputmode: "decimal", enterkeyhint: "next", autocomplete: "off", "data-field": "edit-weight",
+    value: weightText, "data-saved": weightText, "aria-label": `Weight in ${row.unit}, set ${index + 1} of ${exerciseName}`,
+  });
+  const reps = h("input", {
+    type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off", "data-field": "edit-reps",
+    value: repsText, "data-saved": repsText, "aria-label": `Reps, set ${index + 1} of ${exerciseName}`,
+  });
+  const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "edit-set-error" });
+  return h(
+    "form",
+    {
+      class: "rest-editor set-editor",
+      "data-region": "set-editor",
+      onSubmit: async (event) => {
+        event.preventDefault();
+        try {
+          await ctx.services.logger.editSet(row.id, { weight: weight.value, reps: reps.value });
+          log.editingSetId = null;
+          await ctx.rerender();
+        } catch (caught) {
+          error.textContent = caught.message;
+          error.hidden = false;
+        }
+      },
+    },
+    h("span", { class: "cell" }, weight, h("span", { class: "unit-suffix" }, row.unit)),
+    h("span", { class: "cell" }, reps, h("span", { class: "unit-suffix" }, "reps")),
+    row.unit === ctx.unit ? null : h("span", { class: "cell-note" }, `entered in ${row.unit}`),
+    h("button", { type: "submit", class: "small primary", "data-action": "save-set-edit" }, "Save"),
+    button("Cancel", {
+      class: "small",
+      "data-action": "cancel-set-edit",
+      onClick: () => {
+        log.editingSetId = null;
+        return ctx.rerender();
+      },
+    }),
+    error,
+  );
 }
 
 function setRow(ctx, row, index, exerciseName) {
@@ -221,7 +304,7 @@ function setRow(ctx, row, index, exerciseName) {
   const toggled = was !== undefined && was.kind !== row.kind;
   const phaseChanged = was !== undefined && was.phase !== row.phase;
   const planned = logged ? null : plannedCells(ctx, row, index, exerciseName);
-  const cells = logged ? loggedCells(ctx, row) : planned;
+  const cells = logged ? loggedCells(ctx, row, index, exerciseName) : planned;
   const toggle = button("✓", {
     class: "check-toggle",
     "data-action": "toggle-set",
@@ -231,7 +314,7 @@ function setRow(ctx, row, index, exerciseName) {
     "data-anim": toggled ? (logged ? "check" : "uncheck") : null,
     onClick: () => perform(ctx, async () => {
       if (logged) await logger.uncheckSet(row.id);
-      else await logger.checkSet(row.id, { reps: planned.reps.value, weight: planned.weight.value, unit: planned.unit });
+      else await logger.checkSet(row.id, { reps: planned.reps.value, weight: planned.weight.value, unit: planned.unit }, { shownGhost: row.ghost });
     }),
   });
   const line = restLine(ctx, row, index, exerciseName);
@@ -252,6 +335,7 @@ function setRow(ctx, row, index, exerciseName) {
       deleteButton(ctx, row, exerciseName, index),
     ),
     ctx.state.log.confirmDeleteSetId === row.id ? deleteConfirm(ctx, row) : null,
+    logged && ctx.state.log.editingSetId === row.id ? setEditor(ctx, row, index, exerciseName) : null,
     line,
   );
 }

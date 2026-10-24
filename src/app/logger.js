@@ -12,6 +12,7 @@ import {
 } from "../domain/rest-timer.js";
 import {
   normalizePlan, addRow, updateRow, removeRow, bumpPlan, pruneOrphans, nextOrder as nextRowOrder, buildExerciseBlocks,
+  heaviestSet, sameGhost,
 } from "../domain/workout-plan.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
@@ -136,6 +137,58 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     if (status.kind === "stale") throw new Error("Finish, continue or discard the unfinished workout first");
   }
 
+  // The exercises whose first row is unchecked: only such a row takes its ghost from
+  // the last session, so only these need history read.
+  function firstRowUnchecked(session) {
+    const entryOf = new Map(session.entries.map((entry) => [entry.exerciseId, entry.id]));
+    const ids = [];
+    for (const exerciseId of new Set(session.plan.rows.map((row) => row.exerciseId))) {
+      const firstPlanned = Math.min(...session.plan.rows.filter((row) => row.exerciseId === exerciseId).map((row) => row.order));
+      const loggedOrders = session.sets.filter((set) => set.entryId === entryOf.get(exerciseId)).map((set) => set.order);
+      if (loggedOrders.length === 0 || firstPlanned < Math.min(...loggedOrders)) ids.push(exerciseId);
+    }
+    return ids;
+  }
+
+  // exerciseId -> the heaviest set of that exercise's last session (see heaviestSet), for
+  // the given exercises. The last session is the newest workout, other than the current
+  // one, with a set of that exercise that is not a warm-up. Like findRecentExercises it
+  // looks through at most RECENT_WORKOUTS workouts, newest first, one read each, and
+  // stops as soon as every exercise has one. Reads only; nothing is written.
+  async function lastSessionBest(exerciseIds, currentWorkoutId) {
+    const found = new Map();
+    const wanted = new Set(exerciseIds);
+    if (wanted.size === 0) return found;
+    const workouts = (await store.listWorkouts()).filter((workout) => workout.id !== currentWorkoutId).slice(0, RECENT_WORKOUTS);
+    for (const workout of workouts) {
+      const details = await store.getWorkoutWithDetails(workout.id);
+      if (details === null) continue;
+      const setsOf = new Map();
+      for (const entry of details.entries) {
+        if (!wanted.has(entry.exerciseId) || found.has(entry.exerciseId)) continue;
+        setsOf.set(entry.exerciseId, [...(setsOf.get(entry.exerciseId) ?? []), ...entry.sets]);
+      }
+      for (const [exerciseId, sets] of setsOf) {
+        const best = heaviestSet(sets);
+        if (best !== null) found.set(exerciseId, best); // only warm-ups: look further back
+      }
+      if (found.size === wanted.size) break;
+    }
+    return found;
+  }
+
+  // The blocks of the Log tab for a session, ghosts included. `onlyExerciseId` limits the
+  // history read to one exercise (checkSet needs no other).
+  async function blocksOf(session, at, onlyExerciseId = null) {
+    const needed = firstRowUnchecked(session).filter((id) => onlyExerciseId === null || id === onlyExerciseId);
+    const lastBest = await lastSessionBest(needed, session.workout === null ? null : session.workout.id);
+    return buildExerciseBlocks({
+      entries: session.entries, sets: session.sets, plan: session.plan, names: new Map(session.exercises.map((exercise) => [exercise.id, exercise.name])),
+      timer: session.timer, nowMs: at, lastBest,
+      defaults: new Map(session.exercises.map((exercise) => [exercise.id, exercise.defaultRestSeconds])),
+    });
+  }
+
   // What the Log tab shows: the exercises of the session with their rows (logged
   // sets and planned rows) and the running timer. The time is read from the
   // clock here and again on every tick; nothing is counted down.
@@ -148,16 +201,12 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
         { expectRev: session.plan.rev },
       ).catch(() => {});
     }
-    const names = new Map(session.exercises.map((exercise) => [exercise.id, exercise.name]));
     const marked = ambiguousCustomIds(session.exercises);
     const at = nowMs();
     return {
       status: session.status,
       workout: session.status.kind === "none" ? null : await detailWithNames(session.status.workout.id),
-      blocks: buildExerciseBlocks({
-        entries: session.entries, sets: session.sets, plan: session.plan, names, timer: session.timer, nowMs: at,
-        defaults: new Map(session.exercises.map((exercise) => [exercise.id, exercise.defaultRestSeconds])),
-      }).map((block) => ({ ...block, markCustom: marked.has(block.exerciseId) })),
+      blocks: (await blocksOf(session, at)).map((block) => ({ ...block, markCustom: marked.has(block.exerciseId) })),
       timer: session.timer,
       nowMs: at,
       plannedCount: session.plan.rows.length,
@@ -166,8 +215,10 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   }
 
   // Adds an unchecked row for an exercise (adding the exercise to the session if
-  // needed), prefilled from the last row of that exercise. Nothing is stored in
-  // the sets store, and no workout is started: that happens when a row is checked.
+  // needed). The row is stored blank: what it would copy (the row above, or the last
+  // session) is its ghost, worked out every time it is shown and never stored (see
+  // ghostFor in src/domain/workout-plan.js). Nothing is stored in the sets store,
+  // and no workout is started: that happens when a row is checked.
   async function addSet(exerciseId) {
     if (typeof exerciseId !== "string" || exerciseId === "") throw new Error("exerciseId must be a non-empty string");
     return retryOnConflict(async () => {
@@ -178,19 +229,13 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       requireNotStale(session.status);
       const entry = session.entries.find((candidate) => candidate.exerciseId === exerciseId);
       const logged = entry === undefined ? [] : session.sets.filter((set) => set.entryId === entry.id);
-      const last = [
-        ...logged.map((set) => ({ order: set.order, reps: String(set.reps), weight: String(set.weightValue), unit: set.weightUnit })),
-        ...session.plan.rows
-          .filter((row) => row.exerciseId === exerciseId)
-          .map((row) => ({ order: row.order, reps: row.reps, weight: row.weight, unit: row.unit })),
-      ].sort((a, b) => b.order - a.order)[0];
       const row = {
         id: crypto.randomUUID(),
         exerciseId,
         order: nextRowOrder(session.plan, exerciseId, logged),
-        reps: last === undefined ? "" : last.reps,
-        weight: last === undefined ? "" : last.weight,
-        unit: last === undefined ? await store.getPreferredUnit() : last.unit,
+        reps: "",
+        weight: "",
+        unit: await store.getPreferredUnit(), // a blank weight takes the app's kg/lb when typed
         restSeconds: null, // null = the default rest; a value is this set's own
         isWarmup: false,
       };
@@ -219,12 +264,16 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   // Checks a planned row: it becomes a real set, logged now, and its rest timer
   // starts (a warm-up set neither starts nor stops a timer). The rule for when a
   // row can be checked: reps must be a whole number from 1 to MAX_REPS and weight
-  // a number from 0 to MAX_WEIGHT_KG, both present in the row (typed, or filled in
-  // from the previous set by Add set: an untouched prefilled row can be checked;
-  // blank is refused and bodyweight is an explicit 0), in kg or lb. Anything else
-  // leaves the row unchecked. The set, the removal of the row and the timer are
-  // written in ONE transaction.
-  async function checkSet(rowId, fields = {}) {
+  // a number from 0 to MAX_WEIGHT_KG, both present (typed, or else taken from the
+  // row's ghost: an untouched row with a ghost can be checked; blank with no ghost is
+  // refused and bodyweight is an explicit 0), in kg or lb. A weight taken from the
+  // ghost is stored in the number and unit it was entered in, never converted.
+  // Anything else leaves the row unchecked. The set, the removal of the row and the
+  // timer are written in ONE transaction.
+  // `shownGhost` is the ghost the screen showed (omit it when nothing was shown, as in
+  // tests): if the ghost worked out now differs in a field it would fill in (another
+  // tab changed the row above, say), the check is refused and nothing is stored.
+  async function checkSet(rowId, fields = {}, { shownGhost } = {}) {
     if (Object.keys(fields).length > 0) {
       await updatePlannedSet(rowId, fields); // keep what was typed even if the check is refused
     }
@@ -234,9 +283,24 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       const row = session.plan.rows.find((candidate) => candidate.id === rowId);
       if (row === undefined) throw new Error("That set is not planned (it may already be checked)");
 
-      const repsValue = parseWholeNumber(row.reps, "reps");
-      const weightValue = parseDecimal(row.weight, "weight");
       const at = nowMs();
+      const ghost = (await blocksOf(session, at, row.exerciseId))
+        .flatMap((block) => block.rows).find((candidate) => candidate.id === rowId).ghost;
+      const repsFromGhost = row.reps.trim() === "" && ghost !== null && ghost.reps !== "";
+      const weightFromGhost = row.weight.trim() === "" && ghost !== null && ghost.weight !== "";
+      if (shownGhost !== undefined) {
+        // Only the fields the ghost fills in are compared, in their stored form.
+        const used = (candidate) => {
+          if (candidate === null) return null;
+          const reps = row.reps.trim() === "" ? candidate.reps : "";
+          const weight = row.weight.trim() === "" ? candidate.weight : "";
+          return reps === "" && weight === "" ? null : { reps, weight, unit: weight === "" ? "" : candidate.unit };
+        };
+        if (!sameGhost(used(shownGhost), used(ghost))) throw new Error("The suggestion changed. Check again.");
+      }
+      const repsValue = parseWholeNumber(repsFromGhost ? ghost.reps : row.reps, "reps");
+      const weightValue = parseDecimal(weightFromGhost ? ghost.weight : row.weight, "weight");
+      const weightUnit = weightFromGhost ? ghost.unit : row.unit;
       const timestamp = new Date(at).toISOString();
 
       let { workout, entries } = session;
@@ -256,7 +320,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
         order: row.order,
         reps: repsValue,
         weightValue,
-        weightUnit: row.unit,
+        weightUnit,
         isWarmup: row.isWarmup,
         restSeconds,
         completedAt: timestamp,
@@ -292,6 +356,32 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       });
       await store.deleteSet(setId, commit(session, plan, session.timer !== null && session.timer.setId === setId ? null : undefined));
       return plan.rows.find((row) => row.id === setId);
+    });
+  }
+
+  // Changes the reps and/or weight of a CHECKED set of the current workout, in place: the
+  // same id, order, rest, warm-up flag and completedAt; the set stays checked and the
+  // running timer is not touched. The values are read as strictly as checkSet reads them
+  // (blank reps or weight is refused: "reps is required", "weight is required"; 0 reps,
+  // negatives, fractions of a rep and anything over the limits are refused by createWorkSet),
+  // so an edit can never make a set with no reps. A refused edit changes nothing. The
+  // weight keeps the unit it was entered in (fields.unit is ignored). It never goes
+  // through uncheckSet or deleteSet: the whole workout is written back with the same
+  // entries and sets, so saveWorkoutWithDetails deletes nothing.
+  async function editSet(setId, fields = {}) {
+    return retryOnConflict(async () => {
+      const session = await readSession();
+      const set = session.sets.find((candidate) => candidate.id === setId);
+      if (session.status.kind === "none" || set === undefined) throw new Error("That set is not in the current workout");
+      requireNotStale(session.status);
+      const edited = createWorkSet({
+        ...set,
+        reps: "reps" in fields ? parseWholeNumber(fields.reps, "reps") : set.reps,
+        weightValue: "weight" in fields ? parseDecimal(fields.weight, "weight") : set.weightValue,
+      });
+      const sets = session.sets.map((candidate) => (candidate.id === setId ? edited : candidate));
+      await store.saveWorkoutWithDetails(session.workout, session.entries, sets, commit(session, session.plan)); // timer undefined: untouched
+      return edited;
     });
   }
 
@@ -545,6 +635,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     updatePlannedSet,
     checkSet,
     uncheckSet,
+    editSet,
     setRest,
     updateRestTimers,
     clearPlan,

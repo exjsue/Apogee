@@ -150,6 +150,11 @@ for (const [name, theme] of [["light", light], ["dark", dark]]) {
   });
 }
 
+test("styles: a ghost (a field's placeholder) is in the muted colour at full opacity, so its contrast is the one checked above", () => {
+  assert.match(css, /(^|\n)input::placeholder\s*\{\s*color:\s*var\(--muted\);\s*opacity:\s*1;\s*\}/);
+  for (const theme of [light, dark]) assert.ok(contrast(theme.muted, theme.bg) >= 4.5); // fields use the page colour
+});
+
 test("styles: the timer uses tabular numerals, done is greyed with the muted colour and its outline is hidden", () => {
   assert.match(css, /\.rest-line\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
   assert.match(css, /\.rest-time\s*\{\s*font-variant-numeric:\s*tabular-nums/);

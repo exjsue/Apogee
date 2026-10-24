@@ -182,12 +182,12 @@ rule("ui: choosing an exercise adds an unchecked row; checking it logs the set i
     await waitFor(() => logged().querySelector('[data-cell="weight"] .cell-value').textContent === "220.5 lb", "the weight in lb");
     ctx.assert.equal(logged().querySelector('[data-cell="weight"] .cell-note').textContent, "entered 100 kg");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
-    // Add set gives a new unchecked row, prefilled from the last set, and it keeps the unit that weight was entered in
+    // Add set gives a new blank unchecked row whose ghost (placeholder) is the last set, shown in the selected unit
     click(action(root, "add-set"));
     const next = await waitFor(() => lastPlanned(root), "the new row");
-    ctx.assert.equal(next.querySelector('[data-field="reps"]').value, "8");
-    ctx.assert.equal(next.querySelector('[data-field="weight"]').value, "100");
-    ctx.assert.equal(next.querySelector(".unit-suffix").textContent, "kg");
+    ctx.assert.equal(next.querySelector('[data-field="reps"]').placeholder, "8");
+    ctx.assert.equal(next.querySelector('[data-field="weight"]').placeholder, "220.5"); // the 100 kg ghost, shown in the selected lb
+    ctx.assert.equal(next.querySelector(".unit-suffix").textContent, "lb");
   });
 });
 
@@ -262,8 +262,8 @@ rule("ui: changing the unit in Settings while a workout is open updates the weig
     await waitFor(() => weightCell().querySelector(".cell-value").textContent === "220.5 lb", "the logged weight in lb");
     ctx.assert.equal(weightCell().querySelector(".cell-note").textContent, "entered 100 kg");
     ctx.assert.equal(plannedRows(root).length, 1);
-    ctx.assert.equal(plannedRows(root)[0].querySelector('[data-field="weight"]').value, "100"); // prefilled weight keeps the unit it will be stored in
-    ctx.assert.equal(plannedRows(root)[0].querySelector(".unit-suffix").textContent, "kg");
+    ctx.assert.equal(plannedRows(root)[0].querySelector('[data-field="weight"]').placeholder, "220.5"); // the 100 kg ghost, shown in the selected lb
+    ctx.assert.equal(plannedRows(root)[0].querySelector(".unit-suffix").textContent, "lb");
     ctx.assert.deepEqual(await rawCounts(adapter), before);
     const sets = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
     ctx.assert.deepEqual(sets.map((s) => [s.weightValue, s.weightUnit]), [[100, "kg"]]);
@@ -615,6 +615,87 @@ rule("ui: Add set then tap the check with nothing typed logs the prefilled value
     await waitFor(() => lastPlanned(root) && lastPlanned(root).closest("[data-exercise-id]").dataset.exerciseId === "seed-barbell-squat", "the squat row");
     click(lastPlanned(root).querySelector('[data-action="toggle-set"]'));
     await waitFor(() => /reps is required/.test(errorText(root)), "the blank refused");
+  });
+});
+
+rule("ui: a ghost is a placeholder in the selected unit, never a value; an untouched check stores the original number and unit, a typed weight the selected unit", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    await useUnit(root, "lb");
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    const row = await waitFor(() => lastPlanned(root), "the new row");
+    const weight = row.querySelector('[data-field="weight"]');
+    const reps = row.querySelector('[data-field="reps"]');
+    ctx.assert.deepEqual(
+      [weight.value, weight.placeholder, weight.dataset.saved, reps.value, reps.placeholder, reps.dataset.saved],
+      ["", "220.5", "", "", "8", ""],
+    );
+    ctx.assert.ok(weight.getAttribute("aria-label").endsWith(", suggested 220.5 lb, not logged yet"), weight.getAttribute("aria-label"));
+    ctx.assert.ok(reps.getAttribute("aria-label").endsWith(", suggested 8 reps, not logged yet"), reps.getAttribute("aria-label"));
+    ctx.assert.equal(row.querySelector(".unit-suffix").textContent, "lb");
+    click(row.querySelector('[data-action="toggle-set"]')); // nothing typed
+    await waitFor(() => loggedRows(root).length === 2, "the second set to be logged");
+    ctx.assert.equal(errorText(root), "");
+    const second = loggedRows(root)[1];
+    ctx.assert.equal(second.querySelector('[data-cell="weight"] .cell-value').textContent, "220.5 lb");
+    ctx.assert.equal(second.querySelector('[data-cell="weight"] .cell-note').textContent, "entered 100 kg");
+    // a weight typed over the ghost is stored in the selected unit
+    click(action(root, "add-set"));
+    const third = await waitFor(() => lastPlanned(root), "the third row");
+    setValue(third.querySelector('[data-field="weight"]'), "225");
+    click(third.querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => loggedRows(root).length === 3, "the third set to be logged");
+    const [workout] = await store.listWorkouts();
+    const { entries } = await store.getWorkoutWithDetails(workout.id);
+    ctx.assert.deepEqual(entries[0].sets.map((s) => [s.reps, s.weightValue, s.weightUnit]), [[8, 100, "kg"], [8, 100, "kg"], [8, 225, "lb"]]);
+  });
+});
+
+rule("ui: a check whose ghost changed in another tab is refused, nothing is logged, and the row shows the new ghost", async (ctx) => {
+  await withApp(ctx, async ({ root, store, adapter }) => {
+    await useUnit(root, "kg");
+    await pickExercise(root, "bench", BENCH);
+    const aboveId = lastPlanned(root).dataset.setId;
+    const otherTab = createLogger(store);
+    await otherTab.updatePlannedSet(aboveId, { reps: "8", weight: "100", unit: "kg" });
+    click(action(root, "add-set")); // the redraw shows the row above as typed and the new row's ghost
+    const row = await waitFor(() => (plannedRows(root).length === 2 ? lastPlanned(root) : null), "the second row");
+    ctx.assert.equal(row.querySelector('[data-field="weight"]').placeholder, "100");
+    await otherTab.updatePlannedSet(aboveId, { weight: "110" }); // no redraw here
+    click(row.querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => errorText(root) === "The suggestion changed. Check again.", "the refusal");
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 });
+    await waitFor(() => lastPlanned(root).querySelector('[data-field="weight"]').placeholder === "110", "the new ghost");
+  });
+});
+
+rule("ui: a checked set's edit form changes it in place; its rest keeps running, unsaved text is protected, and blank reps are refused", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    const [workout] = await store.listWorkouts();
+    const before = (await store.getWorkoutWithDetails(workout.id)).entries[0].sets[0];
+    const timer = await store.getRunningTimer();
+    click(loggedRows(root)[0].querySelector('[data-cell="reps"] [data-action="edit-set"]'));
+    const form = await waitFor(() => region(root, "set-editor"), "the edit form");
+    const weight = form.querySelector('[data-field="edit-weight"]');
+    const reps = form.querySelector('[data-field="edit-reps"]');
+    ctx.assert.deepEqual([weight.value, reps.value, form.querySelector(".unit-suffix").textContent], ["100", "8", "kg"]);
+    setValue(reps, "");
+    ctx.assert.equal(reps.dataset.saved, "8"); // what is typed differs from what is saved: a reload would ask first
+    click(form.querySelector('[data-action="save-set-edit"]'));
+    await waitFor(() => /reps is required/.test(region(root, "edit-set-error").textContent), "the reps error");
+    ctx.assert.deepEqual(await store.getSet(before.id), before);
+    setValue(reps, "10");
+    setValue(weight, "102.5");
+    click(form.querySelector('[data-action="save-set-edit"]'));
+    await waitFor(() => !region(root, "set-editor") && loggedRows(root)[0].querySelector('[data-cell="reps"]').textContent === "10", "the edited reps");
+    ctx.assert.deepEqual(await store.getSet(before.id), { ...before, reps: 10, weightValue: 102.5 });
+    ctx.assert.deepEqual(await store.getRunningTimer(), timer);
+    const row = loggedRows(root)[0];
+    ctx.assert.deepEqual([row.dataset.kind, row.dataset.phase], ["logged", "resting"]);
+    ctx.assert.ok(row.querySelector("[data-timer-for] button.rest-time"), "the rest time is still counting");
   });
 });
 

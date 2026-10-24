@@ -92,14 +92,17 @@
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.
 - [ ] Make the set UI slightly smaller / more compact.
 - [ ] Show total workout time at the very top during a workout.
-- [ ] Autofill from the previous set: if the next set is empty and the set directly above it has a weight entered, show a ghost of the above set's weight and reps in the next set. Pressing check fills the next set with those exact values.
+- [x] Autofill from the previous set (done 2026-10-24; not yet tested on an iPhone): if the next set is empty and the set directly above it has a weight entered, show a ghost of the above set's weight and reps in the next set. Pressing check fills the next set with those exact values.
   - Ghost values are display-only and are not stored until check is pressed.
-  - If the set above has weight but no reps: reps stay blank, nothing is shown to the user and no warning appears. Once checked, the set is excluded from volume and estimated-1RM calculations until reps are entered.
-- [ ] Previous-workout ghost: if an exercise was done in an earlier workout, the first empty set of that exercise shows a ghost of the heaviest set from the most recent session (e.g., last time 225 lb x 4 deadlift, so the ghost shows 225 x 4). Pressing check fills in those values.
+  - If the set above has weight but no reps: the ghost shows the weight only and the reps stay blank to be typed; no warning appears. Checking with blank reps is refused for now. Once checking such a set is allowed (deferred, see "Sets with no reps" below), it is excluded from volume and estimated-1RM calculations until reps are entered.
+- [x] Previous-workout ghost (done 2026-10-24, warm-ups excluded; not yet tested on an iPhone): if an exercise was done in an earlier workout, the first empty set of that exercise shows a ghost of the heaviest set from the most recent session (e.g., last time 225 lb x 4 deadlift, so the ghost shows 225 x 4). Pressing check fills in those values.
   - Later empty sets ghost the set directly above them in the current workout (see autofill item).
   - Revisit when warmup sets, dropsets, and supersets are added, since "heaviest set" may need to exclude warmups.
-- [ ] Completed (greyed-out) sets stay editable. Editing does not restart the rest timer, does not change the completion timestamp, and does not uncheck the set (unchecking currently deletes the set, so edit handlers must not go through the uncheck path).
+- [x] Completed (greyed-out) sets stay editable (done 2026-10-24 for the current workout, through logger.editSet; not yet tested on an iPhone). Editing does not restart the rest timer, does not change the completion timestamp, and does not uncheck the set (unchecking currently deletes the set, so edit handlers must not go through the uncheck path).
 - [ ] Calculation rule: sets with no reps entered are excluded from volume and estimated-1RM calculations.
+- [ ] Sets with no reps (deferred, stored-data step, needs explicit approval with diffs per the 2026-10-23 decision): allow checking a set with weight and no reps (reps null), update requireReps, createWorkSet, import validation and the export format, decide on a schema version, then add volume and estimated-1RM with the exclusion of such sets. Until then checkSet and editSet refuse blank reps.
+- [ ] Editing sets of finished workouts (from History). editSet only edits the current workout.
+- [ ] Focus the weight field when the set edit form opens (currently a second tap is needed on a phone). Try after a week of real use.
 
 ## Deferred
 - [ ] Importers (Strong, Liftoff); each needs a mapping onto the fixed muscle and equipment lists

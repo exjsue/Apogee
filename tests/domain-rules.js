@@ -17,6 +17,7 @@ import {
   convertWeight,
 } from "../src/domain/model.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
+import { heaviestSet, ghostFor, sameGhost } from "../src/domain/workout-plan.js";
 
 export const domainRules = [];
 const rule = (name, run) => domainRules.push({ name, run });
@@ -219,4 +220,51 @@ rule("seed: about 15 lifts with stable seed- ids, all valid and already canonica
   assert.equal(ids.size, SEED_EXERCISES.length);
   assert.equal(names.size, SEED_EXERCISES.length);
   assert.ok(ids.has("seed-barbell-bench-press"));
+});
+
+// ---- ghosts (src/domain/workout-plan.js) ----
+
+// A stored set for heaviestSet, and Log-tab rows for ghostFor.
+const setOf = (order, reps, weightValue, weightUnit = "kg", isWarmup = false) => ({ order, reps, weightValue, weightUnit, isWarmup });
+const loggedRowOf = (reps, weight, unit = "kg") => ({ kind: "logged", reps, weight, unit });
+const plannedRowOf = (reps = "", weight = "", unit = "lb") => ({ kind: "planned", reps, weight, unit });
+
+rule("ghost: heaviestSet compares weight in kg, then more reps, then the earlier set; warm-ups never count", async ({ assert }) => {
+  assert.deepEqual(heaviestSet([setOf(0, 5, 100), setOf(1, 3, 220.5, "lb")]), { reps: "3", weight: "220.5", unit: "lb" }); // 100.02 kg
+  assert.deepEqual(heaviestSet([setOf(0, 5, 220, "lb"), setOf(1, 3, 100)]), { reps: "3", weight: "100", unit: "kg" }); // 99.79 kg loses
+  assert.deepEqual(heaviestSet([setOf(0, 5, 100), setOf(1, 8, 100), setOf(2, 6, 100)]), { reps: "8", weight: "100", unit: "kg" });
+  assert.deepEqual(heaviestSet([setOf(2, 5, 100), setOf(0, 5, 100), setOf(1, 4, 100)]).reps, "5");
+  assert.deepEqual(heaviestSet([setOf(0, 10, 140, "kg", true), setOf(1, 5, 100)]), { reps: "5", weight: "100", unit: "kg" });
+  assert.deepEqual(heaviestSet([setOf(0, 2, 62.5), setOf(1, 2, 62.5, "kg", true)]), { reps: "2", weight: "62.5", unit: "kg" });
+});
+
+rule("ghost: heaviestSet with all-zero weights takes the most reps (then the earlier set), and no usable set gives null", async ({ assert }) => {
+  assert.deepEqual(heaviestSet([setOf(0, 8, 0), setOf(1, 12, 0, "lb"), setOf(2, 10, 0)]), { reps: "12", weight: "0", unit: "lb" });
+  // 0 kg and 0 lb are equal: with equal reps the earlier set decides, which here shows as its unit
+  assert.deepEqual(heaviestSet([setOf(1, 8, 0, "lb"), setOf(0, 8, 0, "kg")]), { reps: "8", weight: "0", unit: "kg" });
+  assert.equal(heaviestSet([]), null);
+  assert.equal(heaviestSet([setOf(0, 10, 60, "kg", true)]), null); // missing history and warm-ups only are the same: nothing to copy
+});
+
+rule("ghost: ghostFor copies the row above field by field (typed, then its ghost, then blank), and the first row copies the last session", async ({ assert }) => {
+  const last = { reps: "5", weight: "100", unit: "kg" };
+  const rows = [plannedRowOf(), plannedRowOf("6", ""), plannedRowOf("", "90", "lb"), plannedRowOf()];
+  assert.deepEqual(ghostFor(rows, 0, last), last);
+  assert.deepEqual(ghostFor(rows, 1, last), { reps: "", weight: "100", unit: "kg" }); // reps typed: only the weight is a ghost
+  assert.deepEqual(ghostFor(rows, 2, last), { reps: "6", weight: "", unit: "kg" }); // reps typed above; weight typed here
+  assert.deepEqual(ghostFor(rows, 3, last), { reps: "6", weight: "90", unit: "lb" }); // typed text above wins over its ghost
+  assert.equal(ghostFor(rows, 0, null), null); // no history
+  assert.deepEqual(ghostFor(rows, 1, null), null); // nothing above to copy for the weight, and reps are typed
+  assert.deepEqual(ghostFor([loggedRowOf(8, 62.5), plannedRowOf(" ", " ")], 1), { reps: "8", weight: "62.5", unit: "kg" }); // spaces are blank
+  assert.deepEqual(ghostFor([plannedRowOf(" 7 ", "80", "kg"), plannedRowOf()], 1), { reps: "7", weight: "80", unit: "kg" });
+});
+
+rule("ghost: ghostFor gives no ghost to logged or fully typed rows, and a weight-only row above gives a weight-only ghost", async ({ assert }) => {
+  assert.equal(ghostFor([loggedRowOf(8, 100)], 0, { reps: "5", weight: "100", unit: "kg" }), null);
+  assert.equal(ghostFor([loggedRowOf(8, 100), plannedRowOf("6", "90")], 1), null);
+  assert.deepEqual(ghostFor([plannedRowOf("", "140", "kg"), plannedRowOf()], 1), { reps: "", weight: "140", unit: "kg" });
+  assert.equal(ghostFor([plannedRowOf(), plannedRowOf()], 1), null); // a blank row above with no ghost gives nothing
+  assert.equal(ghostFor([], 0), null);
+  assert.equal(sameGhost(null, null), true);
+  assert.equal(sameGhost({ reps: "8", weight: "100", unit: "kg" }, { reps: "8", weight: "100", unit: "lb" }), false);
 });
