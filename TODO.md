@@ -69,6 +69,8 @@
   - Vendor static JSON in the repo. No runtime network calls. Controlled muscle and equipment vocabulary. No images yet.
   - Every exercise needs muscle targeting and equipment tags.
   - Wording note: do not promise "every exercise"; aim for comprehensive plus custom exercises.
+  - When vendoring, include the upstream Unlicense text and the source repo commit hash in a data notice file.
+  - Wiring the catalog into the app requires model.js (createExercise currently drops baseMovementId, equipment, variations, upstreamId), import validation, and the export format to be updated together. Needs approval. Also: add neck and abductors to the app muscle vocabulary.
 - [ ] More animations across the app.
 - [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.

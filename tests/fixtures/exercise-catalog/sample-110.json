@@ -1,0 +1,1945 @@
+[
+ {
+  "name": "Axle Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "strongman",
+  "id": "Axle_Deadlift"
+ },
+ {
+  "name": "Band Good Morning",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "bands",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Band_Good_Morning"
+ },
+ {
+  "name": "Band Good Morning (Pull Through)",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "bands",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Band_Good_Morning_Pull_Through"
+ },
+ {
+  "name": "Barbell Bench Press - Medium Grip",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Barbell_Bench_Press_-_Medium_Grip"
+ },
+ {
+  "name": "Barbell Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lats",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "strength",
+  "id": "Barbell_Deadlift"
+ },
+ {
+  "name": "Barbell Full Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Barbell_Full_Squat"
+ },
+ {
+  "name": "Barbell Guillotine Bench Press",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Barbell_Guillotine_Bench_Press"
+ },
+ {
+  "name": "Barbell Hack Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "forearms",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Barbell_Hack_Squat"
+ },
+ {
+  "name": "Barbell Incline Bench Press - Medium Grip",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Barbell_Incline_Bench_Press_-_Medium_Grip"
+ },
+ {
+  "name": "Barbell Side Split Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Barbell_Side_Split_Squat"
+ },
+ {
+  "name": "Barbell Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Barbell_Squat"
+ },
+ {
+  "name": "Barbell Squat To A Bench",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Barbell_Squat_To_A_Bench"
+ },
+ {
+  "name": "Bench Press - Powerlifting",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "forearms",
+   "lats",
+   "shoulders"
+  ],
+  "category": "powerlifting",
+  "id": "Bench_Press_-_Powerlifting"
+ },
+ {
+  "name": "Bench Press - With Bands",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "bands",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Bench_Press_-_With_Bands"
+ },
+ {
+  "name": "Bench Press with Chains",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "lats",
+   "shoulders"
+  ],
+  "category": "powerlifting",
+  "id": "Bench_Press_with_Chains"
+ },
+ {
+  "name": "Bodyweight Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "body only",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Bodyweight_Squat"
+ },
+ {
+  "name": "Box Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Box_Squat"
+ },
+ {
+  "name": "Box Squat with Bands",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Box_Squat_with_Bands"
+ },
+ {
+  "name": "Box Squat with Chains",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Box_Squat_with_Chains"
+ },
+ {
+  "name": "Cable Deadlifts",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "cable",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Cable_Deadlifts"
+ },
+ {
+  "name": "Car Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "traps"
+  ],
+  "category": "strongman",
+  "id": "Car_Deadlift"
+ },
+ {
+  "name": "Chair Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Chair_Squat"
+ },
+ {
+  "name": "Clean Deadlift",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "lower back",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Clean_Deadlift"
+ },
+ {
+  "name": "Close-Grip Barbell Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "Close-Grip_Barbell_Bench_Press"
+ },
+ {
+  "name": "Deadlift with Bands",
+  "force": "pull",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Deadlift_with_Bands"
+ },
+ {
+  "name": "Deadlift with Chains",
+  "force": "pull",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Deadlift_with_Chains"
+ },
+ {
+  "name": "Decline Barbell Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Decline_Barbell_Bench_Press"
+ },
+ {
+  "name": "Decline Dumbbell Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Decline_Dumbbell_Bench_Press"
+ },
+ {
+  "name": "Deficit Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Deficit_Deadlift"
+ },
+ {
+  "name": "Dumbbell Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Dumbbell_Bench_Press"
+ },
+ {
+  "name": "Dumbbell Bench Press with Neutral Grip",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Dumbbell_Bench_Press_with_Neutral_Grip"
+ },
+ {
+  "name": "Dumbbell Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Dumbbell_Squat"
+ },
+ {
+  "name": "Dumbbell Squat To A Bench",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Dumbbell_Squat_To_A_Bench"
+ },
+ {
+  "name": "Frankenstein Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Frankenstein_Squat"
+ },
+ {
+  "name": "Freehand Jump Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "body only",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Freehand_Jump_Squat"
+ },
+ {
+  "name": "Front Barbell Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Front_Barbell_Squat"
+ },
+ {
+  "name": "Front Barbell Squat To A Bench",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Front_Barbell_Squat_To_A_Bench"
+ },
+ {
+  "name": "Front Squat (Clean Grip)",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Front_Squat_Clean_Grip"
+ },
+ {
+  "name": "Front Squats With Two Kettlebells",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes"
+  ],
+  "category": "strength",
+  "id": "Front_Squats_With_Two_Kettlebells"
+ },
+ {
+  "name": "Goblet Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "Goblet_Squat"
+ },
+ {
+  "name": "Good Morning",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "glutes",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Good_Morning"
+ },
+ {
+  "name": "Good Morning off Pins",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "glutes",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Good_Morning_off_Pins"
+ },
+ {
+  "name": "Hack Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Hack_Squat"
+ },
+ {
+  "name": "Hammer Grip Incline DB Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Hammer_Grip_Incline_DB_Bench_Press"
+ },
+ {
+  "name": "Hanging Bar Good Morning",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "glutes",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Hanging_Bar_Good_Morning"
+ },
+ {
+  "name": "Jefferson Squats",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "traps"
+  ],
+  "category": "strength",
+  "id": "Jefferson_Squats"
+ },
+ {
+  "name": "Jerk Dip Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Jerk_Dip_Squat"
+ },
+ {
+  "name": "Kettlebell One-Legged Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Kettlebell_One-Legged_Deadlift"
+ },
+ {
+  "name": "Kettlebell Pistol Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "Kettlebell_Pistol_Squat"
+ },
+ {
+  "name": "Kettlebell Turkish Get-Up (Squat style)",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "shoulders"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves",
+   "hamstrings",
+   "quadriceps",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Kettlebell_Turkish_Get-Up_Squat_style"
+ },
+ {
+  "name": "Kneeling Jump Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "glutes"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "hamstrings",
+   "quadriceps"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Kneeling_Jump_Squat"
+ },
+ {
+  "name": "Kneeling Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "glutes"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Kneeling_Squat"
+ },
+ {
+  "name": "Leverage Deadlift",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Leverage_Deadlift"
+ },
+ {
+  "name": "Lying Machine Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Lying_Machine_Squat"
+ },
+ {
+  "name": "Machine Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Machine_Bench_Press"
+ },
+ {
+  "name": "Narrow Stance Hack Squats",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Narrow_Stance_Hack_Squats"
+ },
+ {
+  "name": "Narrow Stance Squats",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Narrow_Stance_Squats"
+ },
+ {
+  "name": "Olympic Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Olympic_Squat"
+ },
+ {
+  "name": "One-Arm Overhead Kettlebell Squats",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "kettlebells",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "One-Arm_Overhead_Kettlebell_Squats"
+ },
+ {
+  "name": "One-Arm Side Deadlift",
+  "force": "pull",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "traps"
+  ],
+  "category": "strength",
+  "id": "One-Arm_Side_Deadlift"
+ },
+ {
+  "name": "One Arm Dumbbell Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "One_Arm_Dumbbell_Bench_Press"
+ },
+ {
+  "name": "One Leg Barbell Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "One_Leg_Barbell_Squat"
+ },
+ {
+  "name": "Overhead Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "shoulders",
+   "triceps"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Overhead_Squat"
+ },
+ {
+  "name": "Plie Dumbbell Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abdominals",
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Plie_Dumbbell_Squat"
+ },
+ {
+  "name": "Rack Pull with Bands",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Rack_Pull_with_Bands"
+ },
+ {
+  "name": "Rack Pulls",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Rack_Pulls"
+ },
+ {
+  "name": "Reverse Band Bench Press",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "forearms",
+   "lats",
+   "middle back",
+   "shoulders"
+  ],
+  "category": "powerlifting",
+  "id": "Reverse_Band_Bench_Press"
+ },
+ {
+  "name": "Reverse Band Box Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Reverse_Band_Box_Squat"
+ },
+ {
+  "name": "Reverse Band Deadlift",
+  "force": "pull",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "quadriceps"
+  ],
+  "category": "powerlifting",
+  "id": "Reverse_Band_Deadlift"
+ },
+ {
+  "name": "Reverse Band Power Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Reverse_Band_Power_Squat"
+ },
+ {
+  "name": "Reverse Band Sumo Deadlift",
+  "force": "pull",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "forearms",
+   "glutes",
+   "lower back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Reverse_Band_Sumo_Deadlift"
+ },
+ {
+  "name": "Reverse Triceps Bench Press",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "Reverse_Triceps_Bench_Press"
+ },
+ {
+  "name": "Rickshaw Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "traps"
+  ],
+  "category": "strongman",
+  "id": "Rickshaw_Deadlift"
+ },
+ {
+  "name": "Romanian Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Romanian_Deadlift"
+ },
+ {
+  "name": "Romanian Deadlift from Deficit",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "lower back",
+   "traps"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Romanian_Deadlift_from_Deficit"
+ },
+ {
+  "name": "Seated Good Mornings",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "glutes"
+  ],
+  "category": "powerlifting",
+  "id": "Seated_Good_Mornings"
+ },
+ {
+  "name": "Single-Leg High Box Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Single-Leg_High_Box_Squat"
+ },
+ {
+  "name": "Sit Squats",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": null,
+  "equipment": null,
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "stretching",
+  "id": "Sit_Squats"
+ },
+ {
+  "name": "Smith Machine Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Bench_Press"
+ },
+ {
+  "name": "Smith Machine Close-Grip Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "triceps"
+  ],
+  "secondaryMuscles": [
+   "chest",
+   "shoulders"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Close-Grip_Bench_Press"
+ },
+ {
+  "name": "Smith Machine Incline Bench Press",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Incline_Bench_Press"
+ },
+ {
+  "name": "Smith Machine Pistol Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Pistol_Squat"
+ },
+ {
+  "name": "Smith Machine Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Squat"
+ },
+ {
+  "name": "Smith Machine Stiff-Legged Deadlift",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Smith_Machine_Stiff-Legged_Deadlift"
+ },
+ {
+  "name": "Smith Single-Leg Split Squat",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "machine",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Smith_Single-Leg_Split_Squat"
+ },
+ {
+  "name": "Snatch Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "forearms",
+   "glutes",
+   "hamstrings",
+   "lower back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "olympic weightlifting",
+  "id": "Snatch_Deadlift"
+ },
+ {
+  "name": "Speed Box Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "powerlifting",
+  "id": "Speed_Box_Squat"
+ },
+ {
+  "name": "Speed Squats",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Speed_Squats"
+ },
+ {
+  "name": "Split Squat with Dumbbells",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Split_Squat_with_Dumbbells"
+ },
+ {
+  "name": "Split Squats",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": null,
+  "equipment": null,
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "quadriceps"
+  ],
+  "category": "stretching",
+  "id": "Split_Squats"
+ },
+ {
+  "name": "Squat Jerk",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Squat_Jerk"
+ },
+ {
+  "name": "Squat with Bands",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Squat_with_Bands"
+ },
+ {
+  "name": "Squat with Chains",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "powerlifting",
+  "id": "Squat_with_Chains"
+ },
+ {
+  "name": "Squat with Plate Movers",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Squat_with_Plate_Movers"
+ },
+ {
+  "name": "Squats - With Bands",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "bands",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Squats_-_With_Bands"
+ },
+ {
+  "name": "Stiff-Legged Barbell Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Stiff-Legged_Barbell_Deadlift"
+ },
+ {
+  "name": "Stiff-Legged Dumbbell Deadlift",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "dumbbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Stiff-Legged_Dumbbell_Deadlift"
+ },
+ {
+  "name": "Stiff Leg Barbell Good Morning",
+  "force": "push",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "lower back"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Stiff_Leg_Barbell_Good_Morning"
+ },
+ {
+  "name": "Sumo Deadlift",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "forearms",
+   "glutes",
+   "lower back",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Sumo_Deadlift"
+ },
+ {
+  "name": "Sumo Deadlift with Bands",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "adductors",
+   "forearms",
+   "glutes",
+   "lower back",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Sumo_Deadlift_with_Bands"
+ },
+ {
+  "name": "Sumo Deadlift with Chains",
+  "force": "pull",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "hamstrings"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "forearms",
+   "glutes",
+   "lower back",
+   "middle back",
+   "quadriceps",
+   "traps"
+  ],
+  "category": "powerlifting",
+  "id": "Sumo_Deadlift_with_Chains"
+ },
+ {
+  "name": "Suspended Split Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "abductors",
+   "adductors",
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Suspended_Split_Squat"
+ },
+ {
+  "name": "Trap Bar Deadlift",
+  "force": "pull",
+  "level": "beginner",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Trap_Bar_Deadlift"
+ },
+ {
+  "name": "Weighted Jump Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Weighted_Jump_Squat"
+ },
+ {
+  "name": "Weighted Sissy Squat",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Weighted_Sissy_Squat"
+ },
+ {
+  "name": "Weighted Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "other",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Weighted_Squat"
+ },
+ {
+  "name": "Wide-Grip Barbell Bench Press",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Wide-Grip_Barbell_Bench_Press"
+ },
+ {
+  "name": "Wide-Grip Decline Barbell Bench Press",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "chest"
+  ],
+  "secondaryMuscles": [
+   "shoulders",
+   "triceps"
+  ],
+  "category": "strength",
+  "id": "Wide-Grip_Decline_Barbell_Bench_Press"
+ },
+ {
+  "name": "Wide Stance Barbell Squat",
+  "force": "push",
+  "level": "intermediate",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings",
+   "lower back"
+  ],
+  "category": "strength",
+  "id": "Wide_Stance_Barbell_Squat"
+ },
+ {
+  "name": "Zercher Squats",
+  "force": "push",
+  "level": "expert",
+  "mechanic": "compound",
+  "equipment": "barbell",
+  "primaryMuscles": [
+   "quadriceps"
+  ],
+  "secondaryMuscles": [
+   "calves",
+   "glutes",
+   "hamstrings"
+  ],
+  "category": "strength",
+  "id": "Zercher_Squats"
+ }
+]

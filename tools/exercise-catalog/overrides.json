@@ -1,0 +1,21 @@
+{
+  "Bench_Press_-_With_Bands": {
+    "equipment": "barbell",
+    "variations": ["bands"],
+    "note": "Upstream says only bands; read as a barbell bench press with bands added, like Squat with Bands and Deadlift with Bands (assumed, not verified)."
+  },
+  "Chair_Squat": {
+    "equipment": "bodyweight",
+    "note": "Upstream tags it machine; a chair squat uses no machine (assumed)."
+  },
+  "Split_Squats": {
+    "primaryMuscles": ["quads"],
+    "secondaryMuscles": ["calves", "glutes", "hamstrings"],
+    "note": "Upstream has hamstrings primary and quadriceps secondary; every other split squat has quads primary, so the two are swapped (assumed)."
+  },
+  "Squats_-_With_Bands": {
+    "equipment": "barbell",
+    "variations": ["bands"],
+    "note": "Upstream says only bands; its twin Squat_with_Bands is tagged barbell, so this is a barbell squat with bands (assumed)."
+  }
+}
