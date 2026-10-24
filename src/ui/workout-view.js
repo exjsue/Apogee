@@ -161,17 +161,23 @@ function staleCard(ctx, session) {
 function currentCard(ctx, session) {
   const log = ctx.state.log;
   const { logger } = ctx.services;
-  const card = h("section", { class: "card", "aria-label": "Current workout" }, h("h2", {}, "Current workout"));
+  const card = h("section", { class: "card", "aria-label": "Current workout" });
   const started = session.status.kind !== "none";
+  // The title row: with a workout open, the live elapsed time is at its right, an element of its own
+  // with a reserved width, so a changing time cannot reflow the row.
+  const elapsed = started ? elapsedElement(session.workout.startedAt) : null;
+  card.append(h("div", { class: "card-head" }, h("h2", {}, "Current workout"), elapsed));
   if (!started) {
     card.append(h("p", { class: "muted" }, "No workout in progress. Checking your first set starts one."));
   } else {
-    const elapsed = elapsedElement(session.workout.startedAt);
+    // Two nowrap pieces, the second with a reserved width, so the line wraps (or not) the same way
+    // for "0 sets", "1 set" and "12 sets".
     card.append(h(
       "p",
-      { class: "muted", "data-region": "started" },
-      `Started ${formatDateTime(session.workout.startedAt)} · ${formatCount(session.loggedCount, "set")} · `,
-      elapsed,
+      { class: "muted started-line", "data-region": "started" },
+      h("span", {}, `Started ${formatDateTime(session.workout.startedAt)}`),
+      " ",
+      h("span", { class: "started-count" }, `· ${formatCount(session.loggedCount, "set")}`),
     ));
     card.elapsed = elapsed;
     if (session.loggedCount === 0 && session.plannedCount === 0) card.append(h("p", { class: "muted" }, "No sets yet."));

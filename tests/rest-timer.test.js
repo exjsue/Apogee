@@ -233,3 +233,16 @@ for (const [name, theme] of [["light", light], ["dark", dark]]) {
     assert.ok(contrast(theme.bg, theme.text) >= 4.5, "tick on the disc");
   });
 }
+
+test("styles: the elapsed time has tabular numerals, no wrapping and a fixed width", () => {
+  const block = /(^|\n)\.elapsed\s*\{([^}]*)\}/.exec(css)[2];
+  assert.match(block, /font-variant-numeric:\s*tabular-nums/);
+  assert.match(block, /white-space:\s*nowrap/);
+  assert.match(block, /flex:\s*none/);
+  assert.match(block, /min-width:\s*7ch/);
+});
+
+test("styles: the rest timer digits are tabular", () => {
+  assert.match(css, /\.rest-line\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
+  assert.match(css, /\.rest-time\s*\{\s*font-variant-numeric:\s*tabular-nums/);
+});

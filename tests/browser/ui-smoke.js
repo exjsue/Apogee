@@ -1451,7 +1451,9 @@ rule("elapsed: a tick updates only the timer element's text; the card is not red
     ctx.assert.equal(timer.getAttribute("aria-live"), "off");
     ctx.assert.equal(timer.closest("[aria-live]:not([aria-live=off])"), null, "not inside a live region");
     ctx.assert.ok(/^\d+:\d\d$/.test(timer.textContent), timer.textContent);
-    ctx.assert.ok(region(root, "started").textContent.includes(" · 1 set · "));
+    ctx.assert.ok(region(root, "started").textContent.trim().endsWith(" · 1 set"));
+    ctx.assert.ok(!region(root, "started").contains(timer)); // the time is in the title row, not in the sentence
+    ctx.assert.ok(timer.closest(".card-head").querySelector("h2"), "the time shares the title row");
     const reps = lastPlanned(root).querySelector('[data-field="reps"]');
     reps.focus();
     setValue(reps, "12");
@@ -1543,6 +1545,85 @@ for (const [width, fontSize] of [[320, null], [375, null], [320, "24px"]]) {
       ctx.assert.ok(form.scrollWidth <= form.clientWidth, "the form does not overflow");
       ctx.assert.ok(formBox.left >= 0 && formBox.right <= win.innerWidth, "the form is inside the window");
       ctx.assert.ok(frame.contentDocument.documentElement.scrollWidth <= win.innerWidth, "no horizontal scroll");
+    }, { width, fontSize });
+  });
+}
+
+const ELAPSED_VALUES = ["0:09", "0:10", "9:59", "10:00", "59:59", "1:00:00", "1:00:01"];
+
+for (const [width, fontSize] of [[320, null], [375, null], [320, "24px"]]) {
+  rule(`elapsed: at ${width} px${fontSize ? " with larger text" : ""} the title row and the card keep their height and the time its right edge across 0:09 to 1:00:01, with 0, 1 and 12 sets`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      await pickExercise(root, "bench", BENCH);
+      const rows = [];
+      const measure = (label) => {
+        const timer = elapsedOf(root);
+        const head = timer.closest(".card-head");
+        const card = head.parentElement;
+        const seen = [];
+        for (const value of ELAPSED_VALUES) {
+          timer.textContent = value; // what a tick does: one element's text
+          seen.push([Math.round(head.getBoundingClientRect().height * 100), Math.round(card.getBoundingClientRect().height * 100), Math.round(timer.getBoundingClientRect().right * 100), Math.round(timer.getBoundingClientRect().width * 100)]);
+        }
+        const [first] = seen;
+        seen.forEach((entry, i) => ctx.assert.deepEqual(entry, first, `${label}: ${ELAPSED_VALUES[i]} changed the row, the card or the time's edge`));
+        rows.push(`${label}: title row ${first[0] / 100}, card ${first[1] / 100}, time right edge ${first[2] / 100}, time width ${first[3] / 100}, sentence ${Math.round(region(root, "started").getBoundingClientRect().height)}`);
+        return first;
+      };
+      await logOneSet(root, "8", "100", "kg");
+      const one = measure("1 set");
+      click($(root, '[data-action="toggle-set"][aria-pressed="true"]')); // unchecked again: a running workout with 0 sets
+      await waitFor(() => /· 0 sets$/.test(region(root, "started").textContent.trim()), "0 sets");
+      const zero = measure("0 sets");
+      await logOneSet(root, "8", "100", "kg");
+      for (let i = 0; i < 11; i += 1) await logOneSet(root, "8", "100", "kg");
+      await waitFor(() => /· 12 sets$/.test(region(root, "started").textContent.trim()), "12 sets");
+      const twelve = measure("12 sets");
+      // the sentence's height must not depend on the count (the card above it may differ only by the rows below)
+      const sentence = () => Math.round(region(root, "started").getBoundingClientRect().height);
+      ctx.assert.equal(sentence(), Number(rows[0].split("sentence ")[1]));
+      ctx.assert.equal(zero[2], one[2]);
+      ctx.assert.equal(one[2], twelve[2]);
+      ctx.assert.equal(zero[0], twelve[0]);
+      layoutMeasures.push(`Elapsed, ${width}px${fontSize ? " " + fontSize : ""}: ${rows.join(" | ")}`);
+      ctx.assert.ok(frame.contentDocument.documentElement.scrollWidth <= frame.contentWindow.innerWidth, "no horizontal scroll");
+    }, { width, fontSize });
+  });
+}
+
+for (const [width, fontSize] of [[320, null], [375, null], [320, "24px"]]) {
+  rule(`styles: at ${width} px${fontSize ? " with larger text" : ""} the edit form's fields sit in the rows' Weight and Reps columns and the form does not overflow`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      await pickExercise(root, "bench", BENCH);
+      await logOneSet(root, "8", "100", "kg");
+      click(action(root, "add-set")); // an unchecked row: its cells are the reference columns
+      await waitFor(() => lastPlanned(root), "an unchecked row");
+      click(loggedRows(root)[0].querySelector('[data-cell="reps"] [data-action="edit-set"]'));
+      const form = await waitFor(() => region(root, "set-editor"), "the edit form");
+      const planned = lastPlanned(root); // after the form opened: the view was drawn again
+      const box = (el) => el.getBoundingClientRect();
+      const close = (a, b, what) => { if (!(Math.abs(a - b) < 0.6)) throw new Error(`${what}: ${a} vs ${b}`); };
+      const weightCell = box(planned.querySelector(".cell-weight"));
+      const repsCell = box(planned.querySelector(".cell-reps"));
+      const editWeightCell = box(form.querySelector(".cell-weight"));
+      const editRepsCell = box(form.querySelector(".cell-reps"));
+      close(editWeightCell.left, weightCell.left, "weight column x");
+      close(editWeightCell.width, weightCell.width, "weight column width");
+      close(editRepsCell.left, repsCell.left, "reps column x");
+      close(editRepsCell.width, repsCell.width, "reps column width");
+      // the same field styling as the rows' inputs
+      const win = frame.contentWindow;
+      const rowInput = win.getComputedStyle(planned.querySelector('[data-field="weight"]'));
+      const formInput = win.getComputedStyle(form.querySelector('[data-field="edit-weight"]'));
+      for (const property of ["backgroundColor", "borderTopWidth", "borderTopColor", "borderTopLeftRadius", "fontSize", "paddingLeft", "paddingRight", "minHeight"]) {
+        ctx.assert.equal(formInput[property], rowInput[property], property);
+      }
+      const save = box(form.querySelector('[data-action="save-set-edit"]'));
+      const cancel = box(form.querySelector('[data-action="cancel-set-edit"]'));
+      ctx.assert.ok(Math.abs(save.top - cancel.top) < 1, "Save and Cancel on one line");
+      if (form.scrollWidth > form.clientWidth) throw new Error(`form overflows ${form.scrollWidth}/${form.clientWidth}`);
+      if (frame.contentDocument.documentElement.scrollWidth > win.innerWidth) throw new Error(`page scrolls sideways ${frame.contentDocument.documentElement.scrollWidth}/${win.innerWidth}`);
+      layoutMeasures.push(`Edit form columns, ${width}px${fontSize ? " " + fontSize : ""}: weight x ${weightCell.left.toFixed(1)}/${editWeightCell.left.toFixed(1)} w ${weightCell.width.toFixed(1)}/${editWeightCell.width.toFixed(1)}, reps x ${repsCell.left.toFixed(1)}/${editRepsCell.left.toFixed(1)} w ${repsCell.width.toFixed(1)}/${editRepsCell.width.toFixed(1)} (row/form)`);
     }, { width, fontSize });
   });
 }

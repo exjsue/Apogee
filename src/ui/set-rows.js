@@ -277,11 +277,16 @@ function setEditor(ctx, row, index, exerciseName) {
         }
       },
     },
+    // The rows' own grid (set-grid): an empty first cell where the set number is, then the weight and
+    // reps cells in the Weight and Reps columns (the unit after the weight, as in an unchecked row; the word "reps" in the
+    // space to the right of the Reps column, which has no room for it inside the column).
     h(
       "div",
-      { class: "edit-fields" },
-      h("span", { class: "cell" }, weight, h("span", { class: "unit-suffix" }, row.unit)),
-      h("span", { class: "cell" }, reps, h("span", { class: "unit-suffix" }, "reps")),
+      { class: "edit-fields set-grid" },
+      h("span", {}),
+      h("span", { class: "cell cell-weight" }, weight, h("span", { class: "unit-suffix" }, row.unit)),
+      h("span", { class: "cell cell-reps" }, reps),
+      h("span", { class: "unit-suffix edit-reps-label" }, "reps"),
     ),
     row.unit === ctx.unit ? null : h("span", { class: "cell-note" }, `entered in ${row.unit}`),
     h(
