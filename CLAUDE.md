@@ -48,7 +48,7 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 
 ## Working rules
 - Use the Edit tool, never sed -i.
-- Keep each file's existing line endings as stored in git (DECISIONS.md, TODO.md, src/ui/app.js and CLAUDE.md are LF; tests/browser/ui-smoke.js is CRLF; core.autocrlf warnings are harmless).
+- Line endings: git stores every file as LF (check with git ls-files --eol); CRLF in a working copy comes from core.autocrlf and is harmless. Do not convert endings or rewrite whole files; use the Edit tool so only the intended lines change.
 - For any change to shared app code, show the verbatim git diff before asking for approval.
 - Add a DECISIONS.md row for every architectural or privacy decision.
 - Never switch models mid-session.
@@ -63,6 +63,7 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 - Abort without pushing if git status is unexpected, any Node test fails, the browser suite fails, or any control-character hit appears.
 - No force push, no history rewriting, no tags or releases (the owner tags releases).
 - Report the commit hash and file list each time.
+- Commit messages are plain: no Co-Authored-By line and no tool or AI attribution.
 - Stored-data steps (schema changes, sets with no reps, workout naming) are never auto-committed: plan with diffs first, wait for the owner's "approved commit N", and the owner pushes manually.
 - These rules are instructions, not enforced limits.
 - If .git/index.lock blocks git: check Get-Process git, then Remove-Item .git\index.lock.
