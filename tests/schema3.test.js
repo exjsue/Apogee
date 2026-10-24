@@ -348,3 +348,34 @@ test("schema 3 logger: Update Rest Timers on a grouped seed changes only default
   assert.deepEqual(await logger.updateRestTimers("seed-barbell-squat", 120), { defaultRestSeconds: 120, updatedSets: 1 });
   assert.deepEqual(await store.getExercise("seed-barbell-squat"), { ...SQUAT_V3, defaultRestSeconds: 120 });
 });
+
+// ---- the picker's search, through the logger ----
+
+test("schema 3 logger: findExercises passes the filters on and hides a retired entry, which still resolves in history; a new custom name may not equal any stored name, a retired catalog entry's included", async () => {
+  const adapter = createMemoryAdapter();
+  const store = createStore(adapter);
+  await store.open();
+  await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
+  await store.saveExercise({ id: "Old_One", name: "Old one", primaryMuscles: ["abs"], equipmentTags: ["bodyweight"], origin: "upstream", catalogVersion: 1, retired: true });
+  await store.saveExercise({ id: "Crunch_X", name: "Crunch X", primaryMuscles: ["abs"], equipmentTags: ["bodyweight"], origin: "upstream", catalogVersion: 1 });
+  const logger = createLogger(store, { now: () => new Date(NOW) });
+
+  assert.deepEqual((await logger.findExercises("old")).map((e) => e.id), []);
+  assert.deepEqual((await logger.findExercises("old", { includeRetired: true })).map((e) => e.id), ["Old_One"]);
+  assert.deepEqual((await logger.findExercises("", { muscle: "abs" })).map((e) => e.id), ["Crunch_X"]);
+  assert.deepEqual((await logger.findExercises("", { equipment: "bodyweight" })).map((e) => e.id), ["seed-pull-up", "Crunch_X"]); // the pull-up seed is tagged bodyweight too, and comes first
+  assert.equal((await logger.findExercises("")).length, 17); // 16 seeds + Crunch_X, Old_One hidden
+  assert.equal((await logger.findExercises("bench", undefined))[0].id, "seed-barbell-bench-press");
+
+  // history still resolves a retired entry
+  await store.saveWorkoutWithDetails({ id: "w1", startedAt: NOW, endedAt: NOW }, [{ id: "e1", workoutId: "w1", exerciseId: "Old_One", order: 0 }], [{ id: "s1", entryId: "e1", order: 0, reps: 5, weightValue: 10, weightUnit: "kg", completedAt: NOW }]);
+  assert.equal((await store.getExercise("Old_One")).name, "Old one");
+  assert.equal((await logger.getHistory()).length, 1);
+  assert.equal((await logger.getWorkoutDetail("w1")).entries[0].exerciseName, "Old one");
+
+  // a new custom exercise cannot take any stored name, ignoring case, catalog and retired entries included
+  for (const taken of ["crunch x", "OLD ONE", "Barbell Bench Press"]) {
+    await assert.rejects(logger.addCustomExercise({ name: taken, primaryMuscles: ["abs"] }), /an exercise with this name already exists/, taken);
+  }
+  assert.equal((await logger.addCustomExercise({ name: "Crunch Y", primaryMuscles: ["abs"] })).origin, "custom");
+});

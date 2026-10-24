@@ -165,7 +165,7 @@ test("schema 3 helpers: grouping every real seed with withSeedGrouping changes o
 
 // ---- who uses them ----
 
-test("schema 3 helpers: only the model, the seeds, the upgrade step and the backup code use them; nothing in the UI, the logger or elsewhere", () => {
+test("schema 3 helpers: only the model, the seeds, the upgrade step, the backup code and the exercise picker use them; nothing else in the UI, the logger or elsewhere", () => {
   const names = /\b(withSeedGrouping|exerciseV3Defaults|ALL_MUSCLES|ALL_EQUIPMENT|EXTRA_MUSCLES|EXTRA_EQUIPMENT|ORIGINS)\b/;
   const users = [];
   const walk = (folder) => {
@@ -177,7 +177,13 @@ test("schema 3 helpers: only the model, the seeds, the upgrade step and the back
   };
   walk(path.join(ROOT, "src"));
   for (const file of ["index.html", "sw.js"]) if (names.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) users.push(file);
-  assert.deepEqual(users.sort(), ["src/backup/backup.js", "src/domain/model.js", "src/domain/seed.js", "src/storage/migrations.js"]);
+  assert.deepEqual(users.sort(), ["src/backup/backup.js", "src/domain/model.js", "src/domain/seed.js", "src/storage/migrations.js", "src/ui/workout-view.js"]);
+  // the picker uses the two full lists for its selects and nothing else from here; its custom form still lists MUSCLES and EQUIPMENT
+  const picker = fs.readFileSync(path.join(ROOT, "src", "ui", "workout-view.js"), "utf8");
+  const used = [...picker.matchAll(new RegExp(names.source, "g"))].map((m) => m[1]);
+  assert.deepEqual([...new Set(used)].sort(), ["ALL_EQUIPMENT", "ALL_MUSCLES"]);
+  assert.match(picker, /checkboxGroup\("Primary muscles \(at least one\)", MUSCLES, "primary"\)/);
+  assert.match(picker, /checkboxGroup\("Equipment", EQUIPMENT, "equipment"\)/);
 });
 
 test("schema 3 helpers: createExercise returns exactly the fifteen schema 3 fields, accepts neck, and ignores a field it does not know", async () => {

@@ -476,8 +476,9 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return store.saveExercise(exercise);
   }
 
-  async function findExercises(query) {
-    return searchExercises(await store.listExercises(), query);
+  // filters: { muscle, equipment } (ids, or null for any). Retired exercises are not offered; they still resolve in history.
+  async function findExercises(query, filters) {
+    return searchExercises(await store.listExercises(), query, filters);
   }
 
   // Finished workouts, newest first, with entry and set counts.

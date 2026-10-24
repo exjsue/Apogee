@@ -52,7 +52,7 @@ async function waitFor(check, what, timeoutMs = 4000) {
 const waitForText = (root, text) => waitFor(() => root.textContent.includes(text), `the text "${text}"`);
 
 // Mounts the app against a fresh seeded database and cleans up afterwards.
-async function withApp(ctx, body, { prepare, offline } = {}) {
+async function withApp(ctx, body, { prepare, offline, catalog } = {}) {
   const adapter = ctx.createAdapter();
   const store = createStore(adapter);
   await store.open();
@@ -75,6 +75,7 @@ async function withApp(ctx, body, { prepare, offline } = {}) {
       }),
     },
     ...(offline ? { offline } : {}),
+    ...(catalog ? { catalog } : {}),
   };
   const root = document.createElement("div");
   document.body.append(root); // forms only submit when they are in the document
@@ -971,4 +972,183 @@ rule("page: every resource this page loaded came from this origin", async ({ ass
     .map((entry) => entry.name)
     .filter((name) => !name.startsWith("data:") && new URL(name).origin !== location.origin);
   assert.deepEqual(foreign, []);
+});
+
+// ---- the exercise picker: filters, the 50-row cap and the library note ----
+
+const pickRows = (root) => [...root.querySelectorAll('[data-action="pick-exercise"]')];
+const pickIds = (root) => pickRows(root).map((row) => row.dataset.exerciseId);
+const openPicker = async (root) => {
+  click(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
+  await waitFor(() => field(root, "search") && pickRows(root).length > 0, "the exercise list");
+};
+const chooseOption = (select, value) => {
+  select.value = value;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+};
+const moreText = (root) => (region(root, "pick-more") ? region(root, "pick-more").textContent : null);
+
+// 120 exercises like the catalog's: built-in records, not seeds and not the user's own.
+async function addSynthetic(store) {
+  for (let i = 0; i < 120; i += 1) {
+    await store.saveExercise({
+      id: `Synthetic_${i}`,
+      name: `Synthetic ${String(i).padStart(3, "0")}`,
+      primaryMuscles: [i % 2 === 0 ? "neck" : "chest"],
+      equipmentTags: [i % 3 === 0 ? "foam_roll" : "dumbbell"],
+      equipment: i % 3 === 0 ? "foam_roll" : "dumbbell",
+      origin: "upstream",
+      catalogVersion: 1,
+    });
+  }
+}
+
+rule("ui: with the 16 seeds nothing is capped, the selects list every muscle and equipment id, and both filter the list", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.equal(pickRows(root).length, 16);
+    ctx.assert.equal(region(root, "pick-more"), null);
+    const muscle = field(root, "filter-muscle");
+    const equipment = field(root, "filter-equipment");
+    ctx.assert.equal(muscle.options.length, 21); // Any + the 18 muscles + neck and abductors
+    ctx.assert.equal(equipment.options.length, 17); // Any + the 11 tags + the 5 added
+    const texts = (select) => [...select.options].map((option) => option.textContent);
+    ctx.assert.deepEqual(texts(muscle).slice(0, 3), ["Any", "Chest", "Front delts"]);
+    ctx.assert.ok(texts(muscle).includes("Neck") && texts(muscle).includes("Abductors"));
+    ctx.assert.ok(texts(equipment).includes("Trap bar") && texts(equipment).includes("Foam roll") && texts(equipment).includes("Exercise ball"));
+    chooseOption(muscle, "chest");
+    await waitFor(() => pickRows(root).length === 2, "the chest exercises");
+    ctx.assert.deepEqual(pickIds(root), ["seed-barbell-bench-press", "seed-incline-dumbbell-press"]);
+    chooseOption(equipment, "dumbbell");
+    await waitFor(() => pickRows(root).length === 1, "the chest exercise with dumbbells");
+    ctx.assert.deepEqual(pickIds(root), ["seed-incline-dumbbell-press"]);
+    chooseOption(muscle, "");
+    chooseOption(equipment, "");
+    await waitFor(() => pickRows(root).length === 16, "the whole list again");
+  });
+});
+
+rule("ui: a row shows the primary muscles, then the equipment, then Custom, and the user's own exercises come first", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    await services.logger.addCustomExercise({ name: "Cable fly", primaryMuscles: ["chest"], equipmentTags: ["cable"] });
+    await openPicker(root);
+    const meta = (id) => $(root, `[data-exercise-id="${id}"] .pick-meta`).textContent;
+    ctx.assert.equal(meta("seed-barbell-bench-press"), "Chest · Barbell");
+    ctx.assert.equal(meta("seed-pull-up"), "Lats · Bodyweight");
+    const custom = pickRows(root).find((row) => row.querySelector(".pick-name").textContent === "Cable fly");
+    ctx.assert.equal(custom.querySelector(".pick-meta").textContent, "Chest · Custom"); // a custom exercise has no equipment field
+    ctx.assert.equal(pickRows(root)[0], custom);
+  });
+});
+
+rule("ui: with 136 exercises the list shows 50, says so, and Show 50 more adds 50 at a time", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.equal(pickRows(root).length, 50);
+    ctx.assert.equal(moreText(root), "Showing 50 of 136. Search or filter to narrow it down.Show 50 more");
+    ctx.assert.equal(pickIds(root).slice(0, 16).every((id) => id.startsWith("seed-")), true); // the 16 seeds come first
+    ctx.assert.equal(pickIds(root)[16], "Synthetic_0");
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 100, "100 rows");
+    ctx.assert.equal(moreText(root), "Showing 100 of 136. Search or filter to narrow it down.Show 50 more");
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 136, "all 136 rows");
+    ctx.assert.equal(region(root, "pick-more"), null);
+  }, { prepare: addSynthetic });
+});
+
+rule("ui: a filter or a new search narrows the list and starts again from 50 rows", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 100, "100 rows");
+    chooseOption(field(root, "filter-muscle"), "neck");
+    await waitFor(() => moreText(root) !== null && moreText(root).startsWith("Showing 50 of 60."), "50 of the 60 neck exercises");
+    ctx.assert.equal(pickRows(root).length, 50);
+    ctx.assert.ok(pickIds(root).every((id) => id.startsWith("Synthetic_") && Number(id.slice(10)) % 2 === 0));
+    chooseOption(field(root, "filter-equipment"), "foam_roll");
+    await waitFor(() => pickRows(root).length === 20, "the 20 neck exercises with a foam roll");
+    ctx.assert.equal(region(root, "pick-more"), null);
+    ctx.assert.equal($(root, '[data-exercise-id="Synthetic_0"] .pick-meta').textContent, "Neck · Foam roll");
+    chooseOption(field(root, "filter-muscle"), "");
+    chooseOption(field(root, "filter-equipment"), "");
+    await waitFor(() => moreText(root) !== null && moreText(root).startsWith("Showing 50 of 136."), "the whole list, first page");
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 100, "100 rows again");
+    setValue(field(root, "search"), "synthetic 07");
+    await waitFor(() => pickRows(root).length === 12, "the twelve names containing 07"); // 007, 070 to 079, 107
+    ctx.assert.equal(region(root, "pick-more"), null);
+    setValue(field(root, "search"), "synthetic");
+    await waitFor(() => moreText(root) !== null && moreText(root).startsWith("Showing 50 of 120."), "50 of 120 again");
+    ctx.assert.equal(pickRows(root).length, 50);
+  }, { prepare: addSynthetic });
+});
+
+rule("ui: choosing an exercise still adds it and closes the picker, and the next time the picker opens it is clean", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    chooseOption(field(root, "filter-muscle"), "neck");
+    await waitFor(() => moreText(root) !== null && moreText(root).startsWith("Showing 50 of 60."), "the neck exercises");
+    setValue(field(root, "search"), "synthetic 004");
+    await waitFor(() => pickIds(root).join() === "Synthetic_4", "the one match");
+    click($(root, '[data-action="pick-exercise"][data-exercise-id="Synthetic_4"]'));
+    await waitFor(() => lastPlanned(root), "the new unchecked row");
+    ctx.assert.equal(field(root, "search"), null); // the picker closed
+    ctx.assert.ok(root.textContent.includes("Synthetic 004"));
+    await openPicker(root);
+    ctx.assert.equal(field(root, "search").value, "");
+    ctx.assert.equal(field(root, "filter-muscle").value, "");
+    ctx.assert.equal(field(root, "filter-equipment").value, "");
+    ctx.assert.equal(pickRows(root).length, 50);
+    ctx.assert.equal(moreText(root), "Showing 50 of 136. Search or filter to narrow it down.Show 50 more");
+  }, { prepare: addSynthetic });
+});
+
+rule("ui: the typed query and the filters survive a redraw nobody asked for, which waits while the search box is in use", async (ctx) => {
+  await withApp(ctx, async ({ root, app }) => {
+    await openPicker(root);
+    const search = field(root, "search");
+    search.focus();
+    setValue(search, "synthetic");
+    chooseOption(field(root, "filter-muscle"), "chest");
+    await waitFor(() => pickRows(root).length === 50 && moreText(root).startsWith("Showing 50 of 60."), "the typed search and the filter");
+    search.focus();
+    await app.renderInBackground();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    ctx.assert.equal(field(root, "search"), search); // not replaced while it is in use
+    ctx.assert.equal(search.value, "synthetic");
+    search.blur();
+    const drawn = await waitFor(() => (field(root, "search") !== search ? field(root, "search") : null), "the waiting redraw");
+    ctx.assert.equal(drawn.value, "synthetic"); // the query is remembered
+    ctx.assert.equal(field(root, "filter-muscle").value, "chest"); // and so is the filter
+    await waitFor(() => pickRows(root).length === 50 && moreText(root).startsWith("Showing 50 of 60."), "the same results again");
+  }, { prepare: addSynthetic });
+});
+
+rule("ui: the library note shows only if the app has a catalog service, and only while it loads or after it failed", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.equal(region(root, "catalog-status"), null); // no service: nothing is shown
+  });
+  const failed = "The full exercise library could not be loaded. Apogee will try again the next time it opens.";
+  for (const [status, expected] of [["ready", null], ["idle", null], ["syncing", "Loading the exercise library…"], ["failed", failed]]) {
+    await withApp(ctx, async ({ root }) => {
+      await openPicker(root);
+      const note = region(root, "catalog-status");
+      ctx.assert.equal(note === null ? null : note.textContent, expected, status);
+    }, { catalog: { getStatus: () => status } });
+  }
+});
+
+rule("ui: the custom exercise form is unchanged: it still offers the 18 muscles and 11 equipment tags only", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    click(action(root, "add-custom"));
+    await waitFor(() => $(root, ".custom-form"), "the custom form");
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="primary"]').length, 18);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="secondary"]').length, 18);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="equipment"]').length, 11);
+    ctx.assert.equal(root.querySelector('.custom-form input[value="neck"]'), null);
+    ctx.assert.equal(root.querySelector('.custom-form input[value="foam_roll"]'), null);
+  });
 });

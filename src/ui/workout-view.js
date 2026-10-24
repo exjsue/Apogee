@@ -3,15 +3,22 @@
 // Parsing, validation and every decision happen in src/app and src/domain.
 
 import { h, button } from "./dom.js";
-import { MUSCLES, EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
+import { MUSCLES, EQUIPMENT, ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { isRunning } from "../domain/rest-timer.js";
 import { exerciseBlocks, startTicker, stopTicker, perform } from "./set-rows.js";
+
+// How many rows the picker draws at a time. With the whole exercise library the list has hundreds of rows, and
+// drawing all of them on every keystroke is slow; the screen says how many more there are.
+const PICKER_PAGE = 50;
 
 export const freshLogState = () => ({
   pickerOpen: false,
   addingCustom: false,
   query: "",
+  muscle: "", // the picker's filters: a muscle id or an equipment id, "" for any
+  equipment: "",
+  limit: PICKER_PAGE, // rows drawn so far; "Show 50 more" raises it, any new search or filter resets it
   error: null,
   notice: null,
   confirmDiscard: false,
@@ -269,6 +276,17 @@ function customForm(ctx) {
   return form;
 }
 
+// A drop-down filter for the picker: "Any" or one of the ids, shown with formatLabel. value() is the chosen id or null.
+function filterSelect(label, field, ids, selected, onChange) {
+  const select = h(
+    "select",
+    { "data-field": field, onChange },
+    h("option", { value: "" }, "Any"),
+    ids.map((id) => h("option", { value: id, selected: id === selected }, formatLabel(id))),
+  );
+  return { element: h("label", { class: "field" }, h("span", {}, label), select), value: () => select.value || null };
+}
+
 function picker(ctx) {
   const log = ctx.state.log;
   const { logger } = ctx.services;
@@ -280,48 +298,88 @@ function picker(ctx) {
     autocomplete: "off",
     value: log.query,
   });
+  // Anything that changes the results starts again from the first page.
+  const narrow = () => {
+    log.limit = PICKER_PAGE;
+    return refreshList();
+  };
+  const muscle = filterSelect("Muscle", "filter-muscle", ALL_MUSCLES, log.muscle, narrow);
+  const equipment = filterSelect("Equipment", "filter-equipment", ALL_EQUIPMENT, log.equipment, narrow);
   const list = h("ul", { class: "pick-list", "data-region": "exercise-list" });
+
+  const row = (exercise) => h(
+    "li",
+    {},
+    button(
+      [
+        h("span", { class: "pick-name" }, exercise.name),
+        h(
+          "span",
+          { class: "pick-meta" },
+          [
+            ...exercise.primaryMuscles.map(formatLabel),
+            exercise.equipment ? formatLabel(exercise.equipment) : null,
+            exercise.isCustom ? "Custom" : null,
+          ].filter(Boolean).join(" · "),
+        ),
+      ],
+      {
+        class: "pick",
+        "data-action": "pick-exercise",
+        "data-exercise-id": exercise.id,
+        onClick: () => perform(ctx, async () => {
+          await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
+          Object.assign(log, { pickerOpen: false, query: "", muscle: "", equipment: "", limit: PICKER_PAGE });
+        }),
+      },
+    ),
+  );
+
+  // "Showing 50 of 775" with a button for the next page, when there are more results than rows drawn.
+  const moreRow = (shown, total) => h(
+    "li",
+    { class: "pick-more", "data-region": "pick-more" },
+    h("span", { class: "muted" }, `Showing ${shown} of ${total}. Search or filter to narrow it down.`),
+    button(`Show ${PICKER_PAGE} more`, {
+      class: "small",
+      "data-action": "pick-more",
+      onClick: () => {
+        log.limit += PICKER_PAGE;
+        return refreshList();
+      },
+    }),
+  );
 
   let latest = 0;
   async function refreshList() {
     const mine = ++latest;
-    const results = await logger.findExercises(search.value);
+    const filters = { muscle: muscle.value(), equipment: equipment.value() };
+    const results = await logger.findExercises(search.value, filters);
     if (mine !== latest) return; // a newer search is already on its way
-    log.query = search.value;
+    Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
+    const shown = results.slice(0, log.limit);
     list.replaceChildren(...(results.length === 0
       ? [h("li", { class: "muted" }, "No exercises match.")]
-      : results.map((exercise) => h(
-        "li",
-        {},
-        button(
-          [
-            h("span", { class: "pick-name" }, exercise.name),
-            h(
-              "span",
-              { class: "pick-meta" },
-              [...exercise.primaryMuscles.map(formatLabel), exercise.isCustom ? "Custom" : null].filter(Boolean).join(" · "),
-            ),
-          ],
-          {
-            class: "pick",
-            "data-action": "pick-exercise",
-            "data-exercise-id": exercise.id,
-            onClick: () => perform(ctx, async () => {
-              await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
-              Object.assign(log, { pickerOpen: false, query: "" });
-            }),
-          },
-        ),
-      ))));
+      : [...shown.map(row), ...(results.length > shown.length ? [moreRow(shown.length, results.length)] : [])]));
   }
-  search.addEventListener("input", refreshList);
+  search.addEventListener("input", narrow);
   refreshList();
+
+  // Only if the app has a library service (it does not yet): a note while the library loads or if it could not load.
+  const libraryStatus = ctx.services.catalog ? ctx.services.catalog.getStatus() : "ready";
+  const libraryNote = libraryStatus === "failed"
+    ? h("p", { class: "muted", "data-region": "catalog-status" }, "The full exercise library could not be loaded. Apogee will try again the next time it opens.")
+    : libraryStatus === "syncing"
+      ? h("p", { class: "muted", "data-region": "catalog-status" }, "Loading the exercise library…")
+      : null;
 
   const panel = h(
     "section",
     { class: "card", "aria-label": "Choose exercise" },
     h("h2", {}, "Choose exercise"),
     search,
+    h("div", { class: "pick-filters" }, muscle.element, equipment.element),
+    libraryNote,
     list,
   );
   if (log.addingCustom) {
