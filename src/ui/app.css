@@ -106,10 +106,12 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   min-height: 44px;
   border: 0;
   border-bottom: 3px solid transparent;
+  border-radius: 0; /* the global button radius would curve the underline up at its ends */
   background: none;
   color: var(--muted);
   font: inherit;
 }
+.tab:focus-visible { outline-offset: -3px; } /* square, inside the tab: clear of its neighbours and the underline */
 .tab[aria-current="page"] {
   color: var(--text);
   border-bottom-color: var(--accent);
