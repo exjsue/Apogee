@@ -221,18 +221,29 @@ test("emit: an entry with no primary muscle stops it before anything is written,
 
 // ---- the app does not use it yet ----
 
-test("emit: nothing in src/ outside src/catalog imports the catalog, and the service worker does not precache it", () => {
-  const importers = [];
-  const walk = (folder) => {
-    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
-      const full = path.join(folder, entry.name);
-      if (entry.isDirectory()) { if (full !== REAL) walk(full); } else if (/\.(js|html)$/.test(entry.name) && /catalog\/(catalog|seed-grouping)|seed-grouping/.test(fs.readFileSync(full, "utf8"))) importers.push(path.relative(ROOT, full));
-    }
+// Only the small seed-grouping.js is part of the app (its seed code uses it); the big catalog.js is not, yet.
+const MAY_IMPORT_SEED_GROUPING = ["src/domain/seed.js", "src/storage/migrations.js"]; // migrations.js comes with schema version 3
+
+test("emit: nothing outside src/catalog imports catalog.js, only the seed code imports seed-grouping.js, and the service worker precaches only the latter", () => {
+  const referring = (pattern) => {
+    const found = [];
+    const walk = (folder) => {
+      for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+        const full = path.join(folder, entry.name);
+        if (entry.isDirectory()) { if (full !== REAL) walk(full); } else if (/\.(js|html)$/.test(entry.name) && pattern.test(fs.readFileSync(full, "utf8"))) found.push(path.relative(ROOT, full).replaceAll("\\", "/"));
+      }
+    };
+    walk(path.join(ROOT, "src"));
+    for (const file of ["index.html", "sw.js"]) if (pattern.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) found.push(file);
+    return found.sort();
   };
-  walk(path.join(ROOT, "src"));
-  for (const file of ["index.html", "sw.js"]) if (/src\/catalog|seed-grouping/.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) importers.push(file);
-  assert.deepEqual(importers, []);
-  assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), []);
+  assert.deepEqual(referring(/catalog\/catalog(\.js)?["']/), []); // catalog.js: nothing
+  const groupingUsers = referring(/seed-grouping/);
+  assert.ok(groupingUsers.length > 0 && groupingUsers.every((file) => MAY_IMPORT_SEED_GROUPING.includes(file)), `seed-grouping.js is used by: ${groupingUsers.join(", ")}`);
+  assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), ["src/catalog/seed-grouping.js"]);
+  const manifest = fs.readFileSync(path.join(ROOT, "sw-manifest.js"), "utf8");
+  assert.ok(manifest.includes('"./src/catalog/seed-grouping.js"'));
+  assert.ok(!manifest.includes("catalog.js"));
 });
 
 // ---- the committed module is what a fresh run writes ----

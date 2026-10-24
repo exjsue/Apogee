@@ -18,6 +18,31 @@ export const EQUIPMENT = Object.freeze([
   "cable", "resistance_band", "bodyweight", "bench", "pull_up_bar",
 ]);
 
+// Ids the exercise catalog uses that the custom-exercise form does not offer. They are not part of MUSCLES or
+// EQUIPMENT (the form lists those two), so the form stays as it is. Nothing uses these yet; schema version 3
+// will validate exercises against ALL_MUSCLES and ALL_EQUIPMENT.
+export const EXTRA_MUSCLES = Object.freeze(["neck", "abductors"]);
+export const EXTRA_EQUIPMENT = Object.freeze(["trap_bar", "medicine_ball", "exercise_ball", "foam_roll", "other"]);
+export const ALL_MUSCLES = Object.freeze([...MUSCLES, ...EXTRA_MUSCLES]);
+export const ALL_EQUIPMENT = Object.freeze([...EQUIPMENT, ...EXTRA_EQUIPMENT]);
+
+// Where an exercise comes from: a built-in seed, the source project's catalog, an entry written by hand for
+// Apogee, or one the user made.
+export const ORIGINS = Object.freeze(["seed", "upstream", "authored", "custom"]);
+
+// The fields schema version 3 adds to an exercise, with the value a record saved before it has. Not used yet.
+export function exerciseV3Defaults(record) {
+  return {
+    baseMovementId: null,
+    equipment: null,
+    variations: [],
+    origin: record.isCustom === true ? "custom" : "seed",
+    upstreamId: null,
+    catalogVersion: null,
+    retired: false,
+  };
+}
+
 // Maximum lengths, in characters (Unicode code points) after normalization.
 export const NAME_MAX_LENGTH = 80;
 export const NOTES_MAX_LENGTH = 500;
