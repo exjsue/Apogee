@@ -160,9 +160,14 @@ async function logOneSet(root, reps, weight, unit) {
   await waitFor(() => loggedRows(root).length === before + 1, "the set to be logged");
 }
 
+// The aria-label of the section each tab draws (History may show a workout's detail instead of the list).
+// aria-current alone is not enough: an older render still in flight sets it from state.tab while it draws
+// the previous tab's content, so the content itself must be waited for.
+const TAB_CONTENT = { log: ["Log"], history: ["History", "Workout detail"], backup: ["Backup"], settings: ["Settings"] };
 const goToTab = async (root, tab) => {
   click($(root, `[data-action="tab"][data-tab="${tab}"]`));
   await waitFor(() => $(root, `[data-action="tab"][data-tab="${tab}"]`).getAttribute("aria-current") === "page", `the ${tab} tab`);
+  await waitFor(() => TAB_CONTENT[tab].includes($(root, "#view > section.view")?.getAttribute("aria-label")), `the ${tab} tab's content`);
 };
 
 // ---- tests ----
