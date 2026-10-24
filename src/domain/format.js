@@ -93,3 +93,14 @@ export function formatDateTime(isoTimestamp, { locale, timeZone } = {}) {
   if (Number.isNaN(date.getTime())) fail("not a valid timestamp");
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone }).format(date);
 }
+
+// Time since a start, as m:ss, or h:mm:ss from one hour on (hours are not capped, there is no day format).
+// A start after "now" (the clock was set back) reads 0:00. Both arguments are milliseconds.
+export function formatElapsed(startMs, nowMs) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(nowMs)) fail("not a valid time");
+  const total = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  const seconds = String(total % 60).padStart(2, "0");
+  const minutes = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  return hours === 0 ? `${minutes}:${seconds}` : `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`;
+}

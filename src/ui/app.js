@@ -185,6 +185,7 @@ export async function mountApp(root, services) {
       // (in its own transaction); this resets what the screens remember.
       resetAfterImport: () => {
         if (typeof state.log.stopTicker === "function") state.log.stopTicker();
+        if (typeof state.log.stopElapsed === "function") state.log.stopElapsed();
         state.log = freshLogState();
         state.history = freshHistoryState();
       },
@@ -196,6 +197,7 @@ export async function mountApp(root, services) {
       content = h("p", { class: "error", role: "alert" }, `Something went wrong: ${error.message}`);
     }
     if (mine !== latest) return; // a newer render has taken over
+    if (state.tab !== "log" && typeof state.log.stopElapsed === "function") state.log.stopElapsed(); // the clock runs only on the Log tab
     if (state.enter) {
       content.dataset.anim = "tab"; // see the motion block in app.css
       state.enter = false;

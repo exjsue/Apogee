@@ -8,6 +8,7 @@ import {
   formatWeight,
   formatSetWeight,
   formatDateTime,
+  formatElapsed,
 } from "../src/domain/format.js";
 
 test("parseDecimal: accepts plain numbers and a decimal point", () => {
@@ -129,4 +130,18 @@ test("formatDateTime: formats a stored UTC timestamp", () => {
   const text = formatDateTime("2026-10-22T10:00:00.000Z", { locale: "en-US", timeZone: "UTC" });
   assert.ok(text.includes("2026") && text.includes("Oct") && text.includes("10:00"), text);
   assert.throws(() => formatDateTime("yesterday"), /not a valid timestamp/);
+});
+
+test("elapsed: formats m:ss and h:mm:ss, including 0:00, 59:59, 1:00:00, hours past a day, and a future start clamped to 0:00", () => {
+  const at = (seconds) => formatElapsed(1_000_000, 1_000_000 + seconds * 1000);
+  assert.equal(at(0), "0:00");
+  assert.equal(at(5), "0:05");
+  assert.equal(at(754), "12:34");
+  assert.equal(at(3599), "59:59");
+  assert.equal(at(3600), "1:00:00");
+  assert.equal(at(3754), "1:02:34");
+  assert.equal(at(100 * 3600 + 61), "100:01:01"); // no day format
+  assert.equal(formatElapsed(1_000_000, 1_000_999), "0:00"); // whole seconds only, never rounded up
+  assert.equal(formatElapsed(2_000_000, 1_000_000), "0:00"); // the clock was set back
+  assert.throws(() => formatElapsed(NaN, 0), /not a valid time/);
 });

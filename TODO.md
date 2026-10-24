@@ -91,7 +91,7 @@
 - [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.
 - [ ] Make the set UI slightly smaller / more compact.
-- [ ] Show total workout time at the very top during a workout.
+- [x] Show total workout time during a workout (done 2026-10-24 as a live elapsed time in the Current workout card; not yet tested on an iPhone).
 - [x] Autofill from the previous set (done 2026-10-24; not yet tested on an iPhone): if the next set is empty and the set directly above it has a weight entered, show a ghost of the above set's weight and reps in the next set. Pressing check fills the next set with those exact values.
   - Ghost values are display-only and are not stored until check is pressed.
   - If the set above has weight but no reps: the ghost shows the weight only and the reps stay blank to be typed; no warning appears. Checking with blank reps is refused for now. Once checking such a set is allowed (deferred, see "Sets with no reps" below), it is excluded from volume and estimated-1RM calculations until reps are entered.

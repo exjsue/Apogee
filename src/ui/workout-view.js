@@ -7,6 +7,7 @@ import { MUSCLES, EQUIPMENT, ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from 
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { isRunning } from "../domain/rest-timer.js";
 import { exerciseBlocks, startTicker, stopTicker, perform } from "./set-rows.js";
+import { elapsedElement, startElapsed, stopElapsed } from "./elapsed.js";
 
 // How many rows the picker draws at a time. With the whole exercise library the list has hundreds of rows, and
 // drawing all of them on every keystroke is slow; the screen says how many more there are.
@@ -30,6 +31,7 @@ export const freshLogState = () => ({
   editingDefaultFor: null,
   seen: null, // the rows of the last drawing, so only what changed animates
   stopTicker: null,
+  stopElapsed: null, // stops the elapsed-time clock of the open workout
 });
 
 const countSets = (workout) => workout.entries.reduce((total, entry) => total + entry.sets.length, 0);
@@ -164,11 +166,14 @@ function currentCard(ctx, session) {
   if (!started) {
     card.append(h("p", { class: "muted" }, "No workout in progress. Checking your first set starts one."));
   } else {
+    const elapsed = elapsedElement(session.workout.startedAt);
     card.append(h(
       "p",
-      { class: "muted" },
-      `Started ${formatDateTime(session.workout.startedAt)} · ${formatCount(session.loggedCount, "set")}`,
+      { class: "muted", "data-region": "started" },
+      `Started ${formatDateTime(session.workout.startedAt)} · ${formatCount(session.loggedCount, "set")} · `,
+      elapsed,
     ));
+    card.elapsed = elapsed;
     if (session.loggedCount === 0 && session.plannedCount === 0) card.append(h("p", { class: "muted" }, "No sets yet."));
   }
   card.append(exerciseBlocks(ctx, session.blocks));
@@ -438,6 +443,7 @@ function addExerciseArea(ctx, session) {
 export async function renderLogView(ctx) {
   const log = ctx.state.log;
   stopTicker(ctx);
+  stopElapsed(ctx);
   const session = await ctx.services.logger.getSession();
   const view = h("section", { class: "view", "aria-label": "Log" });
 
@@ -454,8 +460,10 @@ export async function renderLogView(ctx) {
     view.append(staleCard(ctx, session));
     return view;
   }
-  view.append(currentCard(ctx, session));
+  const card = currentCard(ctx, session);
+  view.append(card);
   view.append(addExerciseArea(ctx, session));
+  if (card.elapsed) startElapsed(ctx, card.elapsed, session.workout.startedAt);
   // Only a timer that is still running gets a ticker; an expired one is already done.
   if (session.timer !== null && isRunning(session.timer, session.nowMs)) startTicker(ctx, view, session.timer);
   return view;

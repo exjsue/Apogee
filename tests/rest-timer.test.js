@@ -213,3 +213,23 @@ test("rest entry: the live preview shows the time as it will be read, nothing fo
   assert.equal(previewRestEntry("x").message, REST_ENTRY_HELP);
   assert.match(previewRestEntry("6001").message, /60:00/);
 });
+
+// ---- the check control: its size and its contrast, read from the real stylesheet ----
+
+test("styles: the check control is a 44 px target, drawn by a smaller ring and disc, with a square focus ring", () => {
+  const toggle = /^button\.check-toggle\s*\{([^}]*)\}/m.exec(css)[1];
+  assert.match(toggle, /width:\s*44px/);
+  assert.match(toggle, /height:\s*44px/);
+  assert.match(toggle, /min-height:\s*44px/);
+  assert.match(css, /button\.check-toggle:focus-visible\s*\{\s*outline-offset:\s*-3px/); // inside the target, square
+  assert.match(css, /button\.check-toggle::before,\s*button\.check-toggle::after\s*\{[^}]*inset:\s*8px/); // a 28 px circle in the 44 px
+  assert.match(css, /button\.check-toggle::before\s*\{\s*border:\s*2px solid var\(--check-ring, var\(--muted\)\)/);
+});
+
+for (const [name, theme] of [["light", light], ["dark", dark]]) {
+  test(`styles (${name}): the check ring (unchecked, muted) and the filled disc (checked) are at least 3:1 against the card, and the tick is readable on the disc`, () => {
+    assert.ok(contrast(theme.muted, theme.surface) >= 3, "ring on the card");
+    assert.ok(contrast(theme.text, theme.surface) >= 3, "disc on the card");
+    assert.ok(contrast(theme.bg, theme.text) >= 4.5, "tick on the disc");
+  });
+}

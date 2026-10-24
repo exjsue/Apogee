@@ -277,18 +277,25 @@ function setEditor(ctx, row, index, exerciseName) {
         }
       },
     },
-    h("span", { class: "cell" }, weight, h("span", { class: "unit-suffix" }, row.unit)),
-    h("span", { class: "cell" }, reps, h("span", { class: "unit-suffix" }, "reps")),
+    h(
+      "div",
+      { class: "edit-fields" },
+      h("span", { class: "cell" }, weight, h("span", { class: "unit-suffix" }, row.unit)),
+      h("span", { class: "cell" }, reps, h("span", { class: "unit-suffix" }, "reps")),
+    ),
     row.unit === ctx.unit ? null : h("span", { class: "cell-note" }, `entered in ${row.unit}`),
-    h("button", { type: "submit", class: "small primary", "data-action": "save-set-edit" }, "Save"),
-    button("Cancel", {
-      class: "small",
-      "data-action": "cancel-set-edit",
-      onClick: () => {
-        log.editingSetId = null;
-        return ctx.rerender();
-      },
-    }),
+    h(
+      "div",
+      { class: "edit-actions" },
+      h("button", { type: "submit", class: "primary", "data-action": "save-set-edit" }, "Save"),
+      button("Cancel", {
+        "data-action": "cancel-set-edit",
+        onClick: () => {
+          log.editingSetId = null;
+          return ctx.rerender();
+        },
+      }),
+    ),
     error,
   );
 }

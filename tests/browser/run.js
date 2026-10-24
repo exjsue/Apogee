@@ -9,7 +9,7 @@ import { storeExtraRules } from "../store-extra-rules.js";
 import { loggerRules } from "../logger-rules.js";
 import { sessionRules } from "../session-rules.js";
 import { upgradeRules } from "./upgrade-rules.js";
-import { uiRules } from "./ui-smoke.js";
+import { uiRules, layoutMeasures } from "./ui-smoke.js";
 import { catalogRules } from "../catalog-rules.js";
 import { catalogWiringRules } from "../catalog-wiring-rules.js";
 import { createLogger } from "../../src/app/logger.js";
@@ -370,6 +370,7 @@ async function runAll() {
     // leftover test database; harmless
   }
 
+  notes.push(...layoutMeasures.map((line) => `Edit form layout, ${line}`));
   const passed = rules.length - failed;
   const verdict = failed === 0 ? "ALL PASSED" : `${failed} FAILED`;
   summary.className = failed === 0 ? "pass" : "fail";

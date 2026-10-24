@@ -55,7 +55,7 @@ const waitForText = (root, text) => waitFor(() => root.textContent.includes(text
 
 // Mounts the app against a fresh seeded database and cleans up afterwards. `catalog` is a library service,
 // or a function that makes one from the adapter.
-async function withApp(ctx, body, { prepare, offline, catalog } = {}) {
+async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize } = {}) {
   const adapter = ctx.createAdapter();
   const store = createStore(adapter);
   await store.open();
@@ -80,14 +80,31 @@ async function withApp(ctx, body, { prepare, offline, catalog } = {}) {
     ...(offline ? { offline } : {}),
     ...(catalog ? { catalog: typeof catalog === "function" ? catalog(adapter) : catalog } : {}),
   };
+  // With a width, the app is mounted into an iframe of that width that loads the real stylesheet, so
+  // the layout can be measured; the page's own styles are not touched.
+  let frame = null;
   const root = document.createElement("div");
-  document.body.append(root); // forms only submit when they are in the document
+  if (width) {
+    frame = document.createElement("iframe");
+    frame.style.width = `${width}px`;
+    frame.style.height = "4000px"; // tall enough that the frame has no scroll bar of its own to narrow it
+    frame.style.border = "0";
+    frame.srcdoc = '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../src/ui/app.css"><body>';
+    document.body.append(frame);
+    await waitFor(() => frame.contentDocument.body && frame.contentDocument.styleSheets.length > 0 && frame.contentDocument.styleSheets[0].cssRules.length > 0, "the stylesheet in the frame");
+    if (fontSize) frame.contentDocument.documentElement.style.fontSize = fontSize;
+    root.id = "app"; // the page's own wrapper, which sets the side gutters
+    frame.contentDocument.body.append(root);
+  } else {
+    document.body.append(root); // forms only submit when they are in the document
+  }
   let app = null;
   try {
     app = await mountApp(root, services);
-    await body({ root, store, adapter, services, calls, app });
+    await body({ root, store, adapter, services, calls, app, frame });
   } finally {
     root.remove(); // also stops any ticker, which only runs while its view is on the page
+    if (frame !== null) frame.remove();
     if (app !== null) await app.idle(); // let a render that is still reading finish before the database is closed
   }
 }
@@ -1417,4 +1434,135 @@ rule("ui: a library that cannot load shows the plain note, and the app goes on w
     click(pickRows(root).find((b) => b.dataset.exerciseId === BENCH));
     await waitFor(() => plannedRows(root).length === 1, "the bench row");
   }, { catalog: make });
+});
+
+// ---- the elapsed time of the open workout ----
+
+const elapsedOf = (root) => region(root, "elapsed");
+
+rule("elapsed: a tick updates only the timer element's text; the card is not redrawn and a field's value and focus survive", async (ctx) => {
+  await withApp(ctx, async ({ root, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(action(root, "add-set"));
+    await waitFor(() => plannedRows(root).length === 1, "a new row");
+    const timer = elapsedOf(root);
+    ctx.assert.equal(timer.getAttribute("role"), "timer");
+    ctx.assert.equal(timer.getAttribute("aria-live"), "off");
+    ctx.assert.equal(timer.closest("[aria-live]:not([aria-live=off])"), null, "not inside a live region");
+    ctx.assert.ok(/^\d+:\d\d$/.test(timer.textContent), timer.textContent);
+    ctx.assert.ok(region(root, "started").textContent.includes(" · 1 set · "));
+    const reps = lastPlanned(root).querySelector('[data-field="reps"]');
+    reps.focus();
+    setValue(reps, "12");
+    reps.setSelectionRange(1, 1);
+    const row = lastPlanned(root);
+    const before = timer.textContent;
+    await waitFor(() => timer.textContent !== before, "the timer to tick", 3500);
+    ctx.assert.equal(elapsedOf(root), timer); // the same element
+    ctx.assert.equal(lastPlanned(root), row); // the list was not redrawn
+    ctx.assert.equal(document.activeElement, reps);
+    ctx.assert.deepEqual([reps.value, reps.selectionStart], ["12", 1]);
+    ctx.assert.equal(app.state.log.seen.size, 2);
+  });
+});
+
+rule("elapsed: the interval is cleared on finish, discard and leaving the Log tab (no leaked timer)", async (ctx) => {
+  const live = new Set();
+  const realSet = window.setInterval;
+  const realClear = window.clearInterval;
+  window.setInterval = (fn, delay, ...rest) => {
+    const id = realSet(fn, delay, ...rest);
+    if (delay === 1000) live.add(id);
+    return id;
+  };
+  window.clearInterval = (id) => {
+    live.delete(id);
+    return realClear(id);
+  };
+  try {
+    await withApp(ctx, async ({ root, app }) => {
+      await pickExercise(root, "bench", BENCH);
+      ctx.assert.equal(live.size, 0); // no workout open yet
+      await logOneSet(root, "8", "100", "kg");
+      await waitFor(() => elapsedOf(root), "the timer");
+      ctx.assert.equal(live.size, 1);
+      ctx.assert.equal(typeof app.state.log.stopElapsed, "function");
+      await goToTab(root, "history"); // leaving the tab
+      await waitFor(() => live.size === 0, "the interval to be cleared after leaving the tab");
+      ctx.assert.equal(app.state.log.stopElapsed, null);
+      await goToTab(root, "log");
+      await waitFor(() => elapsedOf(root) && live.size === 1, "the interval to start again");
+      click(action(root, "finish")); // all sets are checked: finishes without a question
+      await waitFor(() => !elapsedOf(root) && live.size === 0, "the interval to be cleared after finishing");
+      ctx.assert.equal(app.state.log.stopElapsed, null);
+      await pickExercise(root, "bench", BENCH);
+      await logOneSet(root, "5", "50", "kg");
+      await waitFor(() => elapsedOf(root) && live.size === 1, "a new workout's interval");
+      click(action(root, "discard"));
+      click(await waitFor(() => action(root, "confirm-discard"), "the discard question"));
+      await waitFor(() => !elapsedOf(root) && live.size === 0, "the interval to be cleared after discarding");
+      ctx.assert.equal(app.state.log.stopElapsed, null);
+    });
+    ctx.assert.equal(live.size, 0);
+  } finally {
+    window.setInterval = realSet;
+    window.clearInterval = realClear;
+  }
+});
+
+// ---- layout, measured in an iframe of the given width with the real stylesheet ----
+
+export const layoutMeasures = [];
+
+async function openEditForm(root) {
+  await pickExercise(root, "bench", BENCH);
+  await logOneSet(root, "8", "100", "kg");
+  click(loggedRows(root)[0].querySelector('[data-cell="reps"] [data-action="edit-set"]'));
+  return waitFor(() => region(root, "set-editor"), "the edit form");
+}
+
+for (const [width, fontSize] of [[320, null], [375, null], [320, "24px"]]) {
+  rule(`styles: at ${width} px${fontSize ? " with larger text" : ""} the edit form's fields share a line, Save and Cancel share the next, equal and 44 px high, and nothing overflows`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      const form = await openEditForm(root);
+      const win = frame.contentWindow;
+      const box = (el) => el.getBoundingClientRect();
+      const [weight, reps] = ["edit-weight", "edit-reps"].map((name) => box(form.querySelector(`[data-field="${name}"]`)));
+      const save = box(form.querySelector('[data-action="save-set-edit"]'));
+      const cancel = box(form.querySelector('[data-action="cancel-set-edit"]'));
+      const rowAbove = box(loggedRows(root)[0].querySelector(".set-main"));
+      const formBox = box(form);
+      layoutMeasures.push(`${width}px${fontSize ? " " + fontSize : ""}: form ${Math.round(formBox.width)} scrollW ${form.scrollWidth}/${form.clientWidth}, Save ${Math.round(save.width)} x ${Math.round(save.height)}, Cancel ${Math.round(cancel.width)} @${Math.round(cancel.top - save.top)}, gap above ${Math.round(formBox.top - rowAbove.bottom)}, field tops ${Math.round(weight.top)}/${Math.round(reps.top)}, doc ${frame.contentDocument.documentElement.scrollWidth}/${win.innerWidth}`);
+      if (!fontSize) ctx.assert.ok(Math.abs(weight.top - reps.top) < 1, `fields on one line (${weight.top} / ${reps.top})`);
+      ctx.assert.ok(Math.abs(save.top - cancel.top) < 1, "Save and Cancel on one line");
+      ctx.assert.ok(Math.abs(save.width - cancel.width) < 1.5, `equal widths ${save.width} / ${cancel.width}`);
+      ctx.assert.ok(save.height >= 44 && cancel.height >= 44, `tap targets ${save.height} / ${cancel.height}`);
+      ctx.assert.ok(save.top >= Math.max(weight.bottom, reps.bottom), "Save is below the fields");
+      ctx.assert.ok(formBox.top - rowAbove.bottom >= 8, `gap above the form ${formBox.top - rowAbove.bottom}`);
+      ctx.assert.ok(form.scrollWidth <= form.clientWidth, "the form does not overflow");
+      ctx.assert.ok(formBox.left >= 0 && formBox.right <= win.innerWidth, "the form is inside the window");
+      ctx.assert.ok(frame.contentDocument.documentElement.scrollWidth <= win.innerWidth, "no horizontal scroll");
+    }, { width, fontSize });
+  });
+}
+
+rule("styles: the check control is a 44 px target with a ring when unchecked and a filled disc with a tick when checked", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await pickExercise(root, "bench", BENCH);
+    const win = frame.contentWindow;
+    const toggle = () => $(root, '[data-action="toggle-set"]');
+    const unchecked = toggle();
+    const target = unchecked.getBoundingClientRect();
+    ctx.assert.ok(target.width >= 44 && target.height >= 44, `target ${target.width}x${target.height}`);
+    ctx.assert.equal(win.getComputedStyle(unchecked, "::before").borderTopWidth, "2px");
+    ctx.assert.equal(win.getComputedStyle(unchecked, "::after").opacity, "0"); // no disc, no tick
+    ctx.assert.equal(win.getComputedStyle(unchecked).color, "rgba(0, 0, 0, 0)");
+    await logOneSet(root, "8", "100", "kg");
+    const checked = toggle();
+    ctx.assert.equal(win.getComputedStyle(checked, "::after").opacity, "1"); // a disc (a different shape, not only a colour)
+    ctx.assert.ok(win.getComputedStyle(checked).color !== "rgba(0, 0, 0, 0)"); // the tick shows
+    ctx.assert.ok(parseFloat(win.getComputedStyle(checked, "::after").width) < 44);
+    ctx.assert.equal(win.getComputedStyle(checked, "::before").borderTopColor, "rgba(0, 0, 0, 0)"); // the ring is gone
+  }, { width: 375 });
 });
