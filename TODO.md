@@ -54,6 +54,34 @@
 - [ ] **Verify on iPhone (pull-to-refresh):** see the checklist in the report of this change: does iOS fire touchmove while the page rubber-bands at the top, is there any native pull-to-refresh in the installed app, does overscroll-behavior-y: contain on html change anything, and do the guards (typing, menu, timer, unsaved text) hold on a real phone
 - [ ] Pull-to-refresh in a Safari tab (not the installed app) may also trigger Safari's own reload; that bypasses the unsaved-text question (the timer and logged sets survive). Decide whether that matters
 - [ ] **Verify on iPhone (rest timer):** the check and the three row states, the countdown and the pie in the Home Screen app, leaving the app and coming back after the rest ended, locking the phone mid-rest, editing a time by tapping it, Add set showing no timer, finishing with unchecked sets, and the grey done state in daylight
+- [ ] Animation tuning: make the check circle animation slightly longer (now 160 ms; keep it under about 250 ms, opacity and transform only, reduced motion still none) and give its pop more size (now scale 0.94 to 1.05 to 1; try about 1.15). Look at it on the iPhone first
+
+## UI / UX and Logging (added 2026-10-23)
+- [ ] Workout templates from history: save a past workout as a reusable routine. Optional, never automatic. Stores planned exercises and set counts only, not logged weights or reps.
+- [ ] Workout naming: allow naming a workout both during the session and after it is finished.
+- [ ] Reorder sets within an exercise mid-workout. Set labels renumber. Logged data stays intact.
+  - Risk: unchecked "planned" rows live in meta and checked sets are real records. Reordering must handle both without losing or duplicating either.
+- [ ] Reorder exercises within the current workout (e.g., move deadlifts to the top if forgotten). Order does not matter for history; only that the sets are logged.
+  - Risk: may need a stored order field and a schema or migration decision. Evaluate before building.
+- [ ] Expand the default exercise library to be comprehensive and expandable, with user-created custom exercises stored separately.
+  - Data model: base movement + structured attributes (equipment: barbell/smith/machine/dumbbell/etc.; variation: e.g., Romanian, stiff-leg, platform, grip). Each combination is its own trackable exercise with a stable id, so PRs and history never mix variants.
+  - Sourcing: first step is a sources-and-licenses evaluation only, with no downloads. Candidates: free-exercise-db (UNVERIFIED: license and entry count) and wger (UNVERIFIED: believed share-alike). Generate variations on top of the base list.
+  - Vendor static JSON in the repo. No runtime network calls. Controlled muscle and equipment vocabulary. No images yet.
+  - Every exercise needs muscle targeting and equipment tags.
+  - Wording note: do not promise "every exercise"; aim for comprehensive plus custom exercises.
+- [ ] More animations across the app.
+- [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
+- [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.
+- [ ] Make the set UI slightly smaller / more compact.
+- [ ] Show total workout time at the very top during a workout.
+- [ ] Autofill from the previous set: if the next set is empty and the set directly above it has a weight entered, show a ghost of the above set's weight and reps in the next set. Pressing check fills the next set with those exact values.
+  - Ghost values are display-only and are not stored until check is pressed.
+  - If the set above has weight but no reps: reps stay blank, nothing is shown to the user and no warning appears. Once checked, the set is excluded from volume and estimated-1RM calculations until reps are entered.
+- [ ] Previous-workout ghost: if an exercise was done in an earlier workout, the first empty set of that exercise shows a ghost of the heaviest set from the most recent session (e.g., last time 225 lb x 4 deadlift, so the ghost shows 225 x 4). Pressing check fills in those values.
+  - Later empty sets ghost the set directly above them in the current workout (see autofill item).
+  - Revisit when warmup sets, dropsets, and supersets are added, since "heaviest set" may need to exclude warmups.
+- [ ] Completed (greyed-out) sets stay editable. Editing does not restart the rest timer, does not change the completion timestamp, and does not uncheck the set (unchecking currently deletes the set, so edit handlers must not go through the uncheck path).
+- [ ] Calculation rule: sets with no reps entered are excluded from volume and estimated-1RM calculations.
 
 ## Deferred
 - [ ] Importers (Strong, Liftoff); each needs a mapping onto the fixed muscle and equipment lists
