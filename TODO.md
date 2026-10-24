@@ -105,3 +105,4 @@
 - [ ] iPhone native app / Android
 - [ ] Opt-in AI feature (do not build until owner approves)
 - [ ] Search ranking: name matches should rank above equipment/notes matches (e.g. 'bench' returns Barbell hip thrust). Deferred by John 2026-10-24.
+- [ ] Same-name exercises (a custom and a catalog entry, allowed since the catalog sync): the Log tab's exercise headings (src/ui/workout-view.js:44) and the history detail (src/ui/history-view.js:85) show only the name, so the two cannot be told apart there. Only the picker marks "Custom".

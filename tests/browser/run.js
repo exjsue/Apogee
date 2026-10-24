@@ -10,11 +10,31 @@ import { loggerRules } from "../logger-rules.js";
 import { sessionRules } from "../session-rules.js";
 import { upgradeRules } from "./upgrade-rules.js";
 import { uiRules } from "./ui-smoke.js";
+import { catalogRules } from "../catalog-rules.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
+import { createCatalogStore } from "../../src/storage/catalog-store.js";
 import { createIdbAdapter, deleteDatabase, requestPersistentStorage } from "../../src/storage/idb-adapter.js";
+import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
+import { CATALOG } from "../../src/catalog/catalog.js";
+import { CATALOG_VERSION, CATALOG_COUNT } from "../../src/catalog/catalog-info.js";
 
 const DB_NAME = "apogee-storage-test";
+
+// Rules marked ownDatabase (the catalog rules) each get a throwaway database of their own, deleted before and
+// after the rule. This page is served from the same origin as the app, so a name is only accepted if it has
+// this prefix: it can never be the app's real database.
+const THROWAWAY_PREFIX = "apogee-catalog-test-";
+let throwawayCount = 0;
+function throwawayName() {
+  throwawayCount += 1;
+  const name = `${THROWAWAY_PREFIX}${Date.now()}-${throwawayCount}`;
+  if (!name.startsWith(THROWAWAY_PREFIX) || name.length <= THROWAWAY_PREFIX.length) throw new Error(`refusing database name "${name}"`);
+  return name;
+}
+
+// Measurements a rule wants in the plain-text report (not pass/fail).
+const notes = [];
 
 // ---- assertion helper, same shape as node:assert/strict for the methods the rules use ----
 
@@ -102,6 +122,70 @@ const browserOnlyRules = [
   },
 ];
 
+// IndexedDB transaction rules the memory adapter cannot show: it never commits early, and it runs
+// transactions one at a time through its own queue instead of the browser's scheduler.
+const FULL = { version: CATALOG_VERSION, count: CATALOG_COUNT };
+const catalogCount = (adapter) => adapter.transaction(["exercises"], "readonly", async (tx) => (
+  (await tx.getAll("exercises")).filter((e) => e.origin === "upstream" || e.origin === "authored").length
+));
+async function seeded(ctx) {
+  const adapter = ctx.createAdapter();
+  const store = createStore(adapter);
+  await store.open();
+  await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
+  return adapter;
+}
+
+const catalogBrowserRules = [
+  {
+    name: "catalog (IndexedDB): the whole catalog commits in one transaction; a brand-new connection sees every record and a current flag",
+    async run(ctx) {
+      const adapter = await seeded(ctx);
+      let started = performance.now();
+      const result = await createCatalogStore(adapter).syncCatalog(CATALOG, FULL);
+      const syncMs = performance.now() - started;
+      assert.equal(result.added, CATALOG_COUNT);
+      adapter.close();
+
+      const fresh = ctx.createAdapter(); // a new adapter object, so a new IndexedDB connection
+      await createStore(fresh).open();
+      started = performance.now();
+      assert.equal(await createCatalogStore(fresh).catalogIsCurrent(FULL), true);
+      const checkMs = performance.now() - started;
+      assert.equal(await catalogCount(fresh), CATALOG_COUNT);
+      notes.push(`Catalog sync of ${CATALOG_COUNT} entries (one transaction, ${SEED_EXERCISES.length} seeds stored): ${syncMs.toFixed(1)} ms`);
+      notes.push(`catalogIsCurrent over ${CATALOG_COUNT + SEED_EXERCISES.length} exercises, new connection: ${checkMs.toFixed(1)} ms`);
+    },
+  },
+  {
+    name: "catalog (IndexedDB): a sync that fails halfway is gone for good: a brand-new connection sees no catalog record and no flag",
+    async run(ctx) {
+      const adapter = await seeded(ctx);
+      await assert.rejects(createCatalogStore(failAfter(adapter, { puts: 400 })).syncCatalog(CATALOG, FULL), /injected failure/);
+      adapter.close();
+
+      const fresh = ctx.createAdapter();
+      await createStore(fresh).open();
+      assert.equal(await catalogCount(fresh), 0);
+      const catalog = createCatalogStore(fresh);
+      assert.equal(await catalog.catalogIsCurrent(FULL), false);
+      assert.equal((await catalog.syncCatalog(CATALOG, FULL)).added, CATALOG_COUNT);
+      assert.equal(await catalog.catalogIsCurrent(FULL), true);
+    },
+  },
+  {
+    name: "catalog (IndexedDB): two connections (two tabs) sync at once: every entry stored once, the second adds nothing",
+    async run(ctx) {
+      const one = await seeded(ctx);
+      const two = ctx.createAdapter();
+      await createStore(two).open();
+      const results = await Promise.all([createCatalogStore(one).syncCatalog(CATALOG, FULL), createCatalogStore(two).syncCatalog(CATALOG, FULL)]);
+      assert.deepEqual(results.map((r) => r.added).sort((a, b) => a - b), [0, CATALOG_COUNT]);
+      assert.equal(await catalogCount(one), CATALOG_COUNT);
+    },
+  },
+];
+
 // ---- runner ----
 
 const resultsList = document.getElementById("results");
@@ -126,12 +210,13 @@ function markFailed(item, error) {
 }
 
 async function runOne(rule) {
-  await deleteDatabase(DB_NAME); // each test starts from an empty database
+  const name = rule.ownDatabase ? throwawayName() : DB_NAME;
+  await deleteDatabase(name); // each test starts from an empty database
   const adapters = [];
   const ctx = {
     assert,
     createAdapter() {
-      const adapter = createIdbAdapter({ name: DB_NAME });
+      const adapter = createIdbAdapter({ name });
       adapters.push(adapter);
       return adapter;
     },
@@ -140,6 +225,7 @@ async function runOne(rule) {
     await rule.run(ctx);
   } finally {
     for (const adapter of adapters) adapter.close();
+    if (rule.ownDatabase) await deleteDatabase(name).catch(() => {});
   }
 }
 
@@ -160,7 +246,9 @@ async function runAll() {
 
   const rules = [
     ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...browserOnlyRules, ...upgradeRules, ...uiRules,
+    ...[...catalogRules, ...catalogBrowserRules].map((rule) => ({ ...rule, ownDatabase: true })),
   ];
+  notes.length = 0;
   const lines = [];
   let failed = 0;
   for (const rule of rules) {
@@ -186,7 +274,7 @@ async function runAll() {
   summary.className = failed === 0 ? "pass" : "fail";
   summary.textContent = `${verdict}: ${passed} of ${rules.length} tests passed`;
   document.title = `${verdict} (${passed}/${rules.length}) Apogee storage tests`;
-  report.textContent = [`${verdict}: ${passed} of ${rules.length}`, `User agent: ${navigator.userAgent}`, "", ...lines].join("\n");
+  report.textContent = [`${verdict}: ${passed} of ${rules.length}`, `User agent: ${navigator.userAgent}`, "", ...lines, "", ...notes.map((note) => `NOTE ${note}`)].join("\n");
   rerun.disabled = false;
 }
 

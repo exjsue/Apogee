@@ -229,6 +229,8 @@ test("emit: an entry with no primary muscle stops it before anything is written,
 
 // Only the small seed-grouping.js is part of the app (its seed code uses it); the big catalog.js is not, yet.
 const MAY_IMPORT_SEED_GROUPING = ["src/domain/seed.js", "src/storage/migrations.js"]; // migrations.js comes with schema version 3
+// The one file allowed to refer to catalog.js and catalog-info.js (an exact path, not a pattern).
+const CATALOG_SERVICE = "src/app/catalog.js";
 
 test("emit: nothing outside src/catalog imports catalog.js, only the seed code imports seed-grouping.js, and the service worker precaches only the latter", () => {
   const referring = (pattern) => {
@@ -243,8 +245,13 @@ test("emit: nothing outside src/catalog imports catalog.js, only the seed code i
     for (const file of ["index.html", "sw.js"]) if (pattern.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) found.push(file);
     return found.sort();
   };
-  assert.deepEqual(referring(/catalog\/catalog(\.js)?["']/), []); // catalog.js: nothing
-  assert.deepEqual(referring(/catalog-info/), []); // catalog-info.js: nothing either, until the wiring step
+  // catalog.js and catalog-info.js: referred to by exactly one file, the library service, which the app does not
+  // load yet. Any other file under src/ that refers to them fails here.
+  assert.deepEqual(referring(/catalog\/catalog(\.js)?["']/), [CATALOG_SERVICE]);
+  assert.deepEqual(referring(/catalog-info/), [CATALOG_SERVICE]);
+  // Nothing reachable from main.js imports the service yet. Commit 6 (wiring the library into main.js) flips
+  // this on purpose, together with the precache checks below.
+  assert.ok(!findPrecacheFiles().includes(CATALOG_SERVICE), `${CATALOG_SERVICE} is reachable from main.js`);
   const groupingUsers = referring(/seed-grouping/);
   assert.ok(groupingUsers.length > 0 && groupingUsers.every((file) => MAY_IMPORT_SEED_GROUPING.includes(file)), `seed-grouping.js is used by: ${groupingUsers.join(", ")}`);
   assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), ["src/catalog/seed-grouping.js"]);
