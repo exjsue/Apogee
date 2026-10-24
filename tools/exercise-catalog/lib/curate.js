@@ -199,6 +199,7 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
     upstreamSecondary: c.source.secondaryMuscles,
     reason: c.exclusionNote,
   }));
+  const pairedEntries = curated.filter((c) => seedOwned.has(c.entry.id)).map((c) => c.entry);
   const excludedForSeeds = curated.filter((c) => seedOwned.has(c.entry.id)).map((c) => ({ upstreamId: c.entry.id, seedId: seedOwned.get(c.entry.id) }));
   const kept = curated.filter((c) => !c.exclude && !seedOwned.has(c.entry.id));
 
@@ -252,6 +253,7 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
     excludedByOverride,
     excludedDetails,
     excludedForSeeds,
+    pairedEntries, // the upstream entries left out because a seed stands for them (their grouping fields go to the seeds)
     provenance: kept.map((c) => ({ id: c.entry.id, how: c.how, duplicatesRemoved: c.duplicatesRemoved, category: c.source.category ?? null })),
   };
 }

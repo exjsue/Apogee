@@ -75,6 +75,14 @@
   - Review the null base-movement list (59 entries, the review files marked null-base-movement) and the multi-family review list (72 entries, "Other families that also matched"); add families in small passes, one rule and its tests at a time.
   - Audit families.md and outliers.md before wiring the catalog into the app.
   - Decide whether Reverse Triceps Bench Press keeps reverse-grip (its name has no grip word; it is the one approved row that does) and whether the plain reverse curls (Reverse Barbell Curl, Reverse Cable Curl, Reverse Plate Curls, Standing Dumbbell Reverse Curl) should get reverse-grip back by a named override.
+  - Wiring the catalog into the app goes in small steps. src/catalog/ is generated and committed, but the app does not import it yet.
+  - Schema v3 plan needs exact diffs and approval before code: new exercise fields (baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired), neck and abductors and five equipment ids in the vocabulary, the upgrade step, and the export and import field lists.
+  - syncCatalog (insert the catalog as builtin records) needs its own explicit approval, after schema v3.
+  - The catalog refresh path (new catalog version, rewrite of catalog-owned fields only, retired ids) needs its own explicit approval, after syncCatalog.
+  - Seeds: the 15 paired seeds keep their name and muscles and gain grouping fields from src/catalog/seed-grouping.js; seed-lat-pulldown is set by hand (pulldown, cable). Update seed.js in the schema step.
+  - Retired entries are hidden from the picker and search and still resolve in history; ids are never deleted (tools/exercise-catalog/retired.json lists the retired ones).
+  - Beta testers: ask them to export before the schema upgrade (no forced prompt).
+  - Export stays self-contained and includes the builtin records (about 290 KB more per export): measure a real export on an iPhone after the schema step.
 - [ ] More animations across the app.
 - [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.

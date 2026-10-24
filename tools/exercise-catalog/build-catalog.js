@@ -1,11 +1,13 @@
 // Builds the exercise catalog from a pinned local copy of free-exercise-db's dist/exercises.json.
 //
-//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>] [--additions <file>] [--pairs <file>]
-// (--pin, --overrides, --additions and --pairs exist for the tests, which run on a fixture.)
+//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--emit src/catalog]
+//       [--pin <file>] [--overrides <file>] [--additions <file>] [--pairs <file>] [--retired <file>]
+// (--pin, --overrides, --additions, --pairs and --retired exist for the tests, which run on a fixture.)
 //
 // It makes no network call: the input is a file someone fetched earlier, and it must match
 // input-pin.json byte for byte (its SHA-256), so it can never run on anything else. Every output goes
-// to --out, which must be OUTSIDE the repository. See README.md.
+// to --out, which must be OUTSIDE the repository, with one exception: --emit writes the generated
+// catalog module, and only into src/catalog/ (any other folder is refused). See README.md.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +18,7 @@ import { curate, entriesWithoutPrimary, stringify } from "./lib/curate.js";
 import { renderReviewBatches, renderAudit, renderExcluded, renderFamilies, renderOutliers, summarize, renderSummary } from "./lib/review.js";
 import { candidatePairs, renderSeedPairs } from "./lib/seed-pairs.js";
 import { buildAdditions, formatProblems, formatWarnings } from "./lib/additions.js";
+import { buildEmission, readPreviousCatalog } from "./lib/emit.js";
 import { SEED_EXERCISES } from "../../src/domain/seed.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +29,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--strict") args.strict = true;
-    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides" || arg === "--additions" || arg === "--pairs") {
+    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides" || arg === "--additions" || arg === "--pairs" || arg === "--emit" || arg === "--retired") {
       args[arg.slice(2)] = argv[i + 1];
       i += 1;
     } else throw new Error(`unknown argument: ${arg}`);
@@ -43,9 +46,15 @@ function insideRepo(folder) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-export function run(argv) {
+// options (for the tests only; the command line cannot set them):
+//   emitFolder  the one folder --emit may write; the default is src/catalog in this repository
+//   emitSeeds   the seed records every one of which must be grouped; the default is the app's seeds
+export function run(argv, { emitFolder = path.join(repoRoot, "src", "catalog"), emitSeeds = SEED_EXERCISES } = {}) {
   const args = parseArgs(argv);
   if (insideRepo(args.out)) throw new Error(`--out must be outside the repository (got ${args.out})`);
+  if (args.emit !== undefined && path.resolve(args.emit) !== path.resolve(emitFolder)) {
+    throw new Error(`--emit writes only into src/catalog/ and refuses any other folder (got ${args.emit})`);
+  }
 
   const pin = readJson(args.pin ?? path.join(here, "input-pin.json"));
   const bytes = fs.readFileSync(args.input);
@@ -84,6 +93,24 @@ export function run(argv) {
   }
   const everyEntry = [...result.entries, ...added.entries];
 
+  // The generated module is worked out now, so a problem (a missing primary muscle, a value outside the lists, an
+  // id that vanished) stops the build before anything is written; the files are written at the very end.
+  let emission = null;
+  if (args.emit !== undefined) {
+    const previousFile = path.join(emitFolder, "catalog.js");
+    emission = buildEmission({
+      entries: everyEntry,
+      pairedEntries: result.pairedEntries,
+      pairs: confirmedPairs,
+      manual: readJson(path.join(here, "seed-grouping-manual.json")),
+      seeds: emitSeeds,
+      vocabulary,
+      pin,
+      previous: fs.existsSync(previousFile) ? readPreviousCatalog(fs.readFileSync(previousFile, "utf8")) : null,
+      retired: readJson(args.retired ?? path.join(here, "retired.json")),
+    });
+  }
+
   const summary = summarize({ upstreamCount: upstream.length, result, overrideCount: Object.keys(overrides).length, strict: args.strict, additionsCount: added.entries.length });
   const files = [
     ["catalog.json", stringify({
@@ -111,13 +138,18 @@ export function run(argv) {
   if (args.strict && noPrimary.length > 0) {
     throw new Error(`--strict: ${noPrimary.length} entries have no primary muscle (see the review list); place them in overrides.json first`);
   }
-  return { summary, out: args.out };
+  if (emission !== null) {
+    fs.mkdirSync(emitFolder, { recursive: true });
+    for (const { name, text } of emission.files) fs.writeFileSync(path.join(emitFolder, name), text);
+  }
+  return { summary, out: args.out, emitted: emission === null ? null : emission.summary };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   try {
-    const { summary, out } = run(process.argv.slice(2));
+    const { summary, out, emitted } = run(process.argv.slice(2));
     process.stdout.write(`${renderSummary(summary)}\nWrote the outputs to ${out}\n`);
+    if (emitted !== null) process.stdout.write(`Wrote src/catalog/: ${emitted.entries} catalog entries, ${emitted.seedGrouping} seed groupings${emitted.retiredKept.length > 0 ? `, ${emitted.retiredKept.length} kept as retired` : ""}\n`);
   } catch (error) {
     process.stderr.write(`build-catalog failed: ${error.message}\n`);
     process.exitCode = 1;

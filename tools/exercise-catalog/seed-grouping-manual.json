@@ -1,0 +1,8 @@
+{
+  "seed-lat-pulldown": {
+    "baseMovementId": "pulldown",
+    "equipment": "cable",
+    "variations": [],
+    "note": "The seed names no grip and upstream has no plain lat pulldown, so it stays unpaired (DECISIONS.md, 2026-10-23). Its grouping is set by hand: the pulldown family, on cable, with no variation."
+  }
+}

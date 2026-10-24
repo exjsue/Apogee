@@ -75,3 +75,23 @@ strongman events and the names in `STAYS_NULL` (owner decisions). Variation tags
 (`lying`, `standing`, `target-<muscle>` for stretch and foam-roll, the cardio kind for cardio) are added to family
 entries only. `vocab.json` lists `keyClashWarningFamilies`: for those families a shared key is not a reason to review,
 and in additions.txt it is a warning (additions-warnings.txt) and not an error.
+
+## The generated module for the app (src/catalog/)
+
+`--emit src/catalog` writes the one folder inside the repo that the pipeline may write (every other output goes to
+`--out`, outside the repo; any other `--emit` folder is refused). It writes three files:
+
+- `catalog.js`: `CATALOG_VERSION`, `MUSCLE_IDS`, `EQUIPMENT_IDS` and `CATALOG`, one line per entry with only the fields
+  the app will store (id, name, muscles, equipment tags, equipment, base movement, variations, origin, catalogVersion,
+  retired). Sorted by id, sorted keys, LF, no timestamps.
+- `seed-grouping.js`: `SEED_GROUPING`, the grouping fields (base movement, equipment, variations) of each of the 16 seeds:
+  from the paired upstream entry (which is left out of `CATALOG`), or set by hand in `seed-grouping-manual.json`.
+- `NOTICE.md`: the Unlicense text, the upstream commit, and what the statement covers.
+
+The files are committed on purpose. The app does not import them yet. Regenerate with the pinned input and commit the
+result; a test (needs `EXERCISE_CATALOG_INPUT`) fails if the committed files differ from a fresh run.
+
+Ids are permanent. If `src/catalog/catalog.js` already exists, an id that was in it and is not in the new output
+(dropped, left out by an override, or newly paired with a seed) stops the emit. List it in `retired.json` (id -> reason)
+to keep it, with its previous record, marked `retired: true`. The emit also stops if an entry has no primary muscle or a
+value is outside the lists.
