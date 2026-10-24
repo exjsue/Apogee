@@ -61,15 +61,17 @@ export async function seedFull(store) {
   );
 }
 
-// A canonical export file built by hand from canonical records.
+// A canonical export file built by hand from canonical records. A file of schema version 4 or later has a
+// templates section; an older one has none.
 export function fileOf(parts = {}, overrides = {}) {
-  const { exercises = [], workouts = [], entries = [], sets = [] } = parts;
+  const { exercises = [], workouts = [], entries = [], sets = [], templates = [] } = parts;
+  const schemaVersion = overrides.schemaVersion ?? SCHEMA_VERSION;
   return JSON.stringify({
     app: "apogee-export",
     exportFormat: 1,
     schemaVersion: SCHEMA_VERSION,
     exportedAt: NOW,
-    data: { exercises, workouts, entries, sets },
+    data: { exercises, workouts, entries, sets, ...(schemaVersion >= 4 ? { templates } : {}) },
     ...overrides,
   });
 }
@@ -138,7 +140,7 @@ rule("export: the document has the specified shape", async (ctx) => {
   assert.equal(doc.exportFormat, 1);
   assert.equal(doc.schemaVersion, SCHEMA_VERSION);
   assert.equal(doc.exportedAt, NOW);
-  assert.deepEqual(Object.keys(doc.data), DATA_STORES);
+  assert.deepEqual(Object.keys(doc.data), [...DATA_STORES, "templates"]);
   assert.deepEqual(
     [doc.data.exercises.length, doc.data.workouts.length, doc.data.entries.length, doc.data.sets.length],
     [2, 2, 3, 8],
@@ -173,8 +175,8 @@ rule("export: an empty database exports a valid, importable file", async (ctx) =
   const { assert } = ctx;
   const { backup } = await openBackup(ctx);
   const text = await backup.exportToText({ now: NOW });
-  assert.deepEqual(inspectBackup(text).counts, { exercises: 0, workouts: 0, entries: 0, sets: 0 });
-  assert.deepEqual(await backup.importFromText(text, { confirmReplace: true }), { exercises: 0, workouts: 0, entries: 0, sets: 0 });
+  assert.deepEqual(inspectBackup(text).counts, { exercises: 0, workouts: 0, entries: 0, sets: 0, templates: 0 });
+  assert.deepEqual(await backup.importFromText(text, { confirmReplace: true }), { exercises: 0, workouts: 0, entries: 0, sets: 0, templates: 0 });
 });
 
 rule("export: generating an export writes nothing: it is not a backup until confirmed", async (ctx) => {
@@ -360,7 +362,7 @@ rule("round trip: export, wipe, import, export again gives the same file", async
   await wipe(adapter);
   assert.deepEqual(await rawCounts(adapter), EMPTY);
   const counts = await backup.importFromText(first, { confirmReplace: true });
-  assert.deepEqual(counts, { exercises: 2, workouts: 2, entries: 3, sets: 8 });
+  assert.deepEqual(counts, { exercises: 2, workouts: 2, entries: 3, sets: 8, templates: 0 });
   assert.equal(await backup.exportToText({ now: NOW }), first);
 });
 
@@ -386,9 +388,9 @@ rule("import: ids and timestamps survive a round trip unchanged", async (ctx) =>
 rule("currentCounts reports how many records of each type are stored", async (ctx) => {
   const { assert } = ctx;
   const { store, backup } = await openBackup(ctx);
-  assert.deepEqual(await backup.currentCounts(), { exercises: 0, workouts: 0, entries: 0, sets: 0 });
+  assert.deepEqual(await backup.currentCounts(), { exercises: 0, workouts: 0, entries: 0, sets: 0, templates: 0 });
   await seedFull(store);
-  assert.deepEqual(await backup.currentCounts(), { exercises: 2, workouts: 2, entries: 3, sets: 8 });
+  assert.deepEqual(await backup.currentCounts(), { exercises: 2, workouts: 2, entries: 3, sets: 8, templates: 0 });
 });
 
 rule("import: replaces a non-empty database, nothing is merged", async (ctx) => {
@@ -397,7 +399,7 @@ rule("import: replaces a non-empty database, nothing is merged", async (ctx) => 
   await seedFull(store);
   const incoming = incomingFile();
   const counts = await backup.importFromText(incoming, { confirmReplace: true });
-  assert.deepEqual(counts, { exercises: 1, workouts: 1, entries: 1, sets: 2 });
+  assert.deepEqual(counts, { exercises: 1, workouts: 1, entries: 1, sets: 2, templates: 0 });
   assert.deepEqual(parse(await snapshot(backup)).data, parse(incoming).data);
   assert.equal(await store.getWorkout("w1"), null);
   assert.equal(await store.getExercise(EXERCISE.id), null);
@@ -408,7 +410,7 @@ rule("import: empty data sections are valid and replace everything with nothing"
   const { adapter, store, backup } = await openBackup(ctx);
   await seedFull(store);
   const empty = fileOf();
-  assert.deepEqual(inspectBackup(empty).counts, { exercises: 0, workouts: 0, entries: 0, sets: 0 });
+  assert.deepEqual(inspectBackup(empty).counts, { exercises: 0, workouts: 0, entries: 0, sets: 0, templates: 0 });
   await backup.importFromText(empty, { confirmReplace: true });
   assert.deepEqual(await rawCounts(adapter), EMPTY);
   assert.deepEqual(await store.listWorkouts(), []);
@@ -417,7 +419,7 @@ rule("import: empty data sections are valid and replace everything with nothing"
 rule("import: inspectBackup reports what a file holds without reading any database", async ({ assert }) => {
   const summary = inspectBackup(incomingFile());
   assert.deepEqual(summary, {
-    exportedAt: NOW, schemaVersion: SCHEMA_VERSION, counts: { exercises: 1, workouts: 1, entries: 1, sets: 2 },
+    exportedAt: NOW, schemaVersion: SCHEMA_VERSION, counts: { exercises: 1, workouts: 1, entries: 1, sets: 2, templates: 0 },
   });
 });
 
@@ -608,7 +610,7 @@ rule("import: rejects a set with absurd reps or weight, naming the limit and kee
     d.data.sets[0].weightValue = 2500;
     d.data.sets[0].weightUnit = "kg";
   });
-  assert.deepEqual(inspectBackup(onLimits).counts, { exercises: 1, workouts: 1, entries: 1, sets: 2 });
+  assert.deepEqual(inspectBackup(onLimits).counts, { exercises: 1, workouts: 1, entries: 1, sets: 2, templates: 0 });
   await env.backup.importFromText(onLimits, { confirmReplace: true });
   assert.equal((await env.store.getSet("b1-e0-s0")).reps, 1000);
 });
@@ -718,7 +720,7 @@ rule("import: ids named like Object.prototype members are ordinary ids and survi
     entries: [createWorkoutEntry({ id: "toString", workoutId: "constructor", exerciseId: "__proto__", order: 0 })],
     sets: [createWorkSet({ id: "hasOwnProperty", entryId: "toString", order: 0, reps: 1, weightValue: 0, weightUnit: "kg" })],
   });
-  assert.deepEqual(await backup.importFromText(file, { confirmReplace: true }), { exercises: 1, workouts: 1, entries: 1, sets: 1 });
+  assert.deepEqual(await backup.importFromText(file, { confirmReplace: true }), { exercises: 1, workouts: 1, entries: 1, sets: 1, templates: 0 });
   const exported = await snapshot(backup);
   assert.deepEqual(parse(exported).data, parse(file).data);
   await wipe(adapter);
@@ -744,7 +746,7 @@ rule("import: enforces the size limit in bytes, a parameter with a 50 MiB defaul
   assert.equal(bytes, characters + 200);
   await expectRejected(env, wide, /too large/, { maxBytes: characters + 100 });
   await expectRejected(env, wide, /too large/, { maxBytes: bytes - 1 });
-  assert.deepEqual(inspectBackup(wide, { maxBytes: bytes }).counts, { exercises: 1, workouts: 0, entries: 0, sets: 0 });
+  assert.deepEqual(inspectBackup(wide, { maxBytes: bytes }).counts, { exercises: 1, workouts: 0, entries: 0, sets: 0, templates: 0 });
   await env.backup.importFromText(wide, { confirmReplace: true, maxBytes: bytes });
   assert.deepEqual(await rawCounts(env.adapter), EMPTY);
 });
@@ -793,7 +795,7 @@ rule("import: an old schema version 1 file (exercises without defaultRestSeconds
   const { assert } = ctx;
   const { store, backup } = await openBackup(ctx);
   const counts = await backup.importFromText(v1File(), { confirmReplace: true });
-  assert.deepEqual(counts, { exercises: 2, workouts: 1, entries: 1, sets: 2 });
+  assert.deepEqual(counts, { exercises: 2, workouts: 1, entries: 1, sets: 2, templates: 0 });
   const exercises = await store.listExercises();
   assert.deepEqual(exercises.map((e) => [e.id, e.defaultRestSeconds]), [["ex-old2", null], ["ex-old", null]]); // listed by name
   assert.equal((await store.getSet("old1-e0-s0")).restSeconds, null); // history is not rewritten

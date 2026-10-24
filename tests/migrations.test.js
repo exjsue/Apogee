@@ -6,6 +6,8 @@ import { failAfter } from "./store-rules.js";
 
 // The step-2 tests run step 2 alone, as they did before step 3 existed.
 const STEPS_TO_2 = STEPS.filter((s) => s.to === 2);
+// The chaining test adds its own step 4 to steps 2 and 3, as it did before the real step 4 existed.
+const STEPS_TO_3 = STEPS.filter((s) => s.to <= 3);
 
 // An exercise as saved by schema version 1: no defaultRestSeconds.
 const v1 = (id, extra = {}) => ({
@@ -97,7 +99,7 @@ test("migration: steps run in order, each one writes its own version, and later 
   const adapter = await populated();
   const order = [];
   const steps = [
-    ...STEPS,
+    ...STEPS_TO_3,
     { to: 4, run: async (tx) => { order.push("4"); await tx.put("meta", { key: "four", value: true }); } },
   ];
   assert.deepEqual(await run(adapter, 1, { steps }), [2, 3, 4]);

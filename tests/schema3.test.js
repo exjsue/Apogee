@@ -152,7 +152,9 @@ const snapshot = (adapter) => adapter.transaction(STORES, "readonly", async (tx)
   for (const name of STORES) out[name] = (await tx.getAll(name)).sort((x, y) => String(x.id ?? x.key).localeCompare(String(y.id ?? y.key)));
   return out;
 });
-const run = (adapter, oldVersion, extra = {}) => adapter.transaction(STORES, "readwrite", (tx) => upgradeData({ oldVersion, tx, ...extra }));
+// The schema 3 tests run steps 2 and 3 only, as they did before step 4 existed (tests/templates.test.js covers 4).
+const STEPS_TO_3 = STEPS.filter((s) => s.to <= 3);
+const run = (adapter, oldVersion, extra = {}) => adapter.transaction(STORES, "readwrite", (tx) => upgradeData({ oldVersion, tx, steps: STEPS_TO_3, ...extra }));
 
 test("schema 3 upgrade: from version 2, each of the 16 seeds gets exactly its grouping, customs get origin custom, and nothing else on any record changes", async () => {
   const { adapter, seeds, customs } = await populatedV2();
@@ -228,7 +230,7 @@ test("schema 3 upgrade: from version 1, step 2 and step 3 run in one go, giving 
     SQUAT_V3,
   ]);
   assert.equal(after.meta.find((m) => m.key === "schemaVersion").value, 3);
-  assert.deepEqual(STEPS.map((s) => s.to), [2, 3]);
+  assert.deepEqual(STEPS.map((s) => s.to), [2, 3, 4]);
 });
 
 test("schema 3 upgrade: the step uses the grouping it is given, and only seeds (not customs) are grouped", async () => {
@@ -295,7 +297,7 @@ test("schema 3 import: a version 1 file still imports, and its seed is grouped t
   assert.deepEqual(await store.getExercise("seed-barbell-squat"), SQUAT_V3);
 });
 
-test("schema 3 export: a version 3 file written by this app imports and exports again byte for byte", async () => {
+test("schema 3 export: a file written by this app (now version 4) imports and exports again byte for byte", async () => {
   const { adapter, store, backup } = await openBackupStore();
   await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
   await store.saveExercise({ id: "c-1", name: "Mine", primaryMuscles: ["neck"], isCustom: true, defaultRestSeconds: 30 });
@@ -306,7 +308,7 @@ test("schema 3 export: a version 3 file written by this app imports and exports 
   );
   const first = await backup.exportToText({ now: NOW });
   const doc = JSON.parse(first);
-  assert.equal(doc.schemaVersion, 3);
+  assert.equal(doc.schemaVersion, 4);
   assert.deepEqual(Object.keys(doc.data.exercises[0]), [
     "baseMovementId", "catalogVersion", "defaultRestSeconds", "equipment", "equipmentTags", "id", "isCustom", "name", "notes", "origin",
     "primaryMuscles", "retired", "secondaryMuscles", "upstreamId", "variations",

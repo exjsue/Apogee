@@ -1,8 +1,9 @@
-// Domain data model, schema version 3 (version 2 added defaultRestSeconds to exercises; version 3 added
-// baseMovementId, equipment, variations, origin, upstreamId, catalogVersion and retired).
+// Domain data model, schema version 4 (version 2 added defaultRestSeconds to exercises; version 3 added
+// baseMovementId, equipment, variations, origin, upstreamId, catalogVersion and retired; version 4 added
+// templates, a record type of their own).
 // Pure JavaScript: no DOM, no storage, no network.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const WEIGHT_UNITS = ["kg", "lb"];
 

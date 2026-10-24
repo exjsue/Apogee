@@ -62,11 +62,11 @@ Keep a recent export. Browsers can remove a site's data on their own, and an exp
 
 ## An older version meets newer data
 
-The storage format only moves forward. Schema version 3 (exercise grouping fields) upgrades the database the first time the new version opens it, and an older version cannot open it again. If an older version of the app is ever running against the upgraded database (for example a copy that has not updated yet, or the site rolled back), the page shows only this:
+The storage format only moves forward. Schema version 3 (exercise grouping fields) upgrades the database the first time the new version opens it, and an older version cannot open it again. Schema version 4 (templates) works the same way: a version 3 build that meets schema 4 data shows the message below with "(schema 3)" in place of "(schema 2)". If an older version of the app is ever running against the upgraded database (for example a copy that has not updated yet, or the site rolled back), the page shows only this:
 
 > Apogee could not open its database: Database "apogee" was saved by a newer version of Apogee than this code (schema 2). The data was not changed. Update the app.
 
-Nothing is lost: the data is left exactly as it was. There is no Update available banner on that screen, because the app did not start. To get the newer version: close every tab and installed window of the app (on an iPhone, swipe it away in the app switcher) and open it again while online, as in step 2 above. If the site itself was rolled back, it has to be published again at the newer version; an older version can never open schema 3 data.
+Nothing is lost: the data is left exactly as it was. There is no Update available banner on that screen, because the app did not start. To get the newer version: close every tab and installed window of the app (on an iPhone, swipe it away in the app switcher) and open it again while online, as in step 2 above. If the site itself was rolled back, it has to be published again at the newer version; an older version can never open data of a newer schema.
 
 An export made by the newer version cannot be imported by an older one either (it says the file was exported by a newer version). An export from the older version can always be imported by the newer one.
 

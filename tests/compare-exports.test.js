@@ -339,3 +339,14 @@ test("compare-exports: run as a program, the flag works and the repository check
     assert.match(refused.stderr, /inside the repository folder/);
   });
 });
+
+test("compare-exports: a templates section (schema 4) is counted like any other section, and does not change the history verdict", () => {
+  const before = file(3, baseData());
+  const after = file(4, { ...baseData(), templates: [{ id: "t1", name: SECRET_NAME, exercises: [{ exerciseId: "seed-a", setCount: 3 }] }] });
+  const result = compareExports(before, after);
+  assert.deepEqual(result.counts.templates, { before: 0, after: 1 });
+  assert.equal(result.ok, true);
+  const report = formatReport(result);
+  assert.match(report, /^  templates: 0 \/ 1  \(different\)$/m);
+  assert.ok(!report.includes(SECRET_NAME));
+});

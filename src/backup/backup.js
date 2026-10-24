@@ -11,6 +11,7 @@ import {
   createWorkout,
   createWorkoutEntry,
   createWorkSet,
+  createTemplate,
   exerciseV3Defaults,
 } from "../domain/model.js";
 import { withSeedGrouping } from "../domain/seed.js";
@@ -33,7 +34,9 @@ export const EXPORT_FORMAT = 1;
 // same unit and the same constant. 50 MiB.
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 
-const DATA_STORES = ["exercises", "workouts", "entries", "sets"];
+const DATA_STORES = ["exercises", "workouts", "entries", "sets", "templates"];
+// The sections of a file saved before schema version 4, which had no templates.
+const DATA_STORES_V3 = DATA_STORES.filter((section) => section !== "templates");
 
 // Every field a record must have in a file. Nothing is defaulted on import:
 // a record with a missing or extra field is rejected.
@@ -47,6 +50,8 @@ export const RECORD_FIELDS = {
   sets: [
     "id", "entryId", "order", "reps", "weightValue", "weightUnit", "isWarmup", "restSeconds", "completedAt",
   ],
+  // exercises is a list of { exerciseId, setCount }, each with exactly those two fields (see sameValue).
+  templates: ["id", "name", "exercises"],
 };
 
 // The fields schema version 3 added to exercises.
@@ -72,6 +77,7 @@ const RECORD_TYPES = {
   workouts: { label: "workout", create: createWorkout },
   entries: { label: "entry", create: createWorkoutEntry },
   sets: { label: "set", create: createWorkSet },
+  templates: { label: "template", create: createTemplate },
 };
 
 const DOCUMENT_FIELDS = ["app", "exportFormat", "schemaVersion", "exportedAt", "data"];
@@ -86,9 +92,16 @@ function fail(message) {
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
+// Plain objects (the items of a template) are equal when they have exactly the same own keys with equal values,
+// so an extra or a missing key in an item of the file is caught here.
 function sameValue(a, b) {
   if (Array.isArray(a) || Array.isArray(b)) {
     return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i]));
+  }
+  if (isPlainObject(a) || isPlainObject(b)) {
+    if (!isPlainObject(a) || !isPlainObject(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((key) => hasOwn(b, key) && sameValue(a[key], b[key]));
   }
   return Object.is(a, b);
 }
@@ -177,17 +190,19 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
     fail("The file's exportedAt is not valid");
   }
   if (!isPlainObject(doc.data)) fail("The file's data section is missing");
-  rejectUnknownFields(doc.data, DATA_STORES, "data");
-  for (const section of DATA_STORES) {
+  // A file from before schema version 4 has no templates section, and must not have one; it imports with none.
+  const sections = doc.schemaVersion >= 4 ? DATA_STORES : DATA_STORES_V3;
+  rejectUnknownFields(doc.data, sections, "data");
+  for (const section of sections) {
     if (!hasOwn(doc.data, section) || !Array.isArray(doc.data[section])) {
       fail(`data.${section} must be a list`);
     }
   }
 
-  const records = {};
+  const records = { templates: [] };
   // The file is checked against the field list of the schema it says it is.
   const fieldsOf = doc.schemaVersion >= 3 ? RECORD_FIELDS : doc.schemaVersion === 2 ? RECORD_FIELDS_V2 : RECORD_FIELDS_V1;
-  for (const section of DATA_STORES) records[section] = validateSection(section, doc.data[section], fieldsOf);
+  for (const section of sections) records[section] = validateSection(section, doc.data[section], fieldsOf);
   // An older file has none of the schema 3 fields: createExercise gave them their defaults, and its seeds get
   // their grouping here, by the same function the upgrade step uses.
   if (doc.schemaVersion < 3) records.exercises = records.exercises.map((record) => withSeedGrouping(record));
@@ -206,6 +221,11 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
   for (const set of records.sets) {
     if (!entryIds.has(set.entryId)) {
       fail(`set "${set.id}": entryId refers to an entry that is not in the file`);
+    }
+  }
+  for (const template of records.templates) {
+    if (template.exercises.some(({ exerciseId }) => !exerciseIds.has(exerciseId))) {
+      fail(`template "${template.id}": exerciseId refers to an exercise that is not in the file`);
     }
   }
 
@@ -376,7 +396,8 @@ export function createBackup(adapter) {
     });
   }
 
-  // Replaces ALL existing data with the file's contents. Nothing is merged.
+  // Replaces ALL existing data with the file's contents, templates included. Nothing is merged: a file from
+  // before schema version 4 (no templates section) leaves no templates.
   // The schema version and lastExportAt in meta are left alone; neither is
   // read from the file. The session's planned sets and running timer are removed.
   // Resolves with the counts of imported records.

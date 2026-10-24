@@ -30,6 +30,7 @@ import {
   createWorkout,
   createWorkoutEntry,
   createWorkSet,
+  createTemplate,
 } from "../domain/model.js";
 import { WORKOUT_META_KEYS, SESSION_CONFLICT } from "./schema.js";
 
@@ -367,6 +368,35 @@ export function createStore(adapter) {
     });
   }
 
+  // Saves a template whole (saving one again with the same id replaces it). Every exercise it lists must
+  // exist, checked in the same transaction. Templates are not history: nothing else is read or written.
+  async function saveTemplate(input) {
+    const template = createTemplate(input);
+    await adapter.transaction(["exercises", "templates"], "readwrite", async (tx) => {
+      for (const [i, { exerciseId }] of template.exercises.entries()) {
+        await requireExists(tx, "exercises", exerciseId, `exercises[${i}].exerciseId`, "exercise");
+      }
+      await tx.put("templates", template);
+    });
+    return template;
+  }
+
+  // All templates, alphabetical by name.
+  async function listTemplates() {
+    const templates = await adapter.transaction(["templates"], "readonly", (tx) => tx.getAll("templates"));
+    return templates.sort((a, b) => a.name.localeCompare(b.name) || compareIds(a, b));
+  }
+
+  // Deletes one template. Workouts and exercises are never touched. Resolves true if it existed.
+  async function deleteTemplate(id) {
+    requireId(id);
+    return adapter.transaction(["templates"], "readwrite", async (tx) => {
+      const existed = (await tx.get("templates", id)) !== undefined;
+      await tx.delete("templates", id);
+      return existed;
+    });
+  }
+
   const readSetting = (key) => adapter.transaction(["meta"], "readonly", async (tx) => (await tx.get("meta", key))?.value);
 
   // "kg" or "lb". Defaults to "lb" until the user chooses.
@@ -456,6 +486,10 @@ export function createStore(adapter) {
     deleteSet,
     listExercises,
     seedExercises,
+    saveTemplate,
+    getTemplate: (id) => getOne("templates", id),
+    listTemplates,
+    deleteTemplate,
     getPreferredUnit,
     setPreferredUnit,
     getContinuedWorkoutId,

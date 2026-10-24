@@ -12,6 +12,7 @@ export const STORES = {
   entries: { keyPath: "id" },
   sets: { keyPath: "id" },
   meta: { keyPath: "key" },
+  templates: { keyPath: "id" }, // schema version 4
 };
 
 // Index name equals the indexed field name.

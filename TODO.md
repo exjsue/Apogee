@@ -38,6 +38,7 @@
 - [ ] Edit a logged set, and edit a finished workout (deleting one is done: History detail has Delete workout, with a confirmation)
 - [ ] Check on a real phone that the Delete workout button in History detail is hard to tap by mistake (it sits at the bottom, away from Back, and asks first; there is no undo)
 - [ ] Edit or delete a custom exercise (blocked until we decide what happens to sets that use it)
+- [ ] The stale-build message ("Apogee could not open its database: ... Update the app.", src/ui/main.js and src/storage/idb-adapter.js) does not say how to update. It should say: close the app fully (on an iPhone, swipe the Home Screen app away in the app switcher) and open it again while online; it can take two launches, because the first may only download the new version and the next one runs it.
 - [ ] Show the app version more widely if it helps support (today the first 8 characters of the cache version are in Backup, Offline only)
 - [ ] Custom domain for the app: removes the shared-origin risk and allows real response headers (frame-ancestors, nosniff) if the host supports them
 - [ ] Decide whether preferredUnit, seedVersion and the unfinished-workout choice should be part of exports (they live in meta and are not exported; a restored backup starts on lb)
@@ -57,7 +58,13 @@
 - [ ] Animation tuning: make the check circle animation slightly longer (now 160 ms; keep it under about 250 ms, opacity and transform only, reduced motion still none) and give its pop more size (now scale 0.94 to 1.05 to 1; try about 1.15). Look at it on the iPhone first
 
 ## UI / UX and Logging (added 2026-10-23)
-- [ ] Workout templates from history: save a past workout as a reusable routine. Optional, never automatic. Stores planned exercises and set counts only, not logged weights or reps.
+- [x] Workout templates, data layer (done 2026-10-24, schema 4, not yet deployed): a template is its own record (name, ordered exercises with set counts) in a templates store; templateFromWorkout makes one from a finished workout (working sets only); export, import and the upgrade from every older schema are tested. No UI yet.
+- [ ] **Task 2: templates UI** (needs a plan with diffs and approval, like the data layer):
+  - Save as template on a finished workout in History (asks for a name; refused with the model's message when empty or over 80 characters; duplicate names are allowed).
+  - A templates section in the tab, and rename the tab from "Log" to "New".
+  - Start a workout from a template: its exercises go into plan.exercises in template order, each with setCount blank unchecked rows (orders 0..setCount-1, reps and weight blank so the ghosts fill them, rest null, isWarmup false). Decide what happens when a plan or workout is already open.
+  - The import preview gets a templates row: importing any file replaces the templates, and a file older than schema 4 leaves none.
+  - src/domain/template.js enters the precache list once the UI imports it (rebuild sw-manifest.js).
 - [ ] Workout naming: allow naming a workout both during the session and after it is finished.
 - [ ] Reorder sets within an exercise mid-workout. Set labels renumber. Logged data stays intact.
   - Risk: unchecked "planned" rows live in meta and checked sets are real records. Reordering must handle both without losing or duplicating either.
@@ -81,6 +88,7 @@
   - Schema v3 is built (2026-10-23, not yet deployed): the seven exercise fields, the upgrade step 2 to 3 (seeds grouped, customs origin custom, history untouched), seeds as complete v3 records, and the export and import field lists (v1 and v2 files still import). Deploy only after the pre-deploy checklist (exports first, record counts noted, tools/compare-exports.js on the before and after exports).
   - syncCatalog (insert builtin records, verify records present): built and wired (commit 6). Retiring removed ids belongs to the refresh path below.
   - The catalog refresh path (new catalog version, rewrite of catalog-owned fields only, retired ids) needs its own explicit approval, after syncCatalog.
+    - It must never delete a catalog exercise, or change its id, while a template refers to it (schema 4). Templates hold exercise ids only: a missing id would leave the template pointing at nothing, and an export containing it would fail to import (the importer rejects a template whose exercise is not in the file). That task must include a test for this.
   - Seeds: done in schema v3. The 15 paired seeds keep their name and muscles and gained grouping fields from src/catalog/seed-grouping.js; seed-lat-pulldown is set by hand (pulldown, cable). Seeds have catalogVersion null: a later refresh must never treat null as older for a seed and never rewrite a seed's name or muscles.
   - UI: allow neck and the new equipment in the custom form and picker.
   - OFFLINE.md note: what a v2 build shows on a v3 database. Done 2026-10-23 (OFFLINE.md, "An older version meets newer data").
@@ -105,7 +113,7 @@
 - [ ] Focus the weight field when the set edit form opens (currently a second tap is needed on a phone). Try after a week of real use.
 
 ## Deferred
-- [ ] **Schema 4: workout name** (deferred 2026-10-24, not started). A workout has no name field and `notes` must not be reused (it would change that field's meaning). The task: add a `name` field to workouts (single line, whitespace collapsed, empty = no name, at most 80 characters, longer refused), a schema 4 migration that gives every stored workout the default, `createWorkout`, the export field list and import of older files (src/backup/backup.js, RECORD_FIELDS), naming during and after a workout, and tests (migration, export/import round trip, an old file imports, limits). Run it on Opus; present the plan with diffs first; the owner approves each commit (approved commit N); verify with a friend's fresh export and the four counts that tools/compare-exports.js prints for each section (exercises, workouts, entries, sets), before and after.
+- [ ] **Schema 5: workout name** (deferred 2026-10-24, not started; schema 4 went to templates). A workout has no name field and `notes` must not be reused (it would change that field's meaning). The task: add a `name` field to workouts (single line, whitespace collapsed, empty = no name, at most 80 characters, longer refused), a schema 5 migration that gives every stored workout the default, `createWorkout`, the export field list and import of older files (src/backup/backup.js, RECORD_FIELDS), naming during and after a workout, and tests (migration, export/import round trip, an old file imports, limits). Run it on Opus; present the plan with diffs first; the owner approves each commit (approved commit N); verify with a friend's fresh export and the five counts that tools/compare-exports.js prints for each section (exercises, workouts, entries, sets, templates), before and after.
 - [ ] Importers (Strong, Liftoff); each needs a mapping onto the fixed muscle and equipment lists
 - [ ] Muscle diagram, strength ranking, streaks
 - [ ] iPhone native app / Android

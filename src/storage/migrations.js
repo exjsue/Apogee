@@ -52,7 +52,15 @@ export function stepTo3(grouping) {
   };
 }
 
-export const STEPS = [stepTo2, stepTo3()];
+// Schema 4: templates, a new object store. The adapter creates it, empty, in this same upgrade transaction
+// (createSchema in idb-adapter.js creates every store in schema.js that is missing). No record is read or
+// written: the step exists so the stored schema version becomes 4.
+const stepTo4 = {
+  to: 4,
+  async run() {},
+};
+
+export const STEPS = [stepTo2, stepTo3(), stepTo4];
 
 // Brings data saved at `oldVersion` up to the newest step. A new database
 // (oldVersion 0) has nothing to upgrade: store.open() writes its schema version.
