@@ -12,6 +12,8 @@ import { installPullToRefresh } from "../../src/ui/pull-refresh.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
+import { createCatalogService, startAfterFirstPaint } from "../../src/app/catalog.js";
+import { createCatalogStore } from "../../src/storage/catalog-store.js";
 import { EXERCISE, makeDetails, rawCounts } from "../store-rules.js";
 import { incomingFile } from "../backup-rules.js";
 
@@ -51,7 +53,8 @@ async function waitFor(check, what, timeoutMs = 4000) {
 
 const waitForText = (root, text) => waitFor(() => root.textContent.includes(text), `the text "${text}"`);
 
-// Mounts the app against a fresh seeded database and cleans up afterwards.
+// Mounts the app against a fresh seeded database and cleans up afterwards. `catalog` is a library service,
+// or a function that makes one from the adapter.
 async function withApp(ctx, body, { prepare, offline, catalog } = {}) {
   const adapter = ctx.createAdapter();
   const store = createStore(adapter);
@@ -75,7 +78,7 @@ async function withApp(ctx, body, { prepare, offline, catalog } = {}) {
       }),
     },
     ...(offline ? { offline } : {}),
-    ...(catalog ? { catalog } : {}),
+    ...(catalog ? { catalog: typeof catalog === "function" ? catalog(adapter) : catalog } : {}),
   };
   const root = document.createElement("div");
   document.body.append(root); // forms only submit when they are in the document
@@ -1151,4 +1154,64 @@ rule("ui: the custom exercise form is unchanged: it still offers the 18 muscles 
     ctx.assert.equal(root.querySelector('.custom-form input[value="neck"]'), null);
     ctx.assert.equal(root.querySelector('.custom-form input[value="foam_roll"]'), null);
   });
+});
+
+// The library wired as src/ui/main.js wires it: mounted first, then onChange redraws and startAfterFirstPaint.
+rule("ui: the library starts only after the first frame; while it loads the app is usable and the note shows; when stored the picker lists 846", async (ctx) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const seen = { checkAt: null, mountedAt: null, frameAt: null };
+  const make = (adapter) => {
+    const catalogStore = createCatalogStore(adapter);
+    return createCatalogService({
+      catalogStore: {
+        catalogIsCurrent: (info) => {
+          if (seen.checkAt === null) seen.checkAt = performance.now();
+          return catalogStore.catalogIsCurrent(info);
+        },
+        syncCatalog: (entries, info) => catalogStore.syncCatalog(entries, info),
+      },
+      load: async () => {
+        await gate;
+        return import("../../src/catalog/catalog.js");
+      },
+    });
+  };
+  await withApp(ctx, async ({ root, services, app }) => {
+    seen.mountedAt = performance.now();
+    ctx.assert.ok(region(root, "catalog-status") === null && action(root, "choose-exercise") !== null); // the Log tab is drawn
+    services.catalog.onChange(() => app.renderInBackground());
+    requestAnimationFrame(() => { seen.frameAt = performance.now(); }); // queued before the library's own frame
+    startAfterFirstPaint(() => services.catalog.ensureCurrent());
+    ctx.assert.equal(seen.checkAt, null); // not started in the same task as the mount
+    await waitFor(() => seen.checkAt !== null, "the library check");
+    ctx.assert.ok(seen.frameAt !== null && seen.checkAt >= seen.frameAt); // only after a frame
+    await waitFor(() => services.catalog.getStatus() === "syncing", "the syncing status");
+    await openPicker(root);
+    ctx.assert.equal(region(root, "catalog-status").textContent, "Loading the exercise library…");
+    ctx.assert.equal(pickRows(root).length, 16); // the seeds, while the library loads
+    click(pickRows(root).find((b) => b.dataset.exerciseId === BENCH)); // logging still works meanwhile
+    await waitFor(() => plannedRows(root).length === 1, "the bench row");
+    release();
+    await waitFor(() => services.catalog.getStatus() === "ready", "the library");
+    await openPicker(root);
+    await waitFor(() => moreText(root) !== null && moreText(root).startsWith("Showing 50 of 846."), "846 in the picker");
+    ctx.assert.equal(region(root, "catalog-status"), null); // nothing shown when ready
+  }, { catalog: make });
+  ctx.assert.ok(seen.checkAt > seen.mountedAt);
+});
+
+rule("ui: a library that cannot load shows the plain note, and the app goes on with the seeds", async (ctx) => {
+  const make = (adapter) => createCatalogService({ catalogStore: createCatalogStore(adapter), load: async () => { throw new Error("offline"); } });
+  await withApp(ctx, async ({ root, services, app }) => {
+    services.catalog.onChange(() => app.renderInBackground());
+    const outcome = await services.catalog.ensureCurrent();
+    ctx.assert.equal(outcome.status, "failed");
+    await openPicker(root);
+    await waitFor(() => region(root, "catalog-status"), "the note");
+    ctx.assert.equal(region(root, "catalog-status").textContent, "The full exercise library could not be loaded. Apogee will try again the next time it opens.");
+    ctx.assert.equal(pickRows(root).length, 16);
+    click(pickRows(root).find((b) => b.dataset.exerciseId === BENCH));
+    await waitFor(() => plannedRows(root).length === 1, "the bench row");
+  }, { catalog: make });
 });

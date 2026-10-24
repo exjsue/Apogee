@@ -365,7 +365,7 @@ function picker(ctx) {
   search.addEventListener("input", narrow);
   refreshList();
 
-  // Only if the app has a library service (it does not yet): a note while the library loads or if it could not load.
+  // Only if the app has a library service (src/ui/main.js passes one): a note while the library loads or if it could not load.
   const libraryStatus = ctx.services.catalog ? ctx.services.catalog.getStatus() : "ready";
   const libraryNote = libraryStatus === "failed"
     ? h("p", { class: "muted", "data-region": "catalog-status" }, "The full exercise library could not be loaded. Apogee will try again the next time it opens.")

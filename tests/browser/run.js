@@ -11,6 +11,9 @@ import { sessionRules } from "../session-rules.js";
 import { upgradeRules } from "./upgrade-rules.js";
 import { uiRules } from "./ui-smoke.js";
 import { catalogRules } from "../catalog-rules.js";
+import { catalogWiringRules } from "../catalog-wiring-rules.js";
+import { createLogger } from "../../src/app/logger.js";
+import { prepareCatalog } from "../../src/domain/builtin.js";
 import { createBackup } from "../../src/backup/backup.js";
 import { createStore } from "../../src/storage/store.js";
 import { createCatalogStore } from "../../src/storage/catalog-store.js";
@@ -184,6 +187,64 @@ const catalogBrowserRules = [
       assert.equal(await catalogCount(one), CATALOG_COUNT);
     },
   },
+  {
+    name: "catalog (IndexedDB): an addSet and a findExercises made while the sync transaction is open wait for its commit, then complete correctly",
+    async run(ctx) {
+      const adapter = await seeded(ctx);
+      const logger = createLogger(createStore(adapter));
+      // Long tasks (50 ms or more) on the main thread during the sync, where the browser reports them.
+      const longTasks = [];
+      let observer = null;
+      try {
+        observer = new PerformanceObserver((list) => longTasks.push(...list.getEntries().map((e) => e.duration)));
+        observer.observe({ type: "longtask" });
+      } catch {
+        observer = null;
+      }
+      const finished = [];
+      const called = performance.now();
+      // syncCatalog validates the whole catalog (phase 3) and opens its readwrite transaction before it returns,
+      // so both logger calls below create their transactions after it, while it is open.
+      const sync = createCatalogStore(adapter).syncCatalog(CATALOG, FULL).then((result) => {
+        finished.push("sync");
+        return { result, at: performance.now() };
+      });
+      const issued = performance.now();
+      const add = logger.addSet("seed-barbell-bench-press").then(() => {
+        finished.push("addSet");
+        return performance.now();
+      });
+      const find = logger.findExercises("").then((list) => {
+        finished.push("findExercises");
+        return { list, at: performance.now() };
+      });
+      const [synced, addAt, found] = await Promise.all([sync, add, find]);
+      if (observer !== null) observer.disconnect();
+      assert.equal(finished[0], "sync"); // both waited for the commit
+      assert.equal(synced.result.added, CATALOG_COUNT);
+      assert.equal(found.list.length, SEED_EXERCISES.length + CATALOG_COUNT); // it read the committed library
+      const session = await logger.getSession();
+      assert.deepEqual(session.blocks.map((b) => b.exerciseId), ["seed-barbell-bench-press"]);
+      assert.equal(session.blocks[0].rows.length, 1);
+      notes.push(`Sync call held the main thread (phase 3: validating ${CATALOG_COUNT} entries, then opening the transaction): ${(issued - called).toFixed(1)} ms`);
+      notes.push(`Sync transaction open until commit: ${(synced.at - issued).toFixed(1)} ms`);
+      notes.push(`addSet issued while the sync transaction was open: done after ${(addAt - issued).toFixed(1)} ms`);
+      notes.push(`findExercises issued while the sync transaction was open: done after ${(found.at - issued).toFixed(1)} ms, ${found.list.length} exercises`);
+      notes.push(observer === null ? "Long tasks: not reported by this browser" : `Long tasks during the sync: ${longTasks.length}, longest ${Math.max(0, ...longTasks).toFixed(0)} ms`);
+    },
+  },
+  {
+    name: "catalog (IndexedDB): phase 3 alone, prepareCatalog over the whole catalog, five runs",
+    async run() {
+      const times = [];
+      for (let i = 0; i < 5; i += 1) {
+        const started = performance.now();
+        assert.equal(prepareCatalog(CATALOG, FULL).length, CATALOG_COUNT);
+        times.push(performance.now() - started);
+      }
+      notes.push(`prepareCatalog (${CATALOG_COUNT} entries, main thread), five runs: ${times.map((t) => t.toFixed(1)).join(", ")} ms`);
+    },
+  },
 ];
 
 // ---- runner ----
@@ -246,7 +307,7 @@ async function runAll() {
 
   const rules = [
     ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...browserOnlyRules, ...upgradeRules, ...uiRules,
-    ...[...catalogRules, ...catalogBrowserRules].map((rule) => ({ ...rule, ownDatabase: true })),
+    ...[...catalogRules, ...catalogWiringRules, ...catalogBrowserRules].map((rule) => ({ ...rule, ownDatabase: true })),
   ];
   notes.length = 0;
   const lines = [];

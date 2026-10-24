@@ -225,14 +225,17 @@ test("emit: an entry with no primary muscle stops it before anything is written,
   assert.throws(() => buildEmission({ entries: [base], pairedEntries: [], pairs: {}, manual: {}, seeds: SEEDS, vocabulary, pin: { repo: "r", file: "f", commit: "c" } }), /neither paired nor set by hand/);
 });
 
-// ---- the app does not use it yet ----
+// ---- the app loads it only through the library service ----
 
-// Only the small seed-grouping.js is part of the app (its seed code uses it); the big catalog.js is not, yet.
+// seed-grouping.js is used by the seed code; catalog.js and catalog-info.js only by the library service, which
+// src/ui/main.js imports (commit 6).
 const MAY_IMPORT_SEED_GROUPING = ["src/domain/seed.js", "src/storage/migrations.js"]; // migrations.js comes with schema version 3
 // The one file allowed to refer to catalog.js and catalog-info.js (an exact path, not a pattern).
 const CATALOG_SERVICE = "src/app/catalog.js";
+// The one file allowed to import the service, and the exact import statement it uses.
+const CATALOG_SERVICE_IMPORT = 'import { createCatalogService, startAfterFirstPaint, resyncAfterImport } from "../app/catalog.js";';
 
-test("emit: nothing outside src/catalog imports catalog.js, only the seed code imports seed-grouping.js, and the service worker precaches only the latter", () => {
+test("emit: only the library service imports catalog.js and catalog-info.js, only main.js imports the service (exact path), only the seed code imports seed-grouping.js, and the service worker precaches all three", () => {
   const referring = (pattern) => {
     const found = [];
     const walk = (folder) => {
@@ -245,20 +248,24 @@ test("emit: nothing outside src/catalog imports catalog.js, only the seed code i
     for (const file of ["index.html", "sw.js"]) if (pattern.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) found.push(file);
     return found.sort();
   };
-  // catalog.js and catalog-info.js: referred to by exactly one file, the library service, which the app does not
-  // load yet. Any other file under src/ that refers to them fails here.
+  // catalog.js and catalog-info.js: referred to by exactly one file, the library service. Any other file under
+  // src/ that refers to them fails here.
   assert.deepEqual(referring(/catalog\/catalog(\.js)?["']/), [CATALOG_SERVICE]);
   assert.deepEqual(referring(/catalog-info/), [CATALOG_SERVICE]);
-  // Nothing reachable from main.js imports the service yet. Commit 6 (wiring the library into main.js) flips
-  // this on purpose, together with the precache checks below.
-  assert.ok(!findPrecacheFiles().includes(CATALOG_SERVICE), `${CATALOG_SERVICE} is reachable from main.js`);
+  // Commit 6 flipped this on purpose (it used to assert the service was NOT reachable from main.js): main.js
+  // imports the service with exactly this statement, and no other file imports it.
+  assert.deepEqual(referring(/app\/catalog(\.js)?["']/), ["src/ui/main.js"]);
+  const mainLines = fs.readFileSync(path.join(ROOT, "src", "ui", "main.js"), "utf8").split(/\r?\n/);
+  assert.deepEqual(mainLines.filter((line) => /["'][^"']*app\/catalog(\.js)?["']/.test(line)), [CATALOG_SERVICE_IMPORT]);
+  assert.ok(findPrecacheFiles().includes(CATALOG_SERVICE), `${CATALOG_SERVICE} is not reachable from main.js`);
   const groupingUsers = referring(/seed-grouping/);
   assert.ok(groupingUsers.length > 0 && groupingUsers.every((file) => MAY_IMPORT_SEED_GROUPING.includes(file)), `seed-grouping.js is used by: ${groupingUsers.join(", ")}`);
-  assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), ["src/catalog/seed-grouping.js"]);
+  assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), [
+    "src/app/catalog.js", "src/catalog/catalog-info.js", "src/catalog/catalog.js", "src/catalog/seed-grouping.js", "src/storage/catalog-store.js",
+  ]);
   const manifest = fs.readFileSync(path.join(ROOT, "sw-manifest.js"), "utf8");
-  assert.ok(manifest.includes('"./src/catalog/seed-grouping.js"'));
-  assert.ok(!manifest.includes("catalog.js"));
-  assert.ok(!manifest.includes("catalog-info"));
+  for (const file of ["seed-grouping.js", "catalog.js", "catalog-info.js"]) assert.ok(manifest.includes(`"./src/catalog/${file}"`), file);
+  assert.ok(manifest.includes('"./src/app/catalog.js"'));
 });
 
 // ---- the committed module is what a fresh run writes ----
