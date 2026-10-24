@@ -425,3 +425,31 @@ test("catalog: the equipment overrides for chain press, dips, box jumps, drills 
   assert.equal(stub.entries[0].equipment, "barbell");
   assert.equal(stub.entries[0].baseMovementId, "bench-press");
 });
+
+test("catalog: the five reverse curls keep reverse-grip by override, with their other tags, while reverse crunch, reverse hyperextension and reverse flyes do not have it", () => {
+  const all = JSON.parse(fs.readFileSync(path.join(here, "..", "tools", "exercise-catalog", "overrides.json"), "utf8"));
+  const curls = [
+    ["Reverse_Barbell_Curl", "Reverse Barbell Curl", "barbell", ["reverse-grip"]],
+    ["Reverse_Barbell_Preacher_Curls", "Reverse Barbell Preacher Curls", "e-z curl bar", ["preacher", "reverse-grip"]],
+    ["Reverse_Cable_Curl", "Reverse Cable Curl", "cable", ["reverse-grip"]],
+    ["Reverse_Plate_Curls", "Reverse Plate Curls", "other", ["reverse-grip"]],
+    ["Standing_Dumbbell_Reverse_Curl", "Standing Dumbbell Reverse Curl", "dumbbell", ["reverse-grip", "standing"]],
+  ];
+  for (const [id, , , tags] of curls) {
+    assert.deepEqual(Object.keys(all[id] ?? {}).sort(), ["note", "variations"], id);
+    assert.deepEqual(all[id].variations, tags, id);
+  }
+  const others = [
+    upstream("Reverse_Crunch", "Reverse Crunch", { primaryMuscles: ["abdominals"] }),
+    upstream("Reverse_Hyperextension", "Reverse Hyperextension", { equipment: "machine", primaryMuscles: ["hamstrings"] }),
+    upstream("Reverse_Flyes", "Reverse Flyes", { equipment: "dumbbell", primaryMuscles: ["shoulders"] }),
+  ];
+  const stubs = curls.map(([id, name, equipment]) => upstream(id, name, { equipment, primaryMuscles: ["biceps"] }));
+  const overrides = Object.fromEntries(curls.map(([id]) => [id, all[id]]));
+  const result = curate({ upstream: [...stubs, ...others], overrides, vocabulary });
+  for (const [id, , , tags] of curls) {
+    assert.equal(entryOf(result, id).baseMovementId, "curl", id);
+    assert.deepEqual(entryOf(result, id).variations, tags, id);
+  }
+  for (const e of others) assert.ok(!entryOf(result, e.id).variations.includes("reverse-grip"), e.id);
+});

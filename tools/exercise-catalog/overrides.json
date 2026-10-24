@@ -204,6 +204,31 @@
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   },
+  "Reverse_Barbell_Curl": {
+    "variations": [
+      "reverse-grip"
+    ],
+    "note": "A reverse curl is an overhand-grip curl. The name does not say grip, so the name rules do not tag it, and the reverse-grip tag is restored by hand. The other tags are kept as they were."
+  },
+  "Reverse_Barbell_Preacher_Curls": {
+    "variations": [
+      "preacher",
+      "reverse-grip"
+    ],
+    "note": "A reverse curl is an overhand-grip curl. The name does not say grip, so the name rules do not tag it, and the reverse-grip tag is restored by hand. The other tags are kept as they were."
+  },
+  "Reverse_Cable_Curl": {
+    "variations": [
+      "reverse-grip"
+    ],
+    "note": "A reverse curl is an overhand-grip curl. The name does not say grip, so the name rules do not tag it, and the reverse-grip tag is restored by hand. The other tags are kept as they were."
+  },
+  "Reverse_Plate_Curls": {
+    "variations": [
+      "reverse-grip"
+    ],
+    "note": "A reverse curl is an overhand-grip curl. The name does not say grip, so the name rules do not tag it, and the reverse-grip tag is restored by hand. The other tags are kept as they were."
+  },
   "Ring_Dips": {
     "equipment": "bodyweight",
     "note": "The pair of gymnastic rings is not in the equipment vocabulary, so this movement is logged as bodyweight."
@@ -277,6 +302,13 @@
       "bands"
     ],
     "note": "Upstream says only bands; its twin Squat_with_Bands is tagged barbell, so this is a barbell squat with bands (assumed)."
+  },
+  "Standing_Dumbbell_Reverse_Curl": {
+    "variations": [
+      "reverse-grip",
+      "standing"
+    ],
+    "note": "A reverse curl is an overhand-grip curl. The name does not say grip, so the name rules do not tag it, and the reverse-grip tag is restored by hand. The other tags are kept as they were."
   },
   "Standing_Low-Pulley_Deltoid_Raise": {
     "primaryMuscles": [
