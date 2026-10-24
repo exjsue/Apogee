@@ -35,7 +35,7 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 ## How we work
 - Before writing code, state the plan and the main risk. Wait for approval on anything that changes privacy rules or architecture.
 - Build in small verifiable steps: data model, logging, exercise library, import, search, UI polish.
-- Git: see the Git policy section. Until the owner has reviewed that section and says so in chat, do not commit or push.
+- Git: see the Git policy section.
 - Keep DECISIONS.md (dated decisions with reasons) and TODO.md (deferred items, including Android and the AI feature) up to date.
 - When a bug is reported, ask for the exact error or reproduction steps before proposing a fix.
 
@@ -56,7 +56,7 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 - Never touch .gitignore or graphify-out/.
 
 ## Git policy (owner review required)
-- Until the owner has reviewed this section and says so in chat, do not commit or push.
+- Reviewed and approved by the owner in chat on 2026-10-24.
 - After approval, auto-commit and push are allowed only for steps with no stored-data change (no schema change, nothing that alters what is written to IndexedDB or to backups).
 - If unsure whether a step touches stored data, treat it as a stored-data step and do not commit.
 - Add files by name only. Never git add . and never touch graphify-out/.
