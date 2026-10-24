@@ -1647,3 +1647,57 @@ rule("styles: the check control is a 44 px target with a ring when unchecked and
     ctx.assert.equal(win.getComputedStyle(checked, "::before").borderTopColor, "rgba(0, 0, 0, 0)"); // the ring is gone
   }, { width: 375 });
 });
+
+rule("ui: an exercise and its sets can be moved with buttons that are 44 px high, labelled, and fit a 320 px screen", async (ctx) => {
+  const SQUAT = "seed-barbell-squat";
+  await withApp(ctx, async ({ root, adapter, frame }) => {
+    const { assert } = ctx;
+    const doc = frame.contentDocument;
+    const blockIds = () => [...root.querySelectorAll(".entry[data-exercise-id]")].map((block) => block.dataset.exerciseId);
+    const block = (id) => $(root, `.entry[data-exercise-id="${id}"]`);
+    await pickExercise(root, "bench", BENCH);
+    await pickExercise(root, "squat", SQUAT);
+    await waitFor(() => blockIds().length === 2, "both exercises");
+    assert.deepEqual(blockIds(), [BENCH, SQUAT]);
+
+    // the exercise menu: Move up / Move down, 44 px high, inside the screen
+    click($(block(SQUAT), '[data-action="exercise-menu"]'));
+    const up = await waitFor(() => $(block(SQUAT), '[data-action="move-exercise-up"]'), "the Move up item");
+    const down = $(block(SQUAT), '[data-action="move-exercise-down"]');
+    assert.equal(up.getAttribute("aria-label"), "Move Barbell back squat up");
+    assert.equal(down.getAttribute("aria-label"), "Move Barbell back squat down");
+    assert.deepEqual([up.disabled, down.disabled], [false, true]); // last of two
+    for (const item of [up, down, $(block(SQUAT), '[data-action="reorder-sets"]')]) {
+      const rect = item.getBoundingClientRect();
+      assert.ok(rect.height >= 44, `${item.dataset.action} is ${rect.height} px high`);
+      assert.ok(rect.left >= 0 && rect.right <= 320, `${item.dataset.action} fits 320 px`);
+    }
+    click(up);
+    await waitFor(() => blockIds()[0] === SQUAT, "squat to move up");
+    assert.deepEqual(blockIds(), [SQUAT, BENCH]);
+    // Move up is now disabled, so focus went to Move down
+    await waitFor(() => doc.activeElement && doc.activeElement.dataset.action === "move-exercise-down", "focus on Move down");
+    assert.deepEqual(await rawCounts(adapter), { workouts: 0, entries: 0, sets: 0 }); // nothing stored but the plan
+
+    // the sets of bench: two rows, then Reorder sets shows a Move line under each
+    click(action(block(BENCH), "add-set"));
+    await waitFor(() => block(BENCH).querySelectorAll("li.set-row").length === 2, "two bench rows");
+    const rowIds = () => [...block(BENCH).querySelectorAll("li.set-row")].map((row) => row.dataset.setId);
+    const [first, second] = rowIds();
+    click($(block(BENCH), '[data-action="exercise-menu"]'));
+    click(await waitFor(() => $(block(BENCH), '[data-action="reorder-sets"]'), "Reorder sets"));
+    const moveDown = await waitFor(() => $(block(BENCH), `[data-action="move-set-down"][data-set-id="${first}"]`), "Move down for the first row");
+    assert.equal(moveDown.getAttribute("aria-label"), "Move set 1 of Barbell bench press down");
+    assert.equal($(block(BENCH), `[data-action="move-set-up"][data-set-id="${first}"]`).disabled, true);
+    for (const item of block(BENCH).querySelectorAll(".move-line button")) {
+      const rect = item.getBoundingClientRect();
+      assert.ok(rect.height >= 44 && rect.width >= 44, `${item.dataset.action} is ${rect.width} x ${rect.height}`);
+      assert.ok(rect.left >= 0 && rect.right <= 320);
+    }
+    click(moveDown);
+    await waitFor(() => rowIds()[0] === second, "the first row to move down");
+    assert.deepEqual(rowIds(), [second, first]);
+    click(action(block(BENCH), "done-reordering"));
+    await waitFor(() => $(block(BENCH), ".move-line") === null, "the move lines to go");
+  }, { width: 320 });
+});

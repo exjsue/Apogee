@@ -28,6 +28,7 @@ export const freshLogState = () => ({
   editingRestId: null,
   editingSetId: null, // the checked set whose edit form is open
   menuExerciseId: null,
+  reorderExerciseId: null, // the exercise whose sets show move up / move down buttons
   editingDefaultFor: null,
   seen: null, // the rows of the last drawing, so only what changed animates
   stopTicker: null,

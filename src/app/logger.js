@@ -12,7 +12,7 @@ import {
 } from "../domain/rest-timer.js";
 import {
   normalizePlan, addRow, updateRow, removeRow, bumpPlan, pruneOrphans, nextOrder as nextRowOrder, buildExerciseBlocks,
-  heaviestSet, sameGhost,
+  heaviestSet, sameGhost, displayedExerciseIds, orderEntriesLike, swapped, reorderedRowOrders, applyRowOrders,
 } from "../domain/workout-plan.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
@@ -308,7 +308,12 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       let entry = entries.find((candidate) => candidate.exerciseId === row.exerciseId);
       if (entry === undefined) {
         entry = createWorkoutEntry({ workoutId: workout.id, exerciseId: row.exerciseId, order: nextOrder(entries) });
-        entries = [...entries, entry];
+        // The entries of this workout take the order the exercises are SHOWN in (displayedExerciseIds), so the
+        // order survives Finish, when the plan is gone: an exercise with an entry that is not in
+        // plan.exercises is shown first, in its entry order, then plan.exercises in its order. Only `order`
+        // changes, and only for this workout's entries (a finished workout is never read here).
+        entries = orderEntriesLike([...entries, entry], displayedExerciseIds([...entries, entry], session.plan));
+        entry = entries.find((candidate) => candidate.exerciseId === row.exerciseId);
       }
       // The rest: this set's own, else the exercise's default, else 3:00. It is written
       // into the set, which keeps the rest it was logged with whatever happens to the default.
@@ -382,6 +387,71 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       const sets = session.sets.map((candidate) => (candidate.id === setId ? edited : candidate));
       await store.saveWorkoutWithDetails(session.workout, session.entries, sets, commit(session, session.plan)); // timer undefined: untouched
       return edited;
+    });
+  }
+
+  const ORDER_CHANGED = "The order changed. Check again.";
+  const requireDirection = (direction) => {
+    if (direction !== "up" && direction !== "down") throw new Error('direction must be "up" or "down"');
+    return direction === "up" ? -1 : 1;
+  };
+
+  // The blocks as shown, without ghosts (only the order matters, so no history is read).
+  const orderBlocks = (session) => buildExerciseBlocks({
+    entries: session.entries, sets: session.sets, plan: session.plan, names: new Map(session.exercises.map((exercise) => [exercise.id, exercise.name])),
+    timer: session.timer, nowMs: nowMs(),
+  });
+
+  // Moves a set (checked or unchecked) one place up or down among its exercise's rows, as shown: it
+  // trades `order` with the neighbouring row, whether that is checked or not. `neighborId` is the id of the
+  // row the screen showed there; if it is not the neighbour now (another tab reordered) the move is refused
+  // with nothing stored. Only `order` changes: ids, completedAt, rest, warm-up flags, the timer and every
+  // other field stay as they are. One write: checked sets and the plan commit together (saveWorkoutWithDetails
+  // writes sets and meta in one transaction), or, if only unchecked rows move, the plan alone.
+  async function moveSet(setId, direction, neighborId) {
+    const step = requireDirection(direction);
+    return retryOnConflict(async () => {
+      const session = await readSession();
+      requireNotStale(session.status);
+      const rows = orderBlocks(session).map((block) => block.rows).find((candidate) => candidate.some((row) => row.id === setId));
+      if (rows === undefined) throw new Error("That set is not in the current workout");
+      const from = rows.findIndex((row) => row.id === setId);
+      const to = from + step;
+      if (to < 0 || to >= rows.length) throw new Error("That set cannot move further");
+      if (rows[to].id !== neighborId) throw new Error(ORDER_CHANGED);
+      const orders = reorderedRowOrders(rows, from, to);
+      const plan = applyRowOrders(session.plan, orders);
+      const sets = session.sets.map((set) => (orders.has(set.id) ? { ...set, order: orders.get(set.id) } : set));
+      const loggedChanged = session.sets.some((set, index) => set.order !== sets[index].order);
+      const { meta, expectRev } = commit(session, plan);
+      if (loggedChanged) await store.saveWorkoutWithDetails(session.workout, session.entries, sets, { meta, expectRev });
+      else await store.setWorkoutMeta(meta, { expectRev });
+      return orders;
+    });
+  }
+
+  // Moves an exercise one place up or down among the exercises as shown. The whole shown order is written
+  // to plan.exercises, and the entries of this workout take that order (orderEntriesLike), so it survives
+  // Finish. `neighborExerciseId` is checked like moveSet's neighborId. Only `order` of entries and the plan's
+  // list change; no entry or set is created, deleted or otherwise edited.
+  async function moveExercise(exerciseId, direction, neighborExerciseId) {
+    const step = requireDirection(direction);
+    return retryOnConflict(async () => {
+      const session = await readSession();
+      requireNotStale(session.status);
+      const ids = displayedExerciseIds(session.entries, session.plan);
+      const from = ids.indexOf(exerciseId);
+      if (from === -1) throw new Error("That exercise is not in the current workout");
+      const to = from + step;
+      if (to < 0 || to >= ids.length) throw new Error("That exercise cannot move further");
+      if (ids[to] !== neighborExerciseId) throw new Error(ORDER_CHANGED);
+      const next = swapped(ids, from, to);
+      const entries = orderEntriesLike(session.entries, next);
+      const entriesChanged = session.entries.some((entry, index) => entry.order !== entries[index].order);
+      const { meta, expectRev } = commit(session, { ...session.plan, exercises: next });
+      if (entriesChanged) await store.saveWorkoutWithDetails(session.workout, entries, session.sets, { meta, expectRev });
+      else await store.setWorkoutMeta(meta, { expectRev });
+      return next;
     });
   }
 
@@ -636,6 +706,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     checkSet,
     uncheckSet,
     editSet,
+    moveSet,
+    moveExercise,
     setRest,
     updateRestTimers,
     clearPlan,

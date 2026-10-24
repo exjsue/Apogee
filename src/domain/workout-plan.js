@@ -200,6 +200,45 @@ function plannedRow(row, fallback) {
   return { kind: "planned", ...row, restSeconds: row.restSeconds ?? fallback };
 }
 
+// The exercises of the session in the order the Log tab shows them: an exercise that has an entry but is not
+// in plan.exercises (a workout started without a plan, or a plan that was cleared) comes first, in its entry
+// order; then plan.exercises in its own order.
+export function displayedExerciseIds(entries, plan) {
+  const loggedFirst = [...entries].sort((a, b) => a.order - b.order).map((entry) => entry.exerciseId);
+  return [...loggedFirst.filter((id) => !plan.exercises.includes(id)), ...plan.exercises];
+}
+
+// The entries with their order set to their exercise's place in `ids` (displayedExerciseIds, or the list after
+// a move), counted from 0 over the exercises that have an entry. ONLY `order` changes: every other field of
+// every entry, and the entries themselves, stay exactly as they are. Callers pass the entries of the CURRENT
+// workout only.
+export function orderEntriesLike(entries, ids) {
+  const withEntry = ids.filter((id) => entries.some((entry) => entry.exerciseId === id));
+  return entries.map((entry) => ({ ...entry, order: withEntry.indexOf(entry.exerciseId) }));
+}
+
+// Moves the item at index `from` one place to `to` (adjacent) in a list of ids. A new array.
+export function swapped(list, from, to) {
+  const next = [...list];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+// The new `order` of each row of ONE exercise when rows[from] and rows[to] (adjacent, rows in displayed order)
+// trade places: Map id -> order. When the orders are all different, the rows take the same values in the new
+// sequence (a pure reordering of values that exist; for adjacent rows, a swap). If two rows share an order
+// (it should not happen), the rows are numbered 0.. in the new sequence so that the move still takes effect.
+export function reorderedRowOrders(rows, from, to) {
+  const distinct = new Set(rows.map((row) => row.order)).size === rows.length;
+  const values = distinct ? rows.map((row) => row.order) : rows.map((_, index) => index);
+  return new Map(swapped(rows.map((row) => row.id), from, to).map((id, index) => [id, values[index]]));
+}
+
+// The plan with the given planned rows' `order` replaced (id -> order). Nothing else changes.
+export function applyRowOrders(plan, orders) {
+  return { ...plan, rows: plan.rows.map((row) => (orders.has(row.id) ? { ...row, order: orders.get(row.id) } : row)) };
+}
+
 // What the Log tab shows: one block per exercise, each with its rows in order
 // and, for every row that has a timer line, its phase, the seconds to show and
 // the fraction of the pie. Warm-up rows have no timer line (hasTimer false).
@@ -208,8 +247,7 @@ function plannedRow(row, fallback) {
 // Every row has a ghost (see ghostFor): null for logged rows.
 export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, defaults = new Map(), lastBest = new Map() }) {
   const entryOf = new Map(entries.map((entry) => [entry.exerciseId, entry]));
-  const loggedFirst = [...entries].sort((a, b) => a.order - b.order).map((entry) => entry.exerciseId);
-  const ids = [...loggedFirst.filter((id) => !plan.exercises.includes(id)), ...plan.exercises];
+  const ids = displayedExerciseIds(entries, plan);
 
   return ids.map((exerciseId) => {
     const entry = entryOf.get(exerciseId) ?? null;

@@ -8,6 +8,7 @@ import { domainRules } from "../domain-rules.js";
 import { storeExtraRules } from "../store-extra-rules.js";
 import { loggerRules } from "../logger-rules.js";
 import { sessionRules } from "../session-rules.js";
+import { reorderRules } from "../reorder-rules.js";
 import { upgradeRules } from "./upgrade-rules.js";
 import { uiRules, layoutMeasures } from "./ui-smoke.js";
 import { catalogRules } from "../catalog-rules.js";
@@ -346,7 +347,7 @@ async function runAll() {
   }
 
   const rules = [
-    ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...browserOnlyRules, ...upgradeRules, ...uiRules,
+    ...storeRules, ...backupRules, ...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...reorderRules, ...browserOnlyRules, ...upgradeRules, ...uiRules,
     ...[...catalogRules, ...catalogWiringRules, ...catalogBrowserRules].map((rule) => ({ ...rule, ownDatabase: true })),
   ];
   notes.length = 0;

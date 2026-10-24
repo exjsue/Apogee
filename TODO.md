@@ -105,6 +105,7 @@
 - [ ] Focus the weight field when the set edit form opens (currently a second tap is needed on a phone). Try after a week of real use.
 
 ## Deferred
+- [ ] **Schema 4: workout name** (deferred 2026-10-24, not started). A workout has no name field and `notes` must not be reused (it would change that field's meaning). The task: add a `name` field to workouts (single line, whitespace collapsed, empty = no name, at most 80 characters, longer refused), a schema 4 migration that gives every stored workout the default, `createWorkout`, the export field list and import of older files (src/backup/backup.js, RECORD_FIELDS), naming during and after a workout, and tests (migration, export/import round trip, an old file imports, limits). Run it on Opus; present the plan with diffs first; the owner approves each commit (approved commit N); verify with a friend's fresh export and the four counts that tools/compare-exports.js prints for each section (exercises, workouts, entries, sets), before and after.
 - [ ] Importers (Strong, Liftoff); each needs a mapping onto the fixed muscle and equipment lists
 - [ ] Muscle diagram, strength ranking, streaks
 - [ ] iPhone native app / Android

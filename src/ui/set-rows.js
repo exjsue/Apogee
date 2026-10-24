@@ -305,7 +305,34 @@ function setEditor(ctx, row, index, exerciseName) {
   );
 }
 
-function setRow(ctx, row, index, exerciseName) {
+// ---- reorder: move up / move down buttons on a line of their own, shown while "Reorder sets" is on ----
+
+// After a move the row has a new place; focus goes to the same direction's button if it can still be used,
+// else to the other one (a disabled button cannot hold focus).
+function moveFocus(selectorFor, direction, newIndex, last) {
+  const keep = direction === "up" ? newIndex > 0 : newIndex < last;
+  return selectorFor(keep ? direction : direction === "up" ? "down" : "up");
+}
+
+const forId = (action, attribute, id) => `[data-action="${action}"][${attribute}="${CSS.escape(id)}"]`;
+
+function moveLine(ctx, rows, index, exerciseName) {
+  const row = rows[index];
+  const direction = (name, label, arrow, to) => button(`${arrow} ${label}`, {
+    class: "move-button",
+    "data-action": `move-set-${name}`,
+    "data-set-id": row.id,
+    "aria-label": `Move set ${index + 1} of ${exerciseName} ${name}`,
+    disabled: to < 0 || to >= rows.length,
+    onClick: () => {
+      ctx.state.focus = moveFocus((d) => forId(`move-set-${d}`, "data-set-id", row.id), name, to, rows.length - 1);
+      return perform(ctx, () => ctx.services.logger.moveSet(row.id, name, rows[to].id));
+    },
+  });
+  return h("div", { class: "move-line" }, direction("up", "Up", "▲", index - 1), direction("down", "Down", "▼", index + 1));
+}
+
+function setRow(ctx, row, index, exerciseName, rows, reordering) {
   const { logger } = ctx.services;
   const logged = row.kind === "logged";
   // What changed since the last drawing, so that only that animates (see the motion block in
@@ -349,6 +376,7 @@ function setRow(ctx, row, index, exerciseName) {
     ctx.state.log.confirmDeleteSetId === row.id ? deleteConfirm(ctx, row) : null,
     logged && ctx.state.log.editingSetId === row.id ? setEditor(ctx, row, index, exerciseName) : null,
     line,
+    reordering ? moveLine(ctx, rows, index, exerciseName) : null,
   );
 }
 
@@ -412,7 +440,7 @@ function defaultRestEditor(ctx, block) {
 }
 
 // The exercise's name and its three-dot menu.
-function blockHeader(ctx, block) {
+function blockHeader(ctx, block, blocks, position) {
   const log = ctx.state.log;
   const open = log.menuExerciseId === block.exerciseId;
   const header = h(
@@ -433,9 +461,37 @@ function blockHeader(ctx, block) {
     }),
   );
   if (open) {
+    const moveExercise = (name, to) => button(`Move ${name}`, {
+      class: "menu-item",
+      role: "menuitem",
+      "data-action": `move-exercise-${name}`,
+      "data-exercise-id": block.exerciseId,
+      "aria-label": `Move ${block.exerciseName} ${name}`,
+      disabled: to < 0 || to >= blocks.length,
+      onClick: () => {
+        ctx.state.focus = moveFocus((d) => forId(`move-exercise-${d}`, "data-exercise-id", block.exerciseId), name, to, blocks.length - 1);
+        return perform(ctx, () => ctx.services.logger.moveExercise(block.exerciseId, name, blocks[to].exerciseId));
+      },
+    });
+    const reordering = log.reorderExerciseId === block.exerciseId;
     header.append(h(
       "div",
       { class: "menu", role: "menu" },
+      moveExercise("up", position - 1),
+      moveExercise("down", position + 1),
+      button("Reorder sets", {
+        class: "menu-item",
+        role: "menuitem",
+        "data-action": "reorder-sets",
+        "data-exercise-id": block.exerciseId,
+        "aria-label": `Reorder sets of ${block.exerciseName}`,
+        "aria-pressed": String(reordering),
+        onClick: () => {
+          log.menuExerciseId = null;
+          log.reorderExerciseId = reordering ? null : block.exerciseId;
+          return ctx.rerender();
+        },
+      }),
       button("Update Rest Timers", {
         class: "small",
         role: "menuitem",
@@ -452,18 +508,38 @@ function blockHeader(ctx, block) {
   return header;
 }
 
+// The line above the rows while their order is being changed.
+function reorderBar(ctx, block) {
+  return h(
+    "div",
+    { class: "reorder-bar" },
+    h("span", {}, "Reordering sets"),
+    button("Done", {
+      "data-action": "done-reordering",
+      "aria-label": `Done reordering sets of ${block.exerciseName}`,
+      onClick: () => {
+        ctx.state.log.reorderExerciseId = null;
+        return ctx.rerender();
+      },
+    }),
+  );
+}
+
 // One block per exercise: its header row, its rows and an Add set button (which shows no timer).
 export function exerciseBlocks(ctx, blocks) {
   const element = h(
     "div",
     { class: "entries", "data-region": "exercise-blocks" },
-    blocks.map((block) => h(
+    blocks.map((block, position) => h(
       "div",
       { class: "entry", "data-exercise-id": block.exerciseId },
-      blockHeader(ctx, block),
+      blockHeader(ctx, block, blocks, position),
       ctx.state.log.editingDefaultFor === block.exerciseId ? defaultRestEditor(ctx, block) : null,
+      ctx.state.log.reorderExerciseId === block.exerciseId ? reorderBar(ctx, block) : null,
       setHead(),
-      h("ol", { class: "sets" }, block.rows.map((row, index) => setRow(ctx, row, index, block.exerciseName))),
+      h("ol", { class: "sets" }, block.rows.map((row, index) => setRow(
+        ctx, row, index, block.exerciseName, block.rows, ctx.state.log.reorderExerciseId === block.exerciseId,
+      ))),
       button("Add set", {
         class: "small",
         "data-action": "add-set",

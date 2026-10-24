@@ -4,10 +4,11 @@ import { domainRules } from "./domain-rules.js";
 import { storeExtraRules } from "./store-extra-rules.js";
 import { loggerRules } from "./logger-rules.js";
 import { sessionRules } from "./session-rules.js";
+import { reorderRules } from "./reorder-rules.js";
 import { createMemoryAdapter } from "../src/storage/memory-adapter.js";
 
 // The shared rules, against the memory adapter.
-for (const { name, run } of [...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules]) {
+for (const { name, run } of [...domainRules, ...storeExtraRules, ...loggerRules, ...sessionRules, ...reorderRules]) {
   test(`app rules: ${name}`, async () => {
     const adapters = [];
     const createAdapter = () => {

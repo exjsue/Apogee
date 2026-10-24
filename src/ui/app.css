@@ -512,7 +512,17 @@ button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  display: grid;
+  gap: 4px;
+  min-width: 12rem;
+  max-width: calc(100vw - 32px);
 }
+button.menu-item { width: 100%; text-align: left; } /* 44 px high like every button; not .small */
+
+/* reordering sets: a bar above the rows, and a line of two equal 44 px buttons under each row */
+.reorder-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 0.875rem; color: var(--muted); }
+.move-line { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.move-line button { min-height: 44px; padding: 8px 4px; }
 
 /* pull-to-refresh: a small label that slides in as the pull grows (steps, not inline styles) */
 
