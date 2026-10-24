@@ -1,7 +1,7 @@
 # Project: Apogee (privacy-first workout tracker, web app)
 
 ## Status
-node --test passes. The browser test page (tests/browser/index.html, including UI smoke tests) passes in headless Chrome; the owner's earlier storage and export/import runs passed in desktop Firefox and Chrome. Nothing is tested on iPhone yet: layout, download, file picker and the Content-Security-Policy there are unverified. Offline use: a service worker (sw.js) precaches the app and serves it cache-first; a new version waits until the user clicks Reload on the Update available banner; the Backup tab has an Offline section with a confirmed Reset offline copy. This is verified end to end in headless Chrome (install, offline reload with data intact, the update flow, an install that fails as a whole, reset) but not in Firefox or Safari, and not installed on an iPhone. The repo is prepared for GitHub Pages at the subpath https://exjsue.github.io/Apogee/ (public repo, .nojekyll, every path in the page relative) but is not published or tested there yet; the owner makes the repo public and turns Pages on. The app's real database name is defined once in src/storage/schema.js, createIdbAdapter requires a name, and tests/guard.test.js fails if a test uses the app's database or its name.
+The app is a PWA served from GitHub Pages and used as a Home Screen app. Current test counts, verification status and open items live in DECISIONS.md and TODO.md, not here. The app's real database name is defined once in src/storage/schema.js, createIdbAdapter requires a name, and tests/guard.test.js fails if a test uses the app's database or its name.
 
 ## Privacy rules (non-negotiable unless the owner changes them)
 - All user data stays on the user's device. Store it in the browser's IndexedDB, never on a server.
@@ -29,15 +29,43 @@ node --test passes. The browser test page (tests/browser/index.html, including U
 - Keep tests focused on data safety: export/import, migrations, schema upgrades, timer logic, and anything that could silently lose or corrupt data.
 - No tests for visual layout or trivial getters. Add only tests that would catch a real regression.
 - Run the existing suite once at the end of a task, not after every small edit.
-- Finish each task's report with one line saying how many tests were added and why.
-- Never delete existing tests. If a deliberate change makes one wrong, say so and get the owner's agreement first; keep the old assertion's intent covered by the new test.
+- Finish each report with the number of tests added and why, and a "what the tests did not cover" list.
+- Never delete an existing test, and stop and ask the owner before changing any existing test assertion. If a deliberate change makes one wrong, say so and get the owner's agreement first; keep the old assertion's intent covered by the new test.
 
 ## How we work
 - Before writing code, state the plan and the main risk. Wait for approval on anything that changes privacy rules or architecture.
 - Build in small verifiable steps: data model, logging, exercise library, import, search, UI polish.
-- Commit to git after each working step.
+- Git: see the Git policy section. Until the owner has reviewed that section and says so in chat, do not commit or push.
 - Keep DECISIONS.md (dated decisions with reasons) and TODO.md (deferred items, including Android and the AI feature) up to date.
 - When a bug is reported, ask for the exact error or reproduction steps before proposing a fix.
+
+## Verification checklist (every task)
+- Full Node suite: node --test
+- Browser suite in a throwaway Chrome profile with a throwaway database name (the browser test page shares an origin with the live app).
+- Never run the browser page on the owner's phone.
+- Control-character scan over tools/, tests/, src/, DECISIONS.md and TODO.md (regex \b can become a literal backspace).
+- Stop any server started for browser tests (ports 8098 and 8099) afterward.
+
+## Working rules
+- Use the Edit tool, never sed -i.
+- Keep each file's existing line endings as stored in git (DECISIONS.md, TODO.md, src/ui/app.js and CLAUDE.md are LF; tests/browser/ui-smoke.js is CRLF; core.autocrlf warnings are harmless).
+- For any change to shared app code, show the verbatim git diff before asking for approval.
+- Add a DECISIONS.md row for every architectural or privacy decision.
+- Never switch models mid-session.
+- Run no plugin skill or command unless the owner asks.
+- Never touch .gitignore or graphify-out/.
+
+## Git policy (owner review required)
+- Until the owner has reviewed this section and says so in chat, do not commit or push.
+- After approval, auto-commit and push are allowed only for steps with no stored-data change (no schema change, nothing that alters what is written to IndexedDB or to backups).
+- If unsure whether a step touches stored data, treat it as a stored-data step and do not commit.
+- Add files by name only. Never git add . and never touch graphify-out/.
+- Abort without pushing if git status is unexpected, any Node test fails, the browser suite fails, or any control-character hit appears.
+- No force push, no history rewriting, no tags or releases (the owner tags releases).
+- Report the commit hash and file list each time.
+- Stored-data steps (schema changes, sets with no reps, workout naming) are never auto-committed: plan with diffs first, wait for the owner's "approved commit N", and the owner pushes manually.
+- These rules are instructions, not enforced limits.
+- If .git/index.lock blocks git: check Get-Process git, then Remove-Item .git\index.lock.
 
 ## Commands
 - Run: node tools/serve.js, then open http://127.0.0.1:8080/ (fixed port; the server stops if it is taken, because browser storage is per origin including the port)
@@ -46,4 +74,8 @@ node --test passes. The browser test page (tests/browser/index.html, including U
 - Recovery from a broken worker, how updates work, and what clearing site data does (it also deletes your workouts): OFFLINE.md.
 - Test: node --test
 - Browser tests (IndexedDB adapter, storage, backup, logger and UI smoke tests): with the server running, open http://127.0.0.1:8080/tests/browser/index.html
-- Live site (once the owner turns Pages on): https://exjsue.github.io/Apogee/ and, for the browser tests, https://exjsue.github.io/Apogee/tests/browser/index.html. It is served at a subpath, so every URL and import path must stay relative. Data on the live site is separate from data on 127.0.0.1:8080 (different origin); move it with Export and Import.
+- Live site: https://exjsue.github.io/Apogee/ and, for the browser tests, https://exjsue.github.io/Apogee/tests/browser/index.html. It is served at a subpath, so every URL and import path must stay relative. Data on the live site is separate from data on 127.0.0.1:8080 (different origin); move it with Export and Import.
+
+## Gotchas
+- Update on the phone by fully closing and reopening the Home Screen app, possibly twice.
+- Exports and backups never go in the repo.
