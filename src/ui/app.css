@@ -203,6 +203,17 @@ fieldset.checks legend { width: 100%; }
 
 .pick-list, .history-list { margin: 8px 0 0; }
 .pick-list li, .history-list li { margin: 0 0 6px; }
+/* The picker's results scroll inside their own box: about 6 rows, less if the viewport is short (18rem is the
+   room the title, search, filters and buttons take). The page behind does not move. */
+.pick-list {
+  --pick-row: 4.5rem;
+  max-height: calc(var(--pick-row) * 6);
+  max-height: min(calc(var(--pick-row) * 6), calc(100dvh - 18rem - env(safe-area-inset-bottom, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 .pick-filters { display: flex; gap: 12px; }
 .pick-filters .field { flex: 1; min-width: 0; }
 .pick-more { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

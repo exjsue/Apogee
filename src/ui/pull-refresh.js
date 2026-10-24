@@ -82,6 +82,8 @@ export function installPullToRefresh({
   function onStart(event) {
     gesture = null;
     if (busy) return;
+    // A drag that starts inside a scroll area of its own (the picker's list) scrolls that area, at any position.
+    if (event.target?.closest?.("[data-no-pull]")) return;
     const touches = event.touches ?? [];
     if (!canStartPull({ scrollTop: getScrollTop(), touchCount: touches.length, blocked: blockedNow() })) return;
     gesture = startPull({ x: touches[0].clientX, y: touches[0].clientY });

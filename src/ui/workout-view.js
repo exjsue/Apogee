@@ -305,7 +305,7 @@ function picker(ctx) {
   };
   const muscle = filterSelect("Muscle", "filter-muscle", ALL_MUSCLES, log.muscle, narrow);
   const equipment = filterSelect("Equipment", "filter-equipment", ALL_EQUIPMENT, log.equipment, narrow);
-  const list = h("ul", { class: "pick-list", "data-region": "exercise-list" });
+  const list = h("ul", { class: "pick-list", "data-region": "exercise-list", "data-no-pull": "" });
 
   const row = (exercise) => h(
     "li",

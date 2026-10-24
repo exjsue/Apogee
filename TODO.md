@@ -104,3 +104,4 @@
 - [ ] Muscle diagram, strength ranking, streaks
 - [ ] iPhone native app / Android
 - [ ] Opt-in AI feature (do not build until owner approves)
+- [ ] Search ranking: name matches should rank above equipment/notes matches (e.g. 'bench' returns Barbell hip thrust). Deferred by John 2026-10-24.
