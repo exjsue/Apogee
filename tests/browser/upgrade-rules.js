@@ -6,7 +6,7 @@ import { createIdbAdapter, deleteDatabase } from "../../src/storage/idb-adapter.
 import { createStore } from "../../src/storage/store.js";
 import { createBackup } from "../../src/backup/backup.js";
 import {
-  SCHEMA_VERSION, createExercise, createWorkout, createWorkoutEntry, createWorkSet,
+  SCHEMA_VERSION, createWorkout, createWorkoutEntry, createWorkSet,
 } from "../../src/domain/model.js";
 
 export const upgradeRules = [];
@@ -69,21 +69,28 @@ const snapshot = (adapter) => adapter.transaction(STORES, "readonly", async (tx)
   return out;
 });
 
+// The exercise fields each schema version stored. The fixtures below are written out as raw records, NOT built
+// with createExercise, so they stay exactly what that schema stored whatever createExercise later returns.
+// withoutField (further down) removes the fields a later schema added, so "nothing else changed" keeps
+// comparing only the fields the old schema had.
+const LATER_FIELDS = ["defaultRestSeconds", "baseMovementId", "equipment", "variations", "origin", "upstreamId", "catalogVersion", "retired"];
+
+// An exercise record as schema version 1 stored it (no defaultRestSeconds).
+const rawV1Exercise = (fields) => ({ secondaryMuscles: [], equipmentTags: [], notes: "", isCustom: false, ...fields });
+// An exercise record as schema version 2 stored it (defaultRestSeconds, null unless set).
+const rawV2Exercise = (fields) => ({ ...rawV1Exercise(fields), defaultRestSeconds: null, ...fields });
+
 // A schema version 1 database with real-looking data: exercises without
 // defaultRestSeconds (one already has a value), a finished and an unfinished
 // workout, sets with and without a rest, and settings in meta.
 async function makeVersion1(name, track) {
   const adapter = track(createIdbAdapter({ name, version: 1 })); // creates the stores, as version 1 did
   await adapter.open();
-  const v1 = (input) => {
-    const { defaultRestSeconds, ...record } = createExercise(input);
-    return record;
-  };
   const records = {
     exercises: [
-      v1({ id: "seed-a", name: "A", primaryMuscles: ["chest"] }),
-      v1({ id: "ex-b", name: "B", primaryMuscles: ["lats"], isCustom: true, notes: "mine" }),
-      { ...v1({ id: "ex-c", name: "C", primaryMuscles: ["quads"] }), defaultRestSeconds: 120 },
+      rawV1Exercise({ id: "seed-a", name: "A", primaryMuscles: ["chest"] }),
+      rawV1Exercise({ id: "ex-b", name: "B", primaryMuscles: ["lats"], isCustom: true, notes: "mine" }),
+      { ...rawV1Exercise({ id: "ex-c", name: "C", primaryMuscles: ["quads"] }), defaultRestSeconds: 120 },
     ],
     workouts: [
       createWorkout({ id: "w1", startedAt: "2026-10-01T10:00:00.000Z", endedAt: "2026-10-01T11:00:00.000Z" }),
@@ -113,7 +120,31 @@ async function makeVersion1(name, track) {
   return before;
 }
 
-const withoutField = ({ defaultRestSeconds, ...rest }) => rest;
+// The exercise without the fields a later schema added (see LATER_FIELDS).
+const withoutField = (record) => Object.fromEntries(Object.entries(record).filter(([key]) => !LATER_FIELDS.includes(key)));
+
+// A schema version 2 database: exercises as version 2 stored them, one finished workout with sets, and settings
+// in meta, written with version 2 explicitly so it stays a version 2 database whatever SCHEMA_VERSION becomes.
+async function makeVersion2(name, track) {
+  const adapter = track(createIdbAdapter({ name, version: 2 }));
+  await adapter.open();
+  const records = {
+    exercises: [
+      rawV2Exercise({ id: "seed-a", name: "A", primaryMuscles: ["chest"] }),
+      rawV2Exercise({ id: "ex-1", name: "Squat", primaryMuscles: ["quads"], isCustom: true, defaultRestSeconds: 90 }),
+    ],
+    workouts: [createWorkout({ id: "w1", startedAt: "2026-10-01T10:00:00.000Z", endedAt: "2026-10-01T11:00:00.000Z" })],
+    entries: [createWorkoutEntry({ id: "e1", workoutId: "w1", exerciseId: "ex-1", order: 0 })],
+    sets: [createWorkSet({ id: "s1", entryId: "e1", order: 0, reps: 8, weightValue: 100, weightUnit: "kg", completedAt: "2026-10-01T10:05:00.000Z" })],
+    meta: [{ key: "schemaVersion", value: 2 }, { key: "preferredUnit", value: "kg" }],
+  };
+  await adapter.transaction(STORES, "readwrite", async (tx) => {
+    for (const [storeName, list] of Object.entries(records)) for (const record of list) await tx.put(storeName, record);
+  });
+  const before = await snapshot(adapter);
+  adapter.close();
+  return before;
+}
 
 rule("upgrade: a populated version 1 database becomes version 2 with every record kept, in the upgrade transaction", async (ctx) => {
   const { assert } = ctx;
@@ -247,17 +278,12 @@ rule("versionchange: when another tab upgrades the database this connection clos
 rule("upgrade: a version 2 database opened by a version 1 build is refused with a clear message and left alone", async (ctx) => {
   const { assert } = ctx;
   await withDatabase(async ({ name, track }) => {
-    const first = track(createIdbAdapter({ name }));
-    const store = createStore(first);
-    await store.open();
-    await store.saveExercise(createExercise({ id: "ex-1", name: "Squat", primaryMuscles: ["quads"], defaultRestSeconds: 90 }));
-    const before = await snapshot(first);
-    first.close();
+    const before = await makeVersion2(name, track);
     // What an older build does: it asks for version 1.
     const oldBuild = track(createIdbAdapter({ name, version: 1 }));
     await assert.rejects(oldBuild.open(), /saved by a newer version of Apogee/);
-    assert.equal(await rawVersion(name), SCHEMA_VERSION);
-    const again = track(createIdbAdapter({ name }));
+    assert.equal(await rawVersion(name), 2); // the fixture's own version, not the code's
+    const again = track(createIdbAdapter({ name, version: 2 })); // reads it as version 2, without upgrading
     await again.open();
     assert.deepEqual(await snapshot(again), before);
   });
