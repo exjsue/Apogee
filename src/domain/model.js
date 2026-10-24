@@ -57,6 +57,11 @@ const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const KEBAB_MAX_LENGTH = 40;
 export const VARIATIONS_MAX = 12;
 
+// Limits for a template: how many exercises it lists, and how many sets one exercise may plan. Checked only,
+// never stored. Lowering one later would make a stored template or a backup invalid.
+export const TEMPLATE_MAX_EXERCISES = 50;
+export const TEMPLATE_MAX_SETS = 50;
+
 // Limits for a set. Easy to change: they are only checked, never stored.
 // A set has 1 to MAX_REPS reps. A weight is 0 (bodyweight) up to
 // MAX_WEIGHT_KG, whichever unit it was entered in.
@@ -351,4 +356,28 @@ export function convertWeight(value, fromUnit, toUnit) {
   requireWeightUnit(toUnit, "toUnit");
   if (fromUnit === toUnit) return value;
   return fromUnit === "lb" ? value * KG_PER_LB : value / KG_PER_LB;
+}
+
+// A template: a name and an ordered list of exercises, each with how many sets to plan (stored from schema 4).
+// Nothing else: no weights, reps, notes or times, and no link to the workout it was made from, so deleting or
+// editing that workout can never change it. The name follows the exercise name rule (whitespace collapsed,
+// 1 to NAME_MAX_LENGTH characters; longer is refused, never cut). An exercise appears at most once.
+// Properties it does not know are ignored here; an import rejects them (src/backup/backup.js).
+export function createTemplate(input) {
+  const { id, name, exercises } = requireInput(input);
+  if (!Array.isArray(exercises)) fail("exercises must be an array");
+  if (exercises.length === 0) fail("exercises must contain at least one exercise");
+  if (exercises.length > TEMPLATE_MAX_EXERCISES) fail(`exercises must have at most ${TEMPLATE_MAX_EXERCISES} entries`);
+  const seen = new Set();
+  const items = exercises.map((item, i) => {
+    const where = `exercises[${i}]`;
+    if (item === null || typeof item !== "object" || Array.isArray(item)) fail(`${where} must be an object`);
+    const exerciseId = requireNonEmptyString(item.exerciseId, `${where}.exerciseId`);
+    if (seen.has(exerciseId)) fail("exercises must not repeat an exercise");
+    seen.add(exerciseId);
+    const setCount = requireInteger(item.setCount, `${where}.setCount`, 1);
+    if (setCount > TEMPLATE_MAX_SETS) fail(`${where}.setCount must be at most ${TEMPLATE_MAX_SETS}`);
+    return { exerciseId, setCount };
+  });
+  return { id: resolveId(id), name: requireName(name, "name"), exercises: items };
 }
