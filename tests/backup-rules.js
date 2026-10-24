@@ -774,7 +774,9 @@ rule("a failing import leaves the previous data fully intact, including after re
 
 // An exercise record as a schema version 1 file has it: without defaultRestSeconds.
 const v1Exercise = (input) => {
-  const { defaultRestSeconds, ...record } = createExercise(input);
+  const {
+    defaultRestSeconds, baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired, ...record
+  } = createExercise(input);
   return record;
 };
 const v1File = (extra = {}) => {
@@ -831,6 +833,11 @@ rule("import: each schema is strict about its own fields: v1 must not have defau
   await assert.rejects(backup.importFromText(withField, { confirmReplace: true }), /unknown field "defaultRestSeconds"/);
   const without = mutate(incomingFile(), (doc) => { delete doc.data.exercises[0].defaultRestSeconds; });
   await assert.rejects(backup.importFromText(without, { confirmReplace: true }), /required field "defaultRestSeconds" is missing/);
+  // schema 3: a version 2 file must not have the new fields, and a version 3 file must have every one
+  const v2WithNew = mutate(v1File(), (doc) => { doc.schemaVersion = 2; for (const e of doc.data.exercises) e.defaultRestSeconds = null; doc.data.exercises[0].origin = "seed"; });
+  await assert.rejects(backup.importFromText(v2WithNew, { confirmReplace: true }), /unknown field "origin"/);
+  const v3Without = mutate(incomingFile(), (doc) => { delete doc.data.exercises[0].retired; });
+  await assert.rejects(backup.importFromText(v3Without, { confirmReplace: true }), /required field "retired" is missing/);
   for (const bad of [-1, 1.5, 3601, "90", true]) {
     const file = mutate(incomingFile(), (doc) => { doc.data.exercises[0].defaultRestSeconds = bad; });
     await assert.rejects(backup.importFromText(file, { confirmReplace: true }), /defaultRestSeconds/, String(bad));

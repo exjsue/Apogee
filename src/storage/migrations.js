@@ -11,22 +11,48 @@
 // in the new shape. No step touches the sets, workouts or entries: history is
 // never rewritten by an upgrade.
 
+import { exerciseV3Defaults } from "../domain/model.js";
+import { withSeedGrouping } from "../domain/seed.js";
+
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
-export const STEPS = [
-  {
-    // Schema 2: exercises have a defaultRestSeconds (null = the app's default,
-    // 3:00). Records that already have the field are left exactly as they are.
-    to: 2,
+// Schema 2: exercises have a defaultRestSeconds (null = the app's default,
+// 3:00). Records that already have the field are left exactly as they are.
+const stepTo2 = {
+  to: 2,
+  async run(tx) {
+    for (const exercise of await tx.getAll("exercises")) {
+      if (!hasOwn(exercise, "defaultRestSeconds")) {
+        await tx.put("exercises", { ...exercise, defaultRestSeconds: null });
+      }
+    }
+  },
+};
+
+const V3_FIELDS = Object.keys(exerciseV3Defaults({}));
+
+// Schema 3: exercises get baseMovementId, equipment, variations, origin, upstreamId, catalogVersion and
+// retired. A missing field is added with its default (origin "custom" for the user's own exercises, "seed"
+// otherwise), and a seed with no base movement yet gets its grouping (base movement, equipment, variations,
+// upstreamId) from src/catalog/seed-grouping.js. A field that is already there is left as it is; the name,
+// muscles, equipment tags, notes and default rest are never touched, and nothing is deleted. Only the
+// exercises store is read and written. `grouping` is for tests; the app uses the generated one.
+export function stepTo3(grouping) {
+  return {
+    to: 3,
     async run(tx) {
       for (const exercise of await tx.getAll("exercises")) {
-        if (!hasOwn(exercise, "defaultRestSeconds")) {
-          await tx.put("exercises", { ...exercise, defaultRestSeconds: null });
+        const completed = { ...exerciseV3Defaults(exercise), ...exercise };
+        const next = withSeedGrouping(completed, grouping);
+        if (next !== completed || V3_FIELDS.some((field) => !hasOwn(exercise, field))) {
+          await tx.put("exercises", next);
         }
       }
     },
-  },
-];
+  };
+}
+
+export const STEPS = [stepTo2, stepTo3()];
 
 // Brings data saved at `oldVersion` up to the newest step. A new database
 // (oldVersion 0) has nothing to upgrade: store.open() writes its schema version.

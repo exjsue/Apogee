@@ -1,7 +1,8 @@
-// Domain data model, schema version 2 (version 2 added defaultRestSeconds to exercises).
+// Domain data model, schema version 3 (version 2 added defaultRestSeconds to exercises; version 3 added
+// baseMovementId, equipment, variations, origin, upstreamId, catalogVersion and retired).
 // Pure JavaScript: no DOM, no storage, no network.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const WEIGHT_UNITS = ["kg", "lb"];
 
@@ -19,8 +20,8 @@ export const EQUIPMENT = Object.freeze([
 ]);
 
 // Ids the exercise catalog uses that the custom-exercise form does not offer. They are not part of MUSCLES or
-// EQUIPMENT (the form lists those two), so the form stays as it is. Nothing uses these yet; schema version 3
-// will validate exercises against ALL_MUSCLES and ALL_EQUIPMENT.
+// EQUIPMENT (the form lists those two), so the form stays as it is. A stored exercise is validated against
+// ALL_MUSCLES and ALL_EQUIPMENT (schema version 3).
 export const EXTRA_MUSCLES = Object.freeze(["neck", "abductors"]);
 export const EXTRA_EQUIPMENT = Object.freeze(["trap_bar", "medicine_ball", "exercise_ball", "foam_roll", "other"]);
 export const ALL_MUSCLES = Object.freeze([...MUSCLES, ...EXTRA_MUSCLES]);
@@ -30,7 +31,9 @@ export const ALL_EQUIPMENT = Object.freeze([...EQUIPMENT, ...EXTRA_EQUIPMENT]);
 // Apogee, or one the user made.
 export const ORIGINS = Object.freeze(["seed", "upstream", "authored", "custom"]);
 
-// The fields schema version 3 adds to an exercise, with the value a record saved before it has. Not used yet.
+// The fields schema version 3 adds to an exercise, with the value a record saved before it has. The one
+// definition used by createExercise (for an absent field), by the 2-to-3 upgrade step and by import of an
+// older file.
 export function exerciseV3Defaults(record) {
   return {
     baseMovementId: null,
@@ -46,6 +49,13 @@ export function exerciseV3Defaults(record) {
 // Maximum lengths, in characters (Unicode code points) after normalization.
 export const NAME_MAX_LENGTH = 80;
 export const NOTES_MAX_LENGTH = 500;
+
+// A base movement id or a variation tag: lower-case letters and digits in words joined by single hyphens
+// ("bench-press", "close-grip"). Checked by form only, never against a list, so a family or tag added to the
+// catalog later never makes an existing backup invalid.
+const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const KEBAB_MAX_LENGTH = 40;
+export const VARIATIONS_MAX = 12;
 
 // Limits for a set. Easy to change: they are only checked, never stored.
 // A set has 1 to MAX_REPS reps. A weight is 0 (bodyweight) up to
@@ -125,6 +135,38 @@ function requireStringArray(value, field) {
   return value.map((item, i) => requireNonEmptyString(item, `${field}[${i}]`));
 }
 
+function requireKebab(value, field) {
+  if (typeof value !== "string" || value.length > KEBAB_MAX_LENGTH || !KEBAB.test(value)) {
+    fail(`${field} must be lower-case words joined by single hyphens, at most ${KEBAB_MAX_LENGTH} characters`);
+  }
+  return value;
+}
+
+// A list of kebab-case tags: sorted, without duplicates, at most VARIATIONS_MAX. Messages never repeat a value.
+function requireKebabList(value, field) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail(`${field} must be an array of strings`);
+  if (value.length > VARIATIONS_MAX) fail(`${field} must have at most ${VARIATIONS_MAX} entries`);
+  value.forEach((item, i) => requireKebab(item, `${field}[${i}]`));
+  for (let i = 1; i < value.length; i += 1) {
+    if (value[i] === value[i - 1]) fail(`${field} must not contain duplicates`);
+    if (value[i] < value[i - 1]) fail(`${field} must be sorted`);
+  }
+  return [...value];
+}
+
+function requireOneOf(value, field, allowed, what) {
+  if (!allowed.includes(value)) fail(`${field} must be a known ${what}`);
+  return value;
+}
+
+// origin is "custom" exactly when the user made the exercise.
+function requireOrigin(value, isCustom) {
+  if (!ORIGINS.includes(value)) fail(`origin must be one of ${ORIGINS.join(", ")}`);
+  if ((value === "custom") !== isCustom) fail('origin must be "custom" exactly when isCustom is true');
+  return value;
+}
+
 function requireWeightUnit(value, field) {
   if (!WEIGHT_UNITS.includes(value)) fail(`${field} must be "kg" or "lb"`);
   return value;
@@ -160,9 +202,11 @@ function requireInput(input) {
   return input;
 }
 
+// Properties it does not know are ignored here; an import rejects them (src/backup/backup.js).
 export function createExercise(input) {
   const {
     id, name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom = false, defaultRestSeconds,
+    baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired,
   } = requireInput(input);
   // null (or missing, as in data saved before schema version 2) means the app's
   // default rest, 3:00. A number is this exercise's own default, in seconds.
@@ -170,21 +214,33 @@ export function createExercise(input) {
     ? null
     : requireInteger(defaultRestSeconds, "defaultRestSeconds", 0);
   if (defaultRest !== null && defaultRest > MAX_REST_SECONDS) fail(`defaultRestSeconds must be at most ${MAX_REST_SECONDS}`);
-  const primary = requireVocabulary(primaryMuscles, "primaryMuscles", MUSCLES, "muscle");
-  const secondary = requireVocabulary(secondaryMuscles, "secondaryMuscles", MUSCLES, "muscle");
+  const primary = requireVocabulary(primaryMuscles, "primaryMuscles", ALL_MUSCLES, "muscle");
+  const secondary = requireVocabulary(secondaryMuscles, "secondaryMuscles", ALL_MUSCLES, "muscle");
   if (primary.length === 0) fail("primaryMuscles must contain at least one muscle");
   if (secondary.some((muscle) => primary.includes(muscle))) {
     fail("secondaryMuscles must not repeat a primary muscle");
   }
-  return {
+  const record = {
     id: resolveId(id),
     name: requireName(name, "name"),
     primaryMuscles: primary,
     secondaryMuscles: secondary,
-    equipmentTags: requireVocabulary(equipmentTags, "equipmentTags", EQUIPMENT, "equipment tag"),
+    equipmentTags: requireVocabulary(equipmentTags, "equipmentTags", ALL_EQUIPMENT, "equipment tag"),
     notes: optionalNotes(notes, "notes"),
     isCustom: requireBoolean(isCustom, "isCustom"),
     defaultRestSeconds: defaultRest,
+  };
+  // The schema 3 fields: an absent one gets its default (exerciseV3Defaults); null is allowed where the
+  // default is null.
+  return {
+    ...record,
+    baseMovementId: baseMovementId === undefined || baseMovementId === null ? null : requireKebab(baseMovementId, "baseMovementId"),
+    equipment: equipment === undefined || equipment === null ? null : requireOneOf(equipment, "equipment", ALL_EQUIPMENT, "equipment"),
+    variations: requireKebabList(variations, "variations"),
+    origin: requireOrigin(origin === undefined ? exerciseV3Defaults(record).origin : origin, record.isCustom),
+    upstreamId: upstreamId === undefined || upstreamId === null ? null : requireNonEmptyString(upstreamId, "upstreamId"),
+    catalogVersion: catalogVersion === undefined || catalogVersion === null ? null : requireInteger(catalogVersion, "catalogVersion", 1),
+    retired: retired === undefined ? false : requireBoolean(retired, "retired"),
   };
 }
 

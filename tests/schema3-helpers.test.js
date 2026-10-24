@@ -21,7 +21,7 @@ const ROOT = path.resolve(here, "..");
 // ---- vocabularies ----
 
 test("schema 3 helpers: the existing lists are unchanged and the extra ones have exactly the expected contents", () => {
-  assert.equal(SCHEMA_VERSION, 2); // this commit changes no schema
+  assert.equal(SCHEMA_VERSION, 3);
   assert.deepEqual([...MUSCLES], [
     "chest", "front_delts", "side_delts", "rear_delts", "biceps", "triceps", "forearms", "traps", "lats", "upper_back",
     "lower_back", "abs", "obliques", "glutes", "quads", "hamstrings", "calves", "adductors",
@@ -163,9 +163,9 @@ test("schema 3 helpers: grouping every real seed with withSeedGrouping changes o
   }
 });
 
-// ---- nothing calls them yet ----
+// ---- who uses them ----
 
-test("schema 3 helpers: no app code uses them yet (this test is changed by the schema commit that starts using them)", () => {
+test("schema 3 helpers: only the model, the seeds, the upgrade step and the backup code use them; nothing in the UI, the logger or elsewhere", () => {
   const names = /\b(withSeedGrouping|exerciseV3Defaults|ALL_MUSCLES|ALL_EQUIPMENT|EXTRA_MUSCLES|EXTRA_EQUIPMENT|ORIGINS)\b/;
   const users = [];
   const walk = (folder) => {
@@ -177,12 +177,15 @@ test("schema 3 helpers: no app code uses them yet (this test is changed by the s
   };
   walk(path.join(ROOT, "src"));
   for (const file of ["index.html", "sw.js"]) if (names.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) users.push(file);
-  assert.deepEqual(users.sort(), ["src/domain/model.js", "src/domain/seed.js"]); // only where they are defined
+  assert.deepEqual(users.sort(), ["src/backup/backup.js", "src/domain/model.js", "src/domain/seed.js", "src/storage/migrations.js"]);
 });
 
-test("schema 3 helpers: createExercise still returns exactly the eight fields it did, and ignores a field it does not know", async () => {
+test("schema 3 helpers: createExercise returns exactly the fifteen schema 3 fields, accepts neck, and ignores a field it does not know", async () => {
   const { createExercise } = await import("../src/domain/model.js");
-  const record = createExercise({ id: "x", name: "X", primaryMuscles: ["chest"], baseMovementId: "squat", origin: "authored" });
-  assert.deepEqual(Object.keys(record).sort(), ["defaultRestSeconds", "equipmentTags", "id", "isCustom", "name", "notes", "primaryMuscles", "secondaryMuscles"]);
-  assert.throws(() => createExercise({ id: "x", name: "X", primaryMuscles: ["neck"] }), /primaryMuscles/); // neck is not valid until the schema step
+  const record = createExercise({ id: "x", name: "X", primaryMuscles: ["chest"], baseMovementId: "squat", origin: "seed", madeUp: 1 });
+  assert.deepEqual(Object.keys(record).sort(), [
+    "baseMovementId", "catalogVersion", "defaultRestSeconds", "equipment", "equipmentTags", "id", "isCustom", "name", "notes", "origin",
+    "primaryMuscles", "retired", "secondaryMuscles", "upstreamId", "variations",
+  ]);
+  assert.deepEqual(createExercise({ id: "x", name: "X", primaryMuscles: ["neck"] }).primaryMuscles, ["neck"]);
 });

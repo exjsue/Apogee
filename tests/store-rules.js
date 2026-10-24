@@ -120,7 +120,7 @@ rule("exercise: round trip", async (ctx) => {
   const { assert } = ctx;
   const { store } = await openStore(ctx);
   assert.equal(await store.getExercise(EXERCISE.id), null);
-  const saved = await store.saveExercise({ ...EXERCISE, isCustom: true });
+  const saved = await store.saveExercise({ ...EXERCISE, isCustom: true, origin: "custom" }); // schema 3: origin goes with isCustom
   assert.equal(saved.isCustom, true);
   assert.deepEqual(await store.getExercise(EXERCISE.id), saved);
 });

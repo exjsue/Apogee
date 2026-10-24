@@ -288,3 +288,116 @@ rule("upgrade: a version 2 database opened by a version 1 build is refused with 
     assert.deepEqual(await snapshot(again), before);
   });
 });
+
+// ---- schema version 3 ----
+
+// The seven fields schema version 3 adds, as a seed or custom record gets them when it is not grouped.
+const V3_EMPTY = { baseMovementId: null, equipment: null, variations: [], upstreamId: null, catalogVersion: null, retired: false };
+
+// A version 2 database (makeVersion2) plus a real paired seed, as version 2 stored it, with a set logged on it.
+async function makeVersion2WithSeed(name, track) {
+  await makeVersion2(name, track);
+  const adapter = track(createIdbAdapter({ name, version: 2 }));
+  await adapter.open();
+  await adapter.transaction(STORES, "readwrite", async (tx) => {
+    await tx.put("exercises", rawV2Exercise({
+      id: "seed-barbell-squat", name: "Barbell back squat", primaryMuscles: ["quads", "glutes"], secondaryMuscles: ["adductors", "hamstrings", "lower_back"],
+      equipmentTags: ["barbell"], notes: "my note", defaultRestSeconds: 150,
+    }));
+    await tx.put("entries", createWorkoutEntry({ id: "e2", workoutId: "w1", exerciseId: "seed-barbell-squat", order: 1 }));
+    await tx.put("sets", createWorkSet({ id: "s2", entryId: "e2", order: 0, reps: 5, weightValue: 140, weightUnit: "kg", completedAt: "2026-10-01T10:20:00.000Z" }));
+  });
+  const before = await snapshot(adapter);
+  adapter.close();
+  return before;
+}
+
+rule("upgrade 2 to 3: a populated version 2 database becomes version 3; seeds are grouped, customs get origin custom, history is unchanged", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    const before = await makeVersion2WithSeed(name, track);
+    assert.equal(await rawVersion(name), 2);
+    const adapter = track(createIdbAdapter({ name }));
+    await createStore(adapter).open();
+    assert.equal(await rawVersion(name), 3);
+    const after = await snapshot(adapter);
+    const byId = Object.fromEntries(after.exercises.map((e) => [e.id, e]));
+    assert.deepEqual(byId["seed-barbell-squat"], {
+      id: "seed-barbell-squat", name: "Barbell back squat", primaryMuscles: ["quads", "glutes"], secondaryMuscles: ["adductors", "hamstrings", "lower_back"],
+      equipmentTags: ["barbell"], notes: "my note", isCustom: false, defaultRestSeconds: 150,
+      baseMovementId: "squat", equipment: "barbell", variations: [], origin: "seed", upstreamId: "Barbell_Squat", catalogVersion: null, retired: false,
+    });
+    assert.deepEqual(byId["ex-1"], { ...before.exercises.find((e) => e.id === "ex-1"), ...V3_EMPTY, origin: "custom" });
+    assert.deepEqual(byId["seed-a"], { ...before.exercises.find((e) => e.id === "seed-a"), ...V3_EMPTY, origin: "seed" }); // not a real seed: no grouping
+    assert.deepEqual(after.exercises.map(withoutField), before.exercises.map(withoutField)); // no older field changed
+    assert.equal(JSON.stringify(after.workouts), JSON.stringify(before.workouts));
+    assert.equal(JSON.stringify(after.entries), JSON.stringify(before.entries));
+    assert.equal(JSON.stringify(after.sets), JSON.stringify(before.sets));
+    const meta = Object.fromEntries(after.meta.map((m) => [m.key, m.value]));
+    assert.deepEqual([meta.schemaVersion, meta.preferredUnit], [3, "kg"]);
+    const doc = JSON.parse(await createBackup(adapter).exportToText());
+    assert.equal(doc.schemaVersion, 3);
+    assert.equal(doc.data.sets.length, 2);
+    // opening again changes nothing
+    adapter.close();
+    const again = track(createIdbAdapter({ name }));
+    await createStore(again).open();
+    assert.deepEqual(await snapshot(again), after);
+  });
+});
+
+rule("upgrade 2 to 3: if the upgrade fails the whole transaction is undone: still version 2, every record as it was, and the real upgrade works afterwards", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    const before = await makeVersion2WithSeed(name, track);
+    const upgrade = async ({ tx }) => {
+      await tx.put("exercises", { id: "seed-barbell-squat", name: "broken" });
+      await tx.put("meta", { key: "schemaVersion", value: 3 });
+      throw new Error("boom after writes");
+    };
+    const failing = track(createIdbAdapter({ name, upgrade }));
+    await assert.rejects(failing.open(), /storage upgrade failed and was undone/);
+    failing.close();
+    assert.equal(await rawVersion(name), 2);
+    const reader = track(createIdbAdapter({ name, version: 2 }));
+    await reader.open();
+    assert.deepEqual(await snapshot(reader), before);
+    reader.close();
+    const adapter = track(createIdbAdapter({ name }));
+    await createStore(adapter).open();
+    assert.equal(await rawVersion(name), 3);
+    assert.equal((await snapshot(adapter)).exercises.find((e) => e.id === "seed-barbell-squat").upstreamId, "Barbell_Squat");
+  });
+});
+
+rule("upgrade 1 to 3: a version 1 database goes through step 2 and step 3 in the one upgrade", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    const before = await makeVersion1(name, track);
+    const adapter = track(createIdbAdapter({ name }));
+    await createStore(adapter).open();
+    assert.equal(await rawVersion(name), 3);
+    const after = await snapshot(adapter);
+    assert.deepEqual(after.exercises.map((e) => [e.id, e.defaultRestSeconds, e.origin, e.baseMovementId]), [["ex-b", null, "custom", null], ["ex-c", 120, "seed", null], ["seed-a", null, "seed", null]]);
+    assert.deepEqual(after.exercises.map(withoutField), before.exercises.map(withoutField));
+    assert.equal(JSON.stringify(after.sets), JSON.stringify(before.sets));
+    assert.equal(after.meta.find((m) => m.key === "schemaVersion").value, 3);
+  });
+});
+
+rule("upgrade: a version 3 database opened by a version 2 build is refused with a clear message and left alone", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    await makeVersion2WithSeed(name, track);
+    const current = track(createIdbAdapter({ name }));
+    await createStore(current).open(); // now version 3
+    const before = await snapshot(current);
+    current.close();
+    const oldBuild = track(createIdbAdapter({ name, version: 2 })); // what a version 2 build asks for
+    await assert.rejects(oldBuild.open(), /saved by a newer version of Apogee than this code \(schema 2\)/);
+    assert.equal(await rawVersion(name), 3);
+    const again = track(createIdbAdapter({ name }));
+    await again.open();
+    assert.deepEqual(await snapshot(again), before);
+  });
+});

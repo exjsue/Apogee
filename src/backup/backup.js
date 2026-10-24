@@ -11,9 +11,11 @@ import {
   createWorkout,
   createWorkoutEntry,
   createWorkSet,
+  exerciseV3Defaults,
 } from "../domain/model.js";
+import { withSeedGrouping } from "../domain/seed.js";
 import { snoozeUntil } from "../domain/backup-reminder.js";
-import { WORKOUT_META_KEYS } from "../storage/schema.js";
+import { WORKOUT_META_KEYS, CATALOG_VERSION_META_KEY } from "../storage/schema.js";
 
 // Keys in meta. Meta is not part of exports, so none of these travel in a backup.
 const LAST_EXPORT_KEY = "lastExportAt";
@@ -36,7 +38,10 @@ const DATA_STORES = ["exercises", "workouts", "entries", "sets"];
 // Every field a record must have in a file. Nothing is defaulted on import:
 // a record with a missing or extra field is rejected.
 export const RECORD_FIELDS = {
-  exercises: ["id", "name", "primaryMuscles", "secondaryMuscles", "equipmentTags", "notes", "isCustom", "defaultRestSeconds"],
+  exercises: [
+    "id", "name", "primaryMuscles", "secondaryMuscles", "equipmentTags", "notes", "isCustom", "defaultRestSeconds",
+    "baseMovementId", "equipment", "variations", "origin", "upstreamId", "catalogVersion", "retired",
+  ],
   workouts: ["id", "startedAt", "endedAt", "notes"],
   entries: ["id", "workoutId", "exerciseId", "order", "supersetGroup", "notes"],
   sets: [
@@ -44,12 +49,22 @@ export const RECORD_FIELDS = {
   ],
 };
 
-// What a schema version 1 file contains: the same, but exercises had no
+// The fields schema version 3 added to exercises.
+const V3_EXERCISE_FIELDS = ["baseMovementId", "equipment", "variations", "origin", "upstreamId", "catalogVersion", "retired"];
+
+// What a schema version 2 file contains: the same, but exercises had none of the schema 3 fields. A version 2
+// file is accepted as it is (the fields get their defaults, and seeds their grouping); it must not contain them.
+export const RECORD_FIELDS_V2 = {
+  ...RECORD_FIELDS,
+  exercises: RECORD_FIELDS.exercises.filter((field) => !V3_EXERCISE_FIELDS.includes(field)),
+};
+
+// What a schema version 1 file contains: as version 2, but exercises had no
 // defaultRestSeconds. A version 1 file is accepted as it is (the field then
 // becomes null); it must not contain the new field.
 export const RECORD_FIELDS_V1 = {
-  ...RECORD_FIELDS,
-  exercises: RECORD_FIELDS.exercises.filter((field) => field !== "defaultRestSeconds"),
+  ...RECORD_FIELDS_V2,
+  exercises: RECORD_FIELDS_V2.exercises.filter((field) => field !== "defaultRestSeconds"),
 };
 
 const RECORD_TYPES = {
@@ -171,8 +186,11 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
 
   const records = {};
   // The file is checked against the field list of the schema it says it is.
-  const fieldsOf = doc.schemaVersion >= 2 ? RECORD_FIELDS : RECORD_FIELDS_V1;
+  const fieldsOf = doc.schemaVersion >= 3 ? RECORD_FIELDS : doc.schemaVersion === 2 ? RECORD_FIELDS_V2 : RECORD_FIELDS_V1;
   for (const section of DATA_STORES) records[section] = validateSection(section, doc.data[section], fieldsOf);
+  // An older file has none of the schema 3 fields: createExercise gave them their defaults, and its seeds get
+  // their grouping here, by the same function the upgrade step uses.
+  if (doc.schemaVersion < 3) records.exercises = records.exercises.map((record) => withSeedGrouping(record));
 
   const workoutIds = new Set(records.workouts.map((record) => record.id));
   const exerciseIds = new Set(records.exercises.map((record) => record.id));
@@ -232,8 +250,9 @@ export function createBackup(adapter) {
       return snapshot;
     });
     const sorted = {};
-    // An exercise saved before schema version 2 has no defaultRestSeconds; the file always does.
-    const complete = (section, record) => (section === "exercises" ? { defaultRestSeconds: null, ...record } : record);
+    // An exercise saved before schema version 2 has no defaultRestSeconds, and one saved before version 3 none of
+    // its fields (the upgrade adds them, so this is only a safety net); the file always has them.
+    const complete = (section, record) => (section === "exercises" ? { defaultRestSeconds: null, ...exerciseV3Defaults(record), ...record } : record);
     for (const section of DATA_STORES) {
       sorted[section] = data[section].sort(byId).map((record) => withSortedKeys(complete(section, record)));
     }
@@ -380,6 +399,8 @@ export function createBackup(adapter) {
       // replaced (exercise ids, set ids), so they go in the same transaction.
       await tx.delete("meta", WORKOUT_META_KEYS.plan);
       await tx.delete("meta", WORKOUT_META_KEYS.timer);
+      // Whatever catalog state there was belongs to the replaced data, so a later sync must run again.
+      await tx.delete("meta", CATALOG_VERSION_META_KEY);
     });
     return counts;
   }

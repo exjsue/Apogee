@@ -4,6 +4,9 @@ import { createMemoryAdapter } from "../src/storage/memory-adapter.js";
 import { upgradeData, STEPS } from "../src/storage/migrations.js";
 import { failAfter } from "./store-rules.js";
 
+// The step-2 tests run step 2 alone, as they did before step 3 existed.
+const STEPS_TO_2 = STEPS.filter((s) => s.to === 2);
+
 // An exercise as saved by schema version 1: no defaultRestSeconds.
 const v1 = (id, extra = {}) => ({
   id, name: id, primaryMuscles: ["chest"], secondaryMuscles: [], equipmentTags: [], notes: "", isCustom: false, ...extra,
@@ -37,7 +40,7 @@ const run = (adapter, oldVersion, extra = {}) =>
 
 test("migration 1 to 2: every exercise without defaultRestSeconds gets null, and the stored schema version becomes 2", async () => {
   const adapter = await populated();
-  assert.deepEqual(await run(adapter, 1), [2]);
+  assert.deepEqual(await run(adapter, 1, { steps: STEPS_TO_2 }), [2]);
   const after = await snapshot(adapter);
   assert.deepEqual(after.exercises.map((e) => [e.id, e.defaultRestSeconds]), [["a", null], ["b", null], ["c", 120]]);
   assert.deepEqual(after.meta.find((m) => m.key === "schemaVersion"), { key: "schemaVersion", value: 2 });
@@ -46,7 +49,7 @@ test("migration 1 to 2: every exercise without defaultRestSeconds gets null, and
 test("migration 1 to 2: nothing else changes: other fields, history and the other settings stay exactly as they were", async () => {
   const adapter = await populated();
   const before = await snapshot(adapter);
-  await run(adapter, 1);
+  await run(adapter, 1, { steps: STEPS_TO_2 });
   const after = await snapshot(adapter);
   assert.deepEqual(after.workouts, before.workouts);
   assert.deepEqual(after.entries, before.entries);
@@ -61,12 +64,12 @@ test("migration 1 to 2: nothing else changes: other fields, history and the othe
 
 test("migration 1 to 2: a value set after the upgrade is never overwritten, and running again changes nothing (idempotent)", async () => {
   const adapter = await populated();
-  await run(adapter, 1);
+  await run(adapter, 1, { steps: STEPS_TO_2 });
   await adapter.transaction(["exercises"], "readwrite", (tx) => tx.put("exercises", v1("a", { defaultRestSeconds: 90 })));
   const settled = await snapshot(adapter);
-  assert.deepEqual(await run(adapter, 2), []); // already version 2: no step runs
+  assert.deepEqual(await run(adapter, 2, { steps: STEPS_TO_2 }), []); // already version 2: no step runs
   assert.deepEqual(await snapshot(adapter), settled);
-  assert.deepEqual(await run(adapter, 1), [2]); // even if it were run again on version 1 data
+  assert.deepEqual(await run(adapter, 1, { steps: STEPS_TO_2 }), [2]); // even if it were run again on version 1 data
   assert.deepEqual((await snapshot(adapter)).exercises.map((e) => [e.id, e.defaultRestSeconds]), [["a", 90], ["b", null], ["c", 120]]);
 });
 
@@ -83,11 +86,11 @@ test("migration: a failure part-way undoes all of it: no exercise changed and th
   const before = await snapshot(adapter);
   const failing = failAfter(adapter, { puts: 1 }); // the first exercise is written, the second put fails
   await assert.rejects(
-    failing.transaction(STORES, "readwrite", (tx) => upgradeData({ oldVersion: 1, tx })),
+    failing.transaction(STORES, "readwrite", (tx) => upgradeData({ oldVersion: 1, tx, steps: STEPS_TO_2 })),
     /injected failure/,
   );
   assert.deepEqual(await snapshot(adapter), before);
-  assert.deepEqual(await run(adapter, 1), [2]); // and the upgrade still works afterwards
+  assert.deepEqual(await run(adapter, 1, { steps: STEPS_TO_2 }), [2]); // and the upgrade still works afterwards
 });
 
 test("migration: steps run in order, each one writes its own version, and later versions chain", async () => {
@@ -95,11 +98,11 @@ test("migration: steps run in order, each one writes its own version, and later 
   const order = [];
   const steps = [
     ...STEPS,
-    { to: 3, run: async (tx) => { order.push("3"); await tx.put("meta", { key: "three", value: true }); } },
+    { to: 4, run: async (tx) => { order.push("4"); await tx.put("meta", { key: "four", value: true }); } },
   ];
-  assert.deepEqual(await run(adapter, 1, { steps }), [2, 3]);
-  assert.deepEqual(order, ["3"]);
+  assert.deepEqual(await run(adapter, 1, { steps }), [2, 3, 4]);
+  assert.deepEqual(order, ["4"]);
   const after = await snapshot(adapter);
-  assert.equal(after.meta.find((m) => m.key === "schemaVersion").value, 3);
-  assert.deepEqual(await run(adapter, 2, { steps }), [3]); // from version 2 only the new step runs
+  assert.equal(after.meta.find((m) => m.key === "schemaVersion").value, 4);
+  assert.deepEqual(await run(adapter, 3, { steps }), [4]); // from version 3 only the new step runs
 });

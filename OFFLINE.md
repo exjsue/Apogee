@@ -60,6 +60,16 @@ Try these in order, and stop when it works:
 
 Keep a recent export. Browsers can remove a site's data on their own, and an export is the only copy you control.
 
+## An older version meets newer data
+
+The storage format only moves forward. Schema version 3 (exercise grouping fields) upgrades the database the first time the new version opens it, and an older version cannot open it again. If an older version of the app is ever running against the upgraded database (for example a copy that has not updated yet, or the site rolled back), the page shows only this:
+
+> Apogee could not open its database: Database "apogee" was saved by a newer version of Apogee than this code (schema 2). The data was not changed. Update the app.
+
+Nothing is lost: the data is left exactly as it was. There is no Update available banner on that screen, because the app did not start. To get the newer version: close every tab and installed window of the app (on an iPhone, swipe it away in the app switcher) and open it again while online, as in step 2 above. If the site itself was rolled back, it has to be published again at the newer version; an older version can never open schema 3 data.
+
+An export made by the newer version cannot be imported by an older one either (it says the file was exported by a newer version). An export from the older version can always be imported by the newer one.
+
 ## What to look at when it misbehaves
 
 - Backup tab, Offline: is it Ready? Which version?

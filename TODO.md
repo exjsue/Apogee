@@ -76,10 +76,12 @@
   - Audit families.md and outliers.md before wiring the catalog into the app.
   - Decide whether Reverse Triceps Bench Press keeps reverse-grip (its name has no grip word; it is the one approved row that does) and whether the plain reverse curls (Reverse Barbell Curl, Reverse Cable Curl, Reverse Plate Curls, Standing Dumbbell Reverse Curl) should get reverse-grip back by a named override.
   - Wiring the catalog into the app goes in small steps. src/catalog/ is generated and committed, but the app does not import it yet.
-  - Schema v3 plan needs exact diffs and approval before code: new exercise fields (baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired), neck and abductors and five equipment ids in the vocabulary, the upgrade step, and the export and import field lists.
-  - syncCatalog (insert the catalog as builtin records) needs its own explicit approval, after schema v3.
+  - Schema v3 is built (2026-10-23, not yet deployed): the seven exercise fields, the upgrade step 2 to 3 (seeds grouped, customs origin custom, history untouched), seeds as complete v3 records, and the export and import field lists (v1 and v2 files still import). Deploy only after the pre-deploy checklist (exports first, record counts noted, tools/compare-exports.js on the before and after exports).
+  - syncCatalog (insert builtin records, verify records present, retire removed ids) needs its own plan and approval.
   - The catalog refresh path (new catalog version, rewrite of catalog-owned fields only, retired ids) needs its own explicit approval, after syncCatalog.
-  - Seeds: the 15 paired seeds keep their name and muscles and gain grouping fields from src/catalog/seed-grouping.js; seed-lat-pulldown is set by hand (pulldown, cable). Update seed.js in the schema step.
+  - Seeds: done in schema v3. The 15 paired seeds keep their name and muscles and gained grouping fields from src/catalog/seed-grouping.js; seed-lat-pulldown is set by hand (pulldown, cable). Seeds have catalogVersion null: a later refresh must never treat null as older for a seed and never rewrite a seed's name or muscles.
+  - UI: allow neck and the new equipment in the custom form and picker.
+  - OFFLINE.md note: what a v2 build shows on a v3 database. Done 2026-10-23 (OFFLINE.md, "An older version meets newer data").
   - Retired entries are hidden from the picker and search and still resolve in history; ids are never deleted (tools/exercise-catalog/retired.json lists the retired ones).
   - Beta testers: ask them to export before the schema upgrade (no forced prompt).
   - Export stays self-contained and includes the builtin records (about 290 KB more per export): measure a real export on an iPhone after the schema step.
