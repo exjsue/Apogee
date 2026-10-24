@@ -233,6 +233,46 @@ const catalogBrowserRules = [
       notes.push(observer === null ? "Long tasks: not reported by this browser" : `Long tasks during the sync: ${longTasks.length}, longest ${Math.max(0, ...longTasks).toFixed(0)} ms`);
     },
   },
+  ...[
+    ["a history that uses 5 distinct exercises, so the walk hits the 30-workout cap (worst case)", 5, 5],
+    ["a history that cycles through all 16 seeds, so the walk stops after a few workouts (typical)", 16, 8],
+  ].map(([label, pool, expected]) => ({
+    name: `recent exercises (IndexedDB): ${label}; 2,000 workouts and 20,000 sets, throwaway database`,
+    async run(ctx) {
+      const adapter = await seeded(ctx);
+      const exerciseIds = SEED_EXERCISES.slice(0, pool).map((exercise) => exercise.id);
+      const WORKOUTS = 2000;
+      const dayMs = 24 * 60 * 60 * 1000;
+      const first = Date.parse("2020-01-01T10:00:00.000Z");
+      for (let from = 0; from < WORKOUTS; from += 200) {
+        await adapter.transaction(["workouts", "entries", "sets"], "readwrite", async (tx) => {
+          for (let w = from; w < from + 200; w += 1) {
+            const startedAt = new Date(first + w * dayMs).toISOString();
+            await tx.put("workouts", { id: `w${w}`, startedAt, endedAt: startedAt, notes: null });
+            for (let e = 0; e < 2; e += 1) {
+              const entryId = `w${w}-e${e}`;
+              await tx.put("entries", { id: entryId, workoutId: `w${w}`, exerciseId: exerciseIds[(w * 2 + e) % pool], order: e, supersetGroup: null, notes: null });
+              for (let s = 0; s < 5; s += 1) {
+                await tx.put("sets", { id: `${entryId}-s${s}`, entryId, order: s, reps: 5, weightValue: 60, weightUnit: "kg", isWarmup: false, restSeconds: null, completedAt: startedAt });
+              }
+            }
+          }
+        });
+      }
+      const logger = createLogger(createStore(adapter));
+      const times = [];
+      let recent = [];
+      for (let i = 0; i < 5; i += 1) {
+        const started = performance.now();
+        recent = await logger.findRecentExercises();
+        times.push(performance.now() - started);
+      }
+      assert.equal(recent.length, expected);
+      assert.equal(new Set(recent.map((exercise) => exercise.id)).size, expected);
+      assert.equal(recent[0].id, exerciseIds[(1999 * 2 + 1) % pool]); // the newest workout's later entry, set last
+      notes.push(`findRecentExercises, ${WORKOUTS} workouts / ${WORKOUTS * 10} sets, ${pool} distinct exercises (found ${recent.length}), five runs: ${times.map((t) => t.toFixed(0)).join(", ")} ms`);
+    },
+  })),
   {
     name: "catalog (IndexedDB): phase 3 alone, prepareCatalog over the whole catalog, five runs",
     async run() {

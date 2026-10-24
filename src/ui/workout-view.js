@@ -350,17 +350,31 @@ function picker(ctx) {
     }),
   );
 
+  const groupHeading = (text) => h("li", { class: "pick-group", "data-region": "pick-group" }, text);
+
+  // The exercises used most recently, read once per opening of the picker. If the read fails there is no Recent group.
+  let recentRead = null;
+  const readRecent = () => (recentRead ??= logger.findRecentExercises().catch(() => []));
+
   let latest = 0;
   async function refreshList() {
     const mine = ++latest;
     const filters = { muscle: muscle.value(), equipment: equipment.value() };
-    const results = await logger.findExercises(search.value, filters);
+    const plain = search.value.trim() === "" && !filters.muscle && !filters.equipment; // Recent only for the unfiltered list
+    const [results, recent] = await Promise.all([logger.findExercises(search.value, filters), plain ? readRecent() : []]);
     if (mine !== latest) return; // a newer search is already on its way
     Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
-    const shown = results.slice(0, log.limit);
+    // Recent is its own group above the list, not part of the 50-row page; its exercises are not repeated below.
+    const recentIds = new Set(recent.map((exercise) => exercise.id));
+    const rest = recent.length === 0 ? results : results.filter((exercise) => !recentIds.has(exercise.id));
+    const shown = rest.slice(0, log.limit);
     list.replaceChildren(...(results.length === 0
       ? [h("li", { class: "muted" }, "No exercises match.")]
-      : [...shown.map(row), ...(results.length > shown.length ? [moreRow(shown.length, results.length)] : [])]));
+      : [
+        ...(recent.length === 0 ? [] : [groupHeading("Recent"), ...recent.map(row), ...(rest.length === 0 ? [] : [groupHeading("All exercises")])]),
+        ...shown.map(row),
+        ...(rest.length > shown.length ? [moreRow(recent.length + shown.length, results.length)] : []),
+      ]));
   }
   search.addEventListener("input", narrow);
   refreshList();

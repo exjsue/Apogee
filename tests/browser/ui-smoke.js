@@ -1087,6 +1087,86 @@ rule("ui: a filter or a new search narrows the list and starts again from 50 row
   }, { prepare: addSynthetic });
 });
 
+// ---- the picker's Recent group ----
+
+const groupTexts = (root) => [...root.querySelectorAll('[data-region="pick-group"]')].map((el) => el.textContent);
+
+// Three finished workouts: squat (oldest), then pull-up and bench together, then deadlift (newest).
+async function addHistory(store) {
+  const make = async (id, startedAt, uses) => {
+    const entries = uses.map(([exerciseId], order) => ({ id: `${id}-e${order}`, workoutId: id, exerciseId, order }));
+    const sets = uses.map(([, completedAt], order) => ({
+      id: `${id}-s${order}`, entryId: `${id}-e${order}`, order: 0, reps: 5, weightValue: 50, weightUnit: "kg", completedAt,
+    }));
+    await store.saveWorkoutWithDetails({ id, startedAt, endedAt: startedAt }, entries, sets);
+  };
+  await make("h1", "2026-09-01T10:00:00.000Z", [["seed-barbell-squat", "2026-09-01T10:00:00.000Z"]]);
+  await make("h2", "2026-09-02T10:00:00.000Z", [["seed-pull-up", "2026-09-02T10:10:00.000Z"], [BENCH, "2026-09-02T10:20:00.000Z"]]);
+  await make("h3", "2026-09-03T10:00:00.000Z", [["seed-conventional-deadlift", "2026-09-03T10:00:00.000Z"]]);
+}
+
+rule("ui: with history the picker shows a Recent group first, most recent first, and does not repeat those exercises below", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.deepEqual(groupTexts(root), ["Recent", "All exercises"]);
+    const ids = pickIds(root);
+    ctx.assert.deepEqual(ids.slice(0, 4), ["seed-conventional-deadlift", BENCH, "seed-pull-up", "seed-barbell-squat"]);
+    ctx.assert.equal(ids.length, 16); // each of the 16 once
+    ctx.assert.equal(new Set(ids).size, 16);
+    ctx.assert.equal($(root, `[data-exercise-id="${BENCH}"] .pick-meta`).textContent, "Chest · Barbell"); // the same row as in the list
+    const labels = [...root.querySelectorAll('.pick-list > li')].map((li) => li.dataset.region || (li.querySelector("button") ? "row" : "other"));
+    ctx.assert.deepEqual(labels.slice(0, 6), ["pick-group", "row", "row", "row", "row", "pick-group"]);
+  }, { prepare: addHistory });
+});
+
+rule("ui: a search or either filter hides the Recent group, and clearing them brings it back; a blank search does not hide it", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.equal(groupTexts(root).length, 2);
+    setValue(field(root, "search"), "   ");
+    await waitFor(() => field(root, "search").value === "   ", "the blank search");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    ctx.assert.equal(groupTexts(root).length, 2);
+    setValue(field(root, "search"), "squat");
+    await waitFor(() => groupTexts(root).length === 0, "no group while searching");
+    ctx.assert.equal(pickIds(root)[0], "seed-barbell-squat");
+    setValue(field(root, "search"), "");
+    await waitFor(() => groupTexts(root).length === 2, "the group back");
+    chooseOption(field(root, "filter-muscle"), "chest");
+    await waitFor(() => groupTexts(root).length === 0, "no group with the muscle filter");
+    ctx.assert.deepEqual(pickIds(root), ["seed-barbell-bench-press", "seed-incline-dumbbell-press"]); // exactly the filter's own results
+    chooseOption(field(root, "filter-muscle"), "");
+    await waitFor(() => groupTexts(root).length === 2, "the group back");
+    chooseOption(field(root, "filter-equipment"), "barbell");
+    await waitFor(() => groupTexts(root).length === 0, "no group with the equipment filter");
+    chooseOption(field(root, "filter-equipment"), "");
+    await waitFor(() => groupTexts(root).length === 2, "the group back again");
+  }, { prepare: addHistory });
+});
+
+rule("ui: Recent rows are extra to the 50-row page: 4 recent plus 50 more, the label counts both, and Show 50 more continues the rest", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.equal(pickRows(root).length, 54);
+    ctx.assert.equal(moreText(root), "Showing 54 of 136. Search or filter to narrow it down.Show 50 more");
+    ctx.assert.equal(new Set(pickIds(root)).size, 54);
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 104, "104 rows");
+    click(action(root, "pick-more"));
+    await waitFor(() => pickRows(root).length === 136, "all 136 rows");
+    ctx.assert.equal(new Set(pickIds(root)).size, 136); // nothing twice
+    ctx.assert.equal(region(root, "pick-more"), null);
+  }, { prepare: async (store) => { await addSynthetic(store); await addHistory(store); } });
+});
+
+rule("ui: without any history there is no Recent group and the list is as before", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    ctx.assert.deepEqual(groupTexts(root), []);
+    ctx.assert.equal(pickRows(root).length, 16);
+  });
+});
+
 rule("ui: choosing an exercise still adds it and closes the picker, and the next time the picker opens it is clean", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await openPicker(root);

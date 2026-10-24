@@ -6,6 +6,7 @@ import { createWorkout, createWorkoutEntry, createWorkSet, createExercise } from
 import { parseDecimal, parseWholeNumber } from "../domain/format.js";
 import { searchExercises } from "../domain/search.js";
 import { ambiguousCustomIds } from "../domain/exercise-names.js";
+import { exerciseIdsByRecency } from "../domain/recent-exercises.js";
 import {
   DEFAULT_REST_SECONDS, startTimer, rescheduleTimer, isRunning, requireRest,
 } from "../domain/rest-timer.js";
@@ -15,6 +16,8 @@ import {
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
 export const DEFAULT_STALE_AFTER_HOURS = 12;
+export const RECENT_LIMIT = 8; // how many exercises the picker's Recent group shows
+export const RECENT_WORKOUTS = 30; // how many of the newest workouts it looks through (each is one read; 2,000 took 2 to 3.5 s)
 const UNKNOWN_EXERCISE = "Unknown exercise";
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -490,6 +493,32 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return searchExercises(await store.listExercises(), query, filters);
   }
 
+  // The exercises used most recently, most recent first, at most `limit` (default RECENT_LIMIT), derived from
+  // saved sets only (planned rows live in meta and are never read here). Matched by exercise id. Retired
+  // exercises and ids that no longer exist are skipped and do not use up a place. It reads workouts newest
+  // first, one at a time, and stops as soon as it has enough. It also looks through at most `maxWorkouts`
+  // (default RECENT_WORKOUTS) workouts, so a history that uses few distinct exercises cannot make it read
+  // everything: an exercise last used longer ago than that is not "recent".
+  async function findRecentExercises(limit = RECENT_LIMIT, maxWorkouts = RECENT_WORKOUTS) {
+    if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a whole number of at least 1");
+    if (!Number.isInteger(maxWorkouts) || maxWorkouts < 1) throw new Error("maxWorkouts must be a whole number of at least 1");
+    const usable = new Map((await store.listExercises()).filter((exercise) => exercise.retired !== true).map((exercise) => [exercise.id, exercise]));
+    const found = [];
+    const seen = new Set();
+    for (const workout of (await store.listWorkouts()).slice(0, maxWorkouts)) {
+      if (found.length >= limit) break;
+      const details = await store.getWorkoutWithDetails(workout.id);
+      if (details === null) continue;
+      for (const id of exerciseIdsByRecency(details.entries)) {
+        if (found.length >= limit) break;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        if (usable.has(id)) found.push(usable.get(id));
+      }
+    }
+    return found;
+  }
+
   // Finished workouts, newest first, with entry and set counts.
   async function getHistory() {
     return (await store.listWorkoutSummaries()).filter((workout) => workout.endedAt !== null);
@@ -527,6 +556,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     suggestNextSet,
     addCustomExercise,
     findExercises,
+    findRecentExercises,
     getHistory,
     deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
