@@ -692,7 +692,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const workout = await store.getWorkout(id); // an empty or non-string id is refused here
     if (workout === null) throw new Error("There is no workout with that id");
     if (workout.endedAt === null) {
-      throw new Error("This workout is not finished; use Discard on the Log tab instead");
+      throw new Error("This workout is not finished; use Discard on the New tab instead");
     }
     return store.deleteWorkout(id);
   }

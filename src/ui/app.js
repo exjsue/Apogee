@@ -14,7 +14,7 @@ import { renderSettingsView } from "./settings-view.js";
 import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
 const TABS = [
-  { id: "log", label: "Log", render: renderLogView },
+  { id: "log", label: "New", render: renderLogView },
   { id: "history", label: "History", render: renderHistoryView },
   { id: "backup", label: "Backup", render: renderBackupView },
   { id: "settings", label: "Settings", render: renderSettingsView },

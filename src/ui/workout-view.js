@@ -452,7 +452,7 @@ export async function renderLogView(ctx) {
   stopTicker(ctx);
   stopElapsed(ctx);
   const session = await ctx.services.logger.getSession();
-  const view = h("section", { class: "view", "aria-label": "Log" });
+  const view = h("section", { class: "view", "aria-label": "New" });
 
   if (log.notice) {
     view.append(h("p", { class: "notice", role: "status", "data-region": "notice" }, log.notice));

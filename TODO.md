@@ -122,3 +122,4 @@
 - [ ] iPhone native app / Android
 - [ ] Opt-in AI feature (do not build until owner approves)
 - [ ] Search ranking: name matches should rank above equipment/notes matches (e.g. 'bench' returns Barbell hip thrust). Deferred by John 2026-10-24.
+- [ ] Make the logger.js "not finished; use Discard on the New tab" error message tab-agnostic (domain logic should not name a UI tab). Deferred 2026-10-24.

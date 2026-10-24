@@ -107,7 +107,7 @@ async function list(ctx) {
   const workouts = await ctx.services.logger.getHistory();
   const view = h("section", { class: "view", "aria-label": "History" }, h("h2", {}, "History"));
   if (workouts.length === 0) {
-    view.append(h("p", { class: "muted" }, "No finished workouts yet. Finish a workout on the Log tab and it appears here."));
+    view.append(h("p", { class: "muted" }, "No finished workouts yet. Finish a workout on the New tab and it appears here."));
     return view;
   }
   view.append(h(
