@@ -1,0 +1,89 @@
+# ===========================================================================
+#  Exercises you add by hand
+# ===========================================================================
+#
+#  This file is for default exercises that the upstream list does not have.
+#  Each exercise is one block of lines. Blocks are separated by a line of three
+#  dashes:  ---
+#
+#  Lines that start with # are notes for people. They are ignored, so you can
+#  leave them here. (A # only works at the very start of a line.)
+#
+#  This file starts with NO exercises. Everything below is explanation, and the
+#  one example is switched off by the # at the start of each of its lines.
+#
+#  To add an exercise: copy the example block, remove the # from its lines,
+#  fill it in, and run the build:
+#      node tools/exercise-catalog/build-catalog.js --input <file> --out <folder>
+#  If something is wrong, the build stops and says what, where, and the exact
+#  line to paste. It never changes this file for you.
+#
+# ---------------------------------------------------------------------------
+#  The fields (write each as  field: value  on one line)
+# ---------------------------------------------------------------------------
+#
+#  id          REQUIRED. The exercise's permanent name for the computer.
+#              It must start with  apogee-  and then use only lower-case letters,
+#              digits and single hyphens, for example  apogee-reverse-nordic-curl
+#              Write it once, by hand, and NEVER change it afterwards: your
+#              workout history points at this id. If you leave it out, the build
+#              suggests one for you to paste in.
+#
+#  name        REQUIRED. What you see on screen, for example  Reverse Nordic Curl
+#              If it is very close to an exercise that already exists, the build
+#              asks "Did you mean ...?" (see similar-ok below).
+#
+#  base        REQUIRED. The kind of movement, from the list in vocab.json,
+#              for example  squat  or  bench-press  or  deadlift.
+#              If your movement is not in that list, add it to the
+#              baseMovements list in vocab.json first.
+#
+#  equipment   REQUIRED. The one thing that carries the load, for example
+#              barbell, dumbbell, kettlebell, cable, machine, smith_machine,
+#              trap_bar, resistance_band, bodyweight. The build prints the full
+#              list if you get it wrong.
+#
+#  variations  Optional. What makes this version different, separated by commas,
+#              for example  pins, paused. Only words from vocab.json are allowed.
+#
+#  primary     REQUIRED. The muscles that do most of the work, separated by
+#              commas, for example  quads, glutes. At least one.
+#
+#  secondary   Optional. Muscles that help. Do not repeat a primary muscle here.
+#
+#  category    Optional. strength, stretching, plyometrics, strongman,
+#              powerlifting, cardio or olympic weightlifting. Left out = strength.
+#
+#  level       Optional. beginner, intermediate or expert.
+#  mechanic    Optional. compound or isolation.
+#  force       Optional. push, pull or static.
+#
+#  similar-ok  Only when the build asked "Did you mean ...?" and your exercise is
+#              really a different one. List the ids it showed you, separated by
+#              commas. It only silences the ids you list.
+#
+#  retired     Optional. Write  retired: yes  to stop offering an exercise
+#              without deleting it. NEVER delete a block: old workouts still
+#              point at it.
+#
+# ---------------------------------------------------------------------------
+#  Example (switched off: remove the # at the start of each line to use it)
+# ---------------------------------------------------------------------------
+#
+# id: apogee-reverse-nordic-curl
+# name: Reverse Nordic Curl
+# base: squat
+# equipment: bodyweight
+# variations: single-leg
+# primary: quads
+# secondary: abs
+# category: strength
+# level: intermediate
+# mechanic: isolation
+# force: push
+#
+#  (Put a line with three dashes, ---, between two exercises.)
+#
+# ===========================================================================
+#  Your exercises go below this line
+# ===========================================================================

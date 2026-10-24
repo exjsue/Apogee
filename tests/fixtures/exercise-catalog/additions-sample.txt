@@ -1,0 +1,23 @@
+# Two sample additions, used only by the tests. They are not in the real additions.txt.
+# (Their group keys and names do not clash with anything in the 110-entry fixture.)
+
+id: apogee-pin-squat
+name: Pin Squat
+base: squat
+equipment: barbell
+variations: pins
+primary: quads, glutes
+secondary: hamstrings, lower_back
+level: intermediate
+mechanic: compound
+force: push
+---
+id: apogee-zercher-deadlift
+name: Zercher Deadlift
+base: deadlift
+equipment: barbell
+variations: zercher
+primary: lower_back
+secondary: glutes, hamstrings
+category: powerlifting
+retired: yes

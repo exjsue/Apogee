@@ -11,13 +11,13 @@ export function renderReviewBatches(review) {
     const lines = [
       `# Review batch ${number} (rows ${start + 1} to ${start + rows.length} of ${review.length}; most uncertain first)`,
       "",
-      "| Upstream id | Name | Why it is here | Base movement | Equipment | Variations | Primary | Secondary | Unplaced |",
-      "|---|---|---|---|---|---|---|---|---|",
+      "| Upstream id | Name | Why it is here | Base movement | Other families that also matched | Equipment | Variations | Primary | Secondary | Unplaced |",
+      "|---|---|---|---|---|---|---|---|---|---|",
     ];
-    for (const { entry, reasons } of rows) {
+    for (const { entry, reasons, alternatives = [] } of rows) {
       const unplaced = (entry.unplacedMuscles ?? []).map((u) => `${u.upstream} (${u.role})`);
       lines.push(
-        `| ${entry.id} | ${entry.name} | ${reasons.join(", ")} | ${entry.baseMovementId ?? "null"} | ${entry.equipment} | ${list(entry.variations)} | ${list(entry.primaryMuscles)} | ${list(entry.secondaryMuscles)} | ${list(unplaced)} |`,
+        `| ${entry.id} | ${entry.name} | ${reasons.join(", ")} | ${entry.baseMovementId ?? "null"} | ${list(alternatives)} | ${entry.equipment} | ${list(entry.variations)} | ${list(entry.primaryMuscles)} | ${list(entry.secondaryMuscles)} | ${list(unplaced)} |`,
       );
     }
     batches.push({ name: `review-${number}.md`, text: `${lines.join("\n")}\n` });
@@ -62,7 +62,7 @@ const tally = (items) => {
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)));
 };
 
-export function summarize({ upstreamCount, result, overrideCount, strict }) {
+export function summarize({ upstreamCount, result, overrideCount, strict, additionsCount = 0 }) {
   const { entries, review, audit, provenance, keyClashes, nameClashes, excludedByOverride, excludedForSeeds } = result;
   const needsHuman = review;
   const needsByCategory = tally(needsHuman.map((r) => r.entry.category ?? "(none)"));
@@ -76,6 +76,7 @@ export function summarize({ upstreamCount, result, overrideCount, strict }) {
   return {
     upstreamEntries: upstreamCount,
     catalogEntries: entries.length,
+    ...(additionsCount > 0 ? { additionsEntries: additionsCount } : {}), // hand-written, origin apogee; shown only when there are some
     excludedByOverride: excludedByOverride.length,
     excludedForSeeds: excludedForSeeds.length,
     overridesApplied: overrideCount,
@@ -100,6 +101,7 @@ export function summarize({ upstreamCount, result, overrideCount, strict }) {
       byReason: tally(review.flatMap((r) => r.reasons)),
     },
     keyClashGroups: keyClashes.length,
+    keyClashWarningOnlyGroups: keyClashes.filter((c) => c.warningOnly).length,
     nameClashGroups: nameClashes.length,
     byCategory: categories,
     strictMode: strict,
@@ -112,6 +114,7 @@ export function renderSummary(summary) {
     "",
     `Upstream entries: ${summary.upstreamEntries}`,
     `Catalog entries: ${summary.catalogEntries} (left out: ${summary.excludedByOverride} by override, ${summary.excludedForSeeds} for confirmed seed pairs)`,
+    ...(summary.additionsEntries > 0 ? [`Hand-written additions (origin apogee): ${summary.additionsEntries}, on top of the catalog entries above`] : []),
     `Overrides applied: ${summary.overridesApplied}`,
     "",
     "Equipment, decided by:",
@@ -129,7 +132,7 @@ export function renderSummary(summary) {
     "",
     `Review list: ${summary.reviewList.rows} rows in ${summary.reviewList.batches} batches`,
     ...Object.entries(summary.reviewList.byReason).map(([k, v]) => `  ${k}: ${v}`),
-    `Key clash groups: ${summary.keyClashGroups}; near-duplicate name groups: ${summary.nameClashGroups}`,
+    `Key clash groups: ${summary.keyClashGroups} (${summary.keyClashWarningOnlyGroups} of them in families where a shared key is expected and not reviewed); near-duplicate name groups: ${summary.nameClashGroups}`,
     "",
     "By category (entries / needing a human):",
     ...summary.byCategory.map((c) => `  ${c.category}: ${c.entries} / ${c.needHuman}`),

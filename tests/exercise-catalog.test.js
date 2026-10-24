@@ -146,11 +146,14 @@ test("catalog: a name that merely contains squat, deadlift or press is not force
   ]);
   const base = Object.fromEntries(result.entries.map((e) => [e.id, e.baseMovementId]));
   assert.deepEqual(base, {
-    Barbell_Step_Ups: null, Good_Morning_X: "good-morning", Incline_Dumbbell_Press: null, Split_Jerk: null, Squat_Jerk_X: "jerk", TGU_Lunge: "turkish-get-up",
+    // 2026-10-23: the three that used to be null (no family existed yet) now join the families the owner approved:
+    // step-up, and the bench-press and jerk bases widened. The other three are unchanged.
+    Barbell_Step_Ups: "step-up", Good_Morning_X: "good-morning", Incline_Dumbbell_Press: "bench-press", Split_Jerk: "jerk", Squat_Jerk_X: "jerk", TGU_Lunge: "turkish-get-up",
   });
-  for (const id of ["Incline_Dumbbell_Press", "Barbell_Step_Ups", "Split_Jerk"]) {
-    assert.ok(result.review.find((r) => r.entry.id === id).reasons.includes("null-base-movement"), `${id} should be on the review list`);
-  }
+  // The old assertion's intent (a name that only resembles a movement is not forced into it) is still covered by
+  // tests/exercise-families.test.js, and an entry with no family still goes on the review list:
+  const none = plainCurate([upstreamEntry({ id: "Odd_Move", name: "Zzz Odd Move", primaryMuscles: ["quadriceps"] })]);
+  assert.ok(none.review.find((r) => r.entry.id === "Odd_Move").reasons.includes("null-base-movement"));
 });
 
 test("catalog: a shoulder is placed in a head only when the name says which, otherwise left unplaced and never guessed", () => {

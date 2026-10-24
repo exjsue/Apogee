@@ -4,7 +4,7 @@
 import crypto from "node:crypto";
 import { classifyEquipment, equipmentTagsFor } from "./rules-equipment.js";
 import { mapMuscles } from "./rules-muscles.js";
-import { baseMovementFor, variationsFor } from "./rules-movement.js";
+import { classifyBase, variationsFor } from "./rules-movement.js";
 
 const OVERRIDE_KEYS = ["name", "baseMovementId", "equipment", "equipmentTags", "variations", "primaryMuscles", "secondaryMuscles", "exclude", "note"];
 
@@ -15,6 +15,7 @@ export const REASON_WEIGHTS = Object.freeze({
   "equipment-uncertain": 3,
   "key-clash": 3,
   "duplicate-suspect": 3,
+  "multiple-families": 2,
   "null-base-movement": 1,
 });
 
@@ -93,16 +94,15 @@ const normalizedName = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, "").re
 
 function curateOne(entry, override, vocabulary) {
   const eq = classifyEquipment(entry);
-  const baseRule = baseMovementFor(entry.name);
   const primary = mapMuscles(entry, entry.primaryMuscles);
   const secondary = mapMuscles(entry, entry.secondaryMuscles);
 
   const decisions = [...primary.notes, ...secondary.notes];
   if (!/^(upstream|override)/.test(eq.by)) decisions.push(`equipment:${eq.by}`);
-  const how = { equipment: eq.by, baseMovement: baseRule === null ? "none" : "rule", muscles: "rule", variations: "rule" };
+  const how = { equipment: eq.by, baseMovement: "none", muscles: "rule", variations: "rule" };
   let equipment = eq.equipment;
   let equipmentUncertain = eq.uncertain;
-  let baseMovementId = baseRule;
+  let baseMovementId = null; // decided below, once the primary muscles are final
   let primaryMuscles = primary.placed;
   let secondaryMuscles = secondary.placed.filter((m) => !primary.placed.includes(m));
   const duplicatesRemoved = secondary.placed.length - secondaryMuscles.length;
@@ -137,13 +137,27 @@ function curateOne(entry, override, vocabulary) {
     if (override.exclude === true) exclude = true;
     if (secondaryMuscles.some((m) => primaryMuscles.includes(m))) fail(`override "${entry.id}": a secondary muscle repeats a primary one`);
   }
-  if (variations === null) variations = baseMovementId === null ? [] : variationsFor(entry.name, equipment);
+  // The base movement comes from the rules unless an override set it. The family rules read the final
+  // primary muscles, so an entry whose shoulder head was placed by hand is judged on that placement.
+  let byFamily = false;
+  let alternatives = [];
+  if (override === undefined || override.baseMovementId === undefined) {
+    const found = classifyBase({ name: entry.name, category: entry.category ?? null, primary: primaryMuscles });
+    baseMovementId = found.id;
+    byFamily = found.byFamily;
+    alternatives = found.alternatives;
+    how.baseMovement = found.id === null ? "none" : "rule";
+  }
+  if (variations === null) {
+    variations = baseMovementId === null ? [] : variationsFor(entry.name, equipment, byFamily ? { id: baseMovementId, primary: primaryMuscles } : null);
+  }
   if (equipmentTags === null) equipmentTags = equipmentTagsFor(equipment, baseMovementId);
 
   return {
     exclude,
     exclusionNote: exclude ? override.note : null,
     uncertainEquipment: equipmentUncertain,
+    alternatives, // other families that also matched, when a family decided the base
     duplicatesRemoved,
     how,
     decisions,
@@ -162,6 +176,7 @@ function curateOne(entry, override, vocabulary) {
       mechanic: entry.mechanic ?? null,
       force: entry.force ?? null,
       source: "builtin",
+      origin: "upstream",
     },
   };
 }
@@ -194,8 +209,11 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key).push(c.entry.id);
   }
-  const keyClashes = [...byKey].filter(([, list]) => list.length > 1).map(([key, list]) => ({ key, ids: list }));
-  const clashing = new Set(keyClashes.flatMap((c) => c.ids));
+  // For the families that are not progressions (stretches, jumps, ...) a shared key is expected, so it is
+  // listed but is not a reason to review the entries (vocab.json: keyClashWarningFamilies).
+  const warningFamilies = new Set(vocabulary.keyClashWarningFamilies ?? []);
+  const keyClashes = [...byKey].filter(([, list]) => list.length > 1).map(([key, list]) => ({ key, ids: list, warningOnly: warningFamilies.has(key.split("|")[0]) }));
+  const clashing = new Set(keyClashes.filter((c) => !c.warningOnly).flatMap((c) => c.ids));
 
   const byName = new Map();
   for (const c of kept) {
@@ -214,9 +232,10 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
     if (c.uncertainEquipment) reasons.push("equipment-uncertain");
     if (clashing.has(c.entry.id)) reasons.push("key-clash");
     if (suspects.has(c.entry.id)) reasons.push("duplicate-suspect");
+    if (c.alternatives.length > 0) reasons.push("multiple-families");
     if (c.entry.baseMovementId === null) reasons.push("null-base-movement");
     if (reasons.length > 0) {
-      review.push({ entry: c.entry, reasons, score: reasons.reduce((n, r) => n + REASON_WEIGHTS[r], 0), how: c.how });
+      review.push({ entry: c.entry, reasons, alternatives: c.alternatives, score: reasons.reduce((n, r) => n + REASON_WEIGHTS[r], 0), how: c.how });
     }
   }
   const audit = kept

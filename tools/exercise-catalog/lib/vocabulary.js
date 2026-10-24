@@ -19,6 +19,7 @@ export function loadVocabulary(file = path.join(here, "..", "vocab.json")) {
     equipment: [...EQUIPMENT, ...ADDED_EQUIPMENT.filter((e) => !EQUIPMENT.includes(e))],
     baseMovements: data.baseMovements,
     variations: data.variations,
+    keyClashWarningFamilies: data.keyClashWarningFamilies ?? [], // families where a shared group key is expected, not an error
     nameMaxLength: NAME_MAX_LENGTH,
   };
 }

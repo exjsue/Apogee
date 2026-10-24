@@ -1,7 +1,7 @@
 // Builds the exercise catalog from a pinned local copy of free-exercise-db's dist/exercises.json.
 //
-//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>]
-// (--pin and --overrides exist for the tests, which run on a fixture.)
+//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>] [--additions <file>]
+// (--pin, --overrides and --additions exist for the tests, which run on a fixture.)
 //
 // It makes no network call: the input is a file someone fetched earlier, and it must match
 // input-pin.json byte for byte (its SHA-256), so it can never run on anything else. Every output goes
@@ -15,6 +15,7 @@ import { loadVocabulary, missingFromModel } from "./lib/vocabulary.js";
 import { curate, entriesWithoutPrimary, stringify } from "./lib/curate.js";
 import { renderReviewBatches, renderAudit, renderExcluded, summarize, renderSummary } from "./lib/review.js";
 import { candidatePairs, renderSeedPairs } from "./lib/seed-pairs.js";
+import { buildAdditions, formatProblems, formatWarnings } from "./lib/additions.js";
 import { SEED_EXERCISES } from "../../src/domain/seed.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +26,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--strict") args.strict = true;
-    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides") {
+    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides" || arg === "--additions") {
       args[arg.slice(2)] = argv[i + 1];
       i += 1;
     } else throw new Error(`unknown argument: ${arg}`);
@@ -62,12 +63,34 @@ export function run(argv) {
   const confirmedPairs = readJson(path.join(here, "confirmed-seed-pairs.json"));
   const result = curate({ upstream, overrides, vocabulary, seeds: SEED_EXERCISES, confirmedPairs });
 
-  const summary = summarize({ upstreamCount: upstream.length, result, overrideCount: Object.keys(overrides).length, strict: args.strict });
+  // The hand-written exercises are checked on their own and appended after curation. A problem stops the
+  // build before anything else is written, and is printed and saved in plain words.
+  const additionsText = fs.readFileSync(args.additions ?? path.join(here, "additions.txt"), "utf8");
+  const added = buildAdditions({ text: additionsText, upstream, curated: result.entries, seeds: SEED_EXERCISES, vocabulary });
+  fs.mkdirSync(args.out, { recursive: true });
+  const problemsFile = path.join(args.out, "additions-problems.txt");
+  if (added.problems.length > 0) {
+    const report = formatProblems(added.problems);
+    fs.writeFileSync(problemsFile, report);
+    throw new Error(`\n${report}\n(The same text is in ${problemsFile})`);
+  }
+  fs.rmSync(problemsFile, { force: true }); // a fixed file must not leave an old report behind
+  const warningsFile = path.join(args.out, "additions-warnings.txt");
+  fs.rmSync(warningsFile, { force: true });
+  if (added.warnings.length > 0) {
+    const report = formatWarnings(added.warnings);
+    fs.writeFileSync(warningsFile, report);
+    process.stderr.write(`${report}\n`);
+  }
+  const everyEntry = [...result.entries, ...added.entries];
+
+  const summary = summarize({ upstreamCount: upstream.length, result, overrideCount: Object.keys(overrides).length, strict: args.strict, additionsCount: added.entries.length });
   const files = [
     ["catalog.json", stringify({
       source: { repo: pin.repo, file: pin.file, commit: pin.commit, sha256: pin.sha256 },
+      notice: "Entries with origin \"upstream\" are derived from the source above, which is released under the Unlicense. Entries with origin \"apogee\" were written by hand for Apogee and are not covered by that statement.",
       modelNeeds: missingFromModel(),
-      exercises: result.entries,
+      exercises: everyEntry,
     })],
     ["summary.json", stringify(summary)],
     ["summary.txt", renderSummary(summary)],
@@ -77,13 +100,12 @@ export function run(argv) {
     ["key-clashes.json", stringify({ keyClashes: result.keyClashes, nameClashes: result.nameClashes })],
     ...renderReviewBatches(result.review).map((b) => [b.name, b.text]),
   ];
-  fs.mkdirSync(args.out, { recursive: true });
   for (const old of fs.readdirSync(args.out)) {
     if (/^review-\d+\.md$/.test(old)) fs.rmSync(path.join(args.out, old)); // a shorter list must not leave old batches behind
   }
   for (const [name, text] of files) fs.writeFileSync(path.join(args.out, name), text);
 
-  const noPrimary = entriesWithoutPrimary(result.entries);
+  const noPrimary = entriesWithoutPrimary(everyEntry);
   if (args.strict && noPrimary.length > 0) {
     throw new Error(`--strict: ${noPrimary.length} entries have no primary muscle (see the review list); place them in overrides.json first`);
   }
