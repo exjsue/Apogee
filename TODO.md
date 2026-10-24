@@ -60,11 +60,12 @@
 ## UI / UX and Logging (added 2026-10-23)
 - [x] Workout templates, data layer (done 2026-10-24, schema 4, not yet deployed): a template is its own record (name, ordered exercises with set counts) in a templates store; templateFromWorkout makes one from a finished workout (working sets only); export, import and the upgrade from every older schema are tested. No UI yet.
 - [ ] **Task 2: templates UI** (needs a plan with diffs and approval, like the data layer):
-  - Save as template on a finished workout in History (asks for a name; refused with the model's message when empty or over 80 characters; duplicate names are allowed).
-  - A templates section in the tab, and rename the tab from "Log" to "New".
-  - Start a workout from a template: its exercises go into plan.exercises in template order, each with setCount blank unchecked rows (orders 0..setCount-1, reps and weight blank so the ghosts fill them, rest null, isWarmup false). Decide what happens when a plan or workout is already open.
+  - [x] (commit 1, awaiting approval) Save as template on a finished workout in History (asks for a name; refused with the model's message when empty or over 80 characters; duplicate names are allowed).
+  - [x] (commit 1, awaiting approval) A templates section in the tab, with Start, Rename and Delete; the tab was already renamed from "Log" to "New".
+  - [x] (commit 1, awaiting approval; refused while anything is planned or running) Start a workout from a template: its exercises go into plan.exercises in template order, each with setCount blank unchecked rows (orders 0..setCount-1, reps and weight blank so the ghosts fill them, rest null, isWarmup false). Decide what happens when a plan or workout is already open.
   - The import preview gets a templates row: importing any file replaces the templates, and a file older than schema 4 leaves none.
   - src/domain/template.js enters the precache list once the UI imports it (rebuild sw-manifest.js).
+  - [ ] Focus gap: when a workout is stale, the "Current workout" heading is not drawn, so focus after deleting the last template has no target and falls to the body (keyboard/VoiceOver gap, to fix later).
 - [ ] Workout naming: allow naming a workout both during the session and after it is finished.
 - [ ] Reorder sets within an exercise mid-workout. Set labels renumber. Logged data stays intact.
   - Risk: unchecked "planned" rows live in meta and checked sets are real records. Reordering must handle both without losing or duplicating either.

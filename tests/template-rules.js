@@ -5,10 +5,12 @@
 // Expected values are written out by hand; none is computed with the code under test.
 
 import { SCHEMA_VERSION, createExercise } from "../src/domain/model.js";
-import { templateFromWorkout } from "../src/domain/template.js";
+import { templateFromWorkout, planFromTemplate } from "../src/domain/template.js";
+import { emptyPlan } from "../src/domain/workout-plan.js";
 import { createStore } from "../src/storage/store.js";
+import { createLogger } from "../src/app/logger.js";
 import { createBackup, inspectBackup } from "../src/backup/backup.js";
-import { EXERCISE, makeDetails } from "./store-rules.js";
+import { EXERCISE, makeDetails, rawCounts } from "./store-rules.js";
 import { seedFull, fileOf, NOW } from "./backup-rules.js";
 
 export const templateRules = [];
@@ -228,4 +230,102 @@ rule("templates: hostile or malformed templates in a file are refused, naming th
   }
   assert.equal({}.polluted, undefined);
   assert.deepEqual(await rawTemplates(adapter), [LEGS]);
+});
+
+// ---- the UI's operations, through the logger ----
+
+rule("templates: planFromTemplate adds the exercises in the template's order, each with setCount blank unchecked rows", async (ctx) => {
+  const { assert } = ctx;
+  let n = 0;
+  const plan = planFromTemplate(emptyPlan(), PUSH, { unit: "lb", newId: () => `r${++n}` });
+  const blank = (id, exerciseId, order) => ({ id, exerciseId, order, reps: "", weight: "", unit: "lb", restSeconds: null, isWarmup: false });
+  assert.deepEqual(plan.exercises, ["ex-bench", "ex-squat"]);
+  assert.deepEqual(plan.rows, [
+    blank("r1", "ex-bench", 0), blank("r2", "ex-bench", 1), blank("r3", "ex-bench", 2),
+    blank("r4", "ex-squat", 0), blank("r5", "ex-squat", 1),
+  ]);
+});
+
+rule("templates: startFromTemplate plans blank rows; refused, nothing written, while rows are planned or a workout is running", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await open(ctx);
+  await store.saveExercise(EXERCISE);
+  await store.saveExercise(BENCH);
+  await store.saveTemplate(PUSH);
+  await store.setPreferredUnit("kg");
+  const logger = createLogger(store);
+
+  await assert.rejects(logger.startFromTemplate("t-nothing"), /no longer exists/);
+  assert.equal((await logger.startFromTemplate("t-push")).id, "t-push");
+  let session = await logger.getSession();
+  assert.equal(session.status.kind, "none");
+  assert.equal(session.loggedCount, 0);
+  assert.deepEqual(session.blocks.map((block) => [block.exerciseId, block.rows.map((row) => row.order)]), [["ex-bench", [0, 1, 2]], ["ex-squat", [0, 1]]]);
+  assert.ok(session.blocks.every((block) => block.rows.every((row) => (
+    row.kind === "planned" && row.reps === "" && row.weight === "" && row.unit === "kg" && row.isWarmup === false))));
+
+  // rows already planned and no workout yet: refused, the plan is unchanged
+  await assert.rejects(logger.startFromTemplate("t-push"), /Sets are already planned.*Finish workout/);
+  assert.equal((await logger.getSession()).plannedCount, 5);
+
+  // a running workout: refused, the plan is unchanged
+  await logger.checkSet(session.blocks[0].rows[0].id, { reps: "5", weight: "100" });
+  await assert.rejects(logger.startFromTemplate("t-push"), /A workout is already running.*Finish workout.*Discard workout/);
+  session = await logger.getSession();
+  assert.equal(session.plannedCount, 4);
+  assert.equal(session.loggedCount, 1);
+});
+
+rule("templates: startFromTemplate is refused beside an unfinished old workout, and when a listed exercise is gone", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store } = await open(ctx);
+  await store.saveExercise(EXERCISE);
+  await store.saveExercise(BENCH);
+  await store.saveTemplate(PUSH);
+  const logger = createLogger(store);
+
+  await adapter.transaction(["exercises"], "readwrite", (tx) => tx.delete("exercises", "ex-bench"));
+  await assert.rejects(logger.startFromTemplate("t-push"), /"Push day" lists an exercise that is no longer in the library/);
+  assert.equal((await logger.getSession()).plannedCount, 0);
+
+  const old = createLogger(store, { now: () => new Date("2026-01-01T10:00:00.000Z") });
+  await old.logSet({ exerciseId: "ex-squat", reps: "5", weight: "100", weightUnit: "kg" });
+  await assert.rejects(logger.startFromTemplate("t-push"), /unfinished workout is waiting.*"Finish" or "Discard"/);
+  assert.equal((await logger.getSession()).plannedCount, 0);
+});
+
+rule("templates: saveWorkoutAsTemplate, renameTemplate and deleteTemplate; refusals write nothing and delete never touches workouts", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store } = await open(ctx);
+  await finishedWorkout(store);
+  const logger = createLogger(store);
+
+  const saved = await logger.saveWorkoutAsTemplate("w1", "  My \n push ");
+  assert.equal(saved.name, "My push");
+  assert.deepEqual(saved.exercises, [{ exerciseId: "ex-bench", setCount: 3 }, { exerciseId: "ex-squat", setCount: 2 }]);
+  const twin = await logger.saveWorkoutAsTemplate("w1", "My push"); // duplicate names are allowed
+  assert.ok(twin.id !== saved.id);
+  assert.equal((await logger.listTemplates()).length, 2);
+
+  const warmups = makeDetails("w2", 1, 1);
+  await store.saveWorkoutWithDetails({ ...warmups.workout, endedAt: "2026-10-22T11:00:00.000Z" }, warmups.entries, warmups.sets.map((set) => ({ ...set, isWarmup: true })));
+  const open3 = makeDetails("w3", 1, 1);
+  await store.saveWorkoutWithDetails(open3.workout, open3.entries, open3.sets);
+  await assert.rejects(logger.saveWorkoutAsTemplate("w1", "   "), /name must be a non-empty string/);
+  await assert.rejects(logger.saveWorkoutAsTemplate("w1", "x".repeat(81)), /name must be at most 80 characters/);
+  await assert.rejects(logger.saveWorkoutAsTemplate("w2", "Warm"), /no working sets/);
+  await assert.rejects(logger.saveWorkoutAsTemplate("w3", "Open"), /Only a finished workout/);
+  await assert.rejects(logger.saveWorkoutAsTemplate("w-none", "Nope"), /no workout/);
+  assert.equal((await logger.listTemplates()).length, 2);
+
+  const renamed = await logger.renameTemplate(saved.id, " Pull  day ");
+  assert.deepEqual(renamed, { id: saved.id, name: "Pull day", exercises: saved.exercises });
+  await assert.rejects(logger.renameTemplate(saved.id, ""), /name must be a non-empty string/);
+  await assert.rejects(logger.renameTemplate("t-none", "X"), /no longer exists/);
+  assert.equal((await store.getTemplate(saved.id)).name, "Pull day");
+
+  const before = await rawCounts(adapter);
+  assert.equal(await logger.deleteTemplate(saved.id), true);
+  assert.deepEqual((await logger.listTemplates()).map((template) => template.id), [twin.id]);
+  assert.deepEqual(await rawCounts(adapter), before);
 });

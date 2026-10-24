@@ -14,6 +14,7 @@ import {
   normalizePlan, addRow, updateRow, removeRow, bumpPlan, pruneOrphans, nextOrder as nextRowOrder, buildExerciseBlocks,
   heaviestSet, sameGhost, displayedExerciseIds, orderEntriesLike, swapped, reorderedRowOrders, applyRowOrders,
 } from "../domain/workout-plan.js";
+import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
 export const DEFAULT_STALE_AFTER_HOURS = 12;
@@ -697,6 +698,55 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return store.deleteWorkout(id);
   }
 
+  // Saves a FINISHED workout as a template (exercises in order, working sets counted; see templateFromWorkout).
+  // A workout with nothing countable, an unfinished one, or a bad name is refused and nothing is written.
+  // Duplicate names are allowed.
+  async function saveWorkoutAsTemplate(workoutId, name) {
+    const workout = await store.getWorkoutWithDetails(workoutId);
+    if (workout === null) throw new Error("There is no workout with that id");
+    return store.saveTemplate(templateFromWorkout(workout, { name }));
+  }
+
+  // Same id and exercises, new name (checked by the template name rule).
+  async function renameTemplate(id, name) {
+    const template = await store.getTemplate(id);
+    if (template === null) throw new Error("That template no longer exists");
+    return store.saveTemplate({ ...template, name });
+  }
+
+  // Puts a template's exercises into the session as blank unchecked rows (planFromTemplate). Refused, with
+  // nothing written, while anything is running or planned: a workout (active or stale), or unchecked rows.
+  async function startFromTemplate(templateId) {
+    const template = await store.getTemplate(templateId);
+    if (template === null) throw new Error("That template no longer exists");
+    return retryOnConflict(async () => {
+      const session = await readSession();
+      if (session.status.kind === "stale") {
+        throw new Error('An unfinished workout is waiting on the New tab. Use "Finish" or "Discard" on it before starting from a template.');
+      }
+      if (session.status.kind === "active") {
+        throw new Error('A workout is already running. Use "Finish workout" or "Discard workout" on the New tab before starting from a template.');
+      }
+      if (session.plan.rows.length > 0 || session.plan.exercises.length > 0) {
+        throw new Error(
+          'Sets are already planned on the New tab. Remove them with the "Delete set" (×) buttons, or check one and then use '
+          + '"Finish workout" or "Discard workout", before starting from a template.',
+        );
+      }
+      const known = new Set(session.exercises.map((exercise) => exercise.id));
+      if (template.exercises.some(({ exerciseId }) => !known.has(exerciseId))) {
+        throw new Error(`The template "${template.name}" lists an exercise that is no longer in the library`);
+      }
+      const plan = planFromTemplate(session.plan, template, {
+        unit: await store.getPreferredUnit(),
+        newId: () => crypto.randomUUID(),
+      });
+      const { meta, expectRev } = commit(session, plan);
+      await store.setWorkoutMeta(meta, { expectRev });
+      return template;
+    });
+  }
+
   return {
     getStatus,
     getCurrent,
@@ -723,6 +773,11 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     getHistory,
     deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
+    saveWorkoutAsTemplate,
+    listTemplates: () => store.listTemplates(),
+    renameTemplate,
+    deleteTemplate: (id) => store.deleteTemplate(id),
+    startFromTemplate,
     getPreferredUnit: () => store.getPreferredUnit(),
     setPreferredUnit: (unit) => store.setPreferredUnit(unit),
   };

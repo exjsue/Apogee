@@ -380,6 +380,105 @@ rule("ui: leaving a workout detail closes its delete confirmation", async (ctx) 
   }, { prepare: twoFinishedWorkouts });
 });
 
+rule("ui: Save as template asks for a name, shows the refusal and keeps the field, then stores the template and returns focus to the button", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    await goToTab(root, "history");
+    click(await waitFor(() => $(root, '[data-action="open-workout"]'), "a workout in History"));
+    click(await waitFor(() => action(root, "save-template"), "the Save as template button"));
+    const name = await waitFor(() => field(root, "template-name"), "the name field");
+    await waitFor(() => document.activeElement === field(root, "template-name"), "focus in the name field");
+
+    click(action(root, "confirm-save-template")); // no name
+    await waitFor(() => region(root, "template-error") && !region(root, "template-error").hidden
+      && region(root, "template-error").textContent.includes("name must be a non-empty string"), "the name error");
+    ctx.assert.deepEqual(await store.listTemplates(), []);
+
+    setValue(name, "  Bench   day ");
+    click(action(root, "confirm-save-template"));
+    await waitForText(root, 'Saved template "Bench day" with 1 exercise.');
+    await waitFor(() => document.activeElement === action(root, "save-template"), "focus back on Save as template");
+    const saved = await store.listTemplates();
+    ctx.assert.deepEqual(saved.map((template) => [template.name, template.exercises]), [["Bench day", [{ exerciseId: BENCH, setCount: 1 }]]]);
+  }, { prepare: twoFinishedWorkouts });
+});
+
+const startButton = (root, id) => $(root, `[data-action="start-template"][data-template-id="${id}"]`);
+const templateButton = (root, name, id) => $(root, `[data-action="${name}"][data-template-id="${id}"]`);
+
+rule("ui: templates on the New tab: list with exercise counts, Start (refused while rows are planned or a workout runs), rename, delete with confirm", async (ctx) => {
+  const prepare = async (store) => {
+    await store.saveTemplate({ id: "t-a", name: "Push", exercises: [{ exerciseId: BENCH, setCount: 3 }, { exerciseId: "seed-barbell-squat", setCount: 2 }] });
+    await store.saveTemplate({ id: "t-b", name: "Push", exercises: [{ exerciseId: BENCH, setCount: 1 }] }); // same name, told apart by the count
+  };
+  await withApp(ctx, async ({ root, store, adapter }) => {
+    await waitFor(() => region(root, "templates"), "the templates section");
+    ctx.assert.deepEqual(
+      [...root.querySelectorAll('[data-region="templates"] li')].map((li) => li.querySelector(".pick-name").textContent + li.querySelector(".pick-meta").textContent),
+      ["Push · 2 exercises", "Push · 1 exercise"],
+    );
+    ctx.assert.equal(startButton(root, "t-a").getAttribute("aria-label"), 'Start "Push" (2 exercises)');
+
+    // Start: the exercises and blank unchecked rows appear, focus goes to the workout
+    click(startButton(root, "t-a"));
+    await waitFor(() => plannedRows(root).length === 5, "five unchecked rows");
+    await waitForText(root, 'Started from "Push".');
+    await waitFor(() => document.activeElement === region(root, "current-heading"), "focus on Current workout");
+    ctx.assert.equal(loggedRows(root).length, 0);
+
+    // rows planned, no workout yet: refused with nothing added; focus stays on the Start button
+    click(startButton(root, "t-b"));
+    await waitFor(() => errorText(root).includes("Sets are already planned"), "the refusal");
+    ctx.assert.ok(errorText(root).includes("Finish workout"));
+    ctx.assert.equal(plannedRows(root).length, 5);
+    await waitFor(() => document.activeElement === startButton(root, "t-b"), "focus on Start");
+
+    // a running workout: refused too
+    const first = plannedRows(root)[0];
+    setValue(first.querySelector('[data-field="reps"]'), "5");
+    setValue(first.querySelector('[data-field="weight"]'), "100");
+    click(first.querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => loggedRows(root).length === 1, "a logged set");
+    click(startButton(root, "t-b"));
+    await waitFor(() => errorText(root).includes("A workout is already running"), "the refusal");
+    ctx.assert.equal(plannedRows(root).length, 4);
+
+    // rename: an empty name is refused and the field stays; a good one is saved
+    click(templateButton(root, "rename-template", "t-b"));
+    const input = await waitFor(() => field(root, "template-name"), "the rename field");
+    await waitFor(() => document.activeElement === field(root, "template-name"), "focus in the rename field");
+    ctx.assert.equal(input.value, "Push");
+    setValue(input, "");
+    click(action(root, "save-rename-template"));
+    await waitFor(() => region(root, "template-error") && !region(root, "template-error").hidden, "the rename error");
+    ctx.assert.equal((await store.getTemplate("t-b")).name, "Push");
+    setValue(input, "Pull");
+    click(action(root, "save-rename-template"));
+    await waitForText(root, 'Renamed to "Pull".');
+    await waitFor(() => document.activeElement === templateButton(root, "rename-template", "t-b"), "focus back on Rename");
+    ctx.assert.equal((await store.getTemplate("t-b")).name, "Pull");
+
+    // delete: Keep changes nothing; Delete removes only the template
+    const before = await rawCounts(adapter);
+    click(templateButton(root, "delete-template", "t-b"));
+    await waitFor(() => region(root, "confirm-delete-template"), "the confirmation");
+    ctx.assert.equal((await store.listTemplates()).length, 2);
+    click(action(root, "cancel-delete-template"));
+    await waitFor(() => !region(root, "confirm-delete-template") && document.activeElement === templateButton(root, "delete-template", "t-b"), "the confirmation to close");
+    click(templateButton(root, "delete-template", "t-b"));
+    click(await waitFor(() => action(root, "confirm-delete-template"), "the confirm button"));
+    await waitForText(root, 'Deleted the template "Pull".');
+    await waitFor(() => document.activeElement === region(root, "templates-heading"), "focus on the Templates heading");
+    ctx.assert.deepEqual((await store.listTemplates()).map((template) => template.id), ["t-a"]);
+
+    // the last one: the section goes, focus moves to the Current workout heading
+    click(templateButton(root, "delete-template", "t-a"));
+    click(await waitFor(() => action(root, "confirm-delete-template"), "the confirm button"));
+    await waitFor(() => region(root, "templates") === null && document.activeElement === region(root, "current-heading"), "the section gone, focus on Current workout");
+    ctx.assert.deepEqual(await store.listTemplates(), []);
+    ctx.assert.deepEqual(await rawCounts(adapter), before);
+  }, { prepare });
+});
+
 rule("ui: adding a custom exercise needs a primary muscle, then selects the new exercise", async (ctx) => {
   await withApp(ctx, async ({ root, store }) => {
     click(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));

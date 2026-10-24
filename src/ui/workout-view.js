@@ -25,6 +25,8 @@ export const freshLogState = () => ({
   confirmDiscard: false,
   confirmFinish: false,
   confirmDeleteSetId: null,
+  renamingTemplateId: null,
+  confirmDeleteTemplateId: null,
   editingRestId: null,
   editingSetId: null, // the checked set whose edit form is open
   menuExerciseId: null,
@@ -167,7 +169,12 @@ function currentCard(ctx, session) {
   // The title row: with a workout open, the live elapsed time is at its right, an element of its own
   // with a reserved width, so a changing time cannot reflow the row.
   const elapsed = started ? elapsedElement(session.workout.startedAt) : null;
-  card.append(h("div", { class: "card-head" }, h("h2", {}, "Current workout"), elapsed));
+  card.append(h(
+    "div",
+    { class: "card-head" },
+    h("h2", { tabindex: "-1", "data-region": "current-heading" }, "Current workout"), // focus lands here after Start
+    elapsed,
+  ));
   if (!started) {
     card.append(h("p", { class: "muted" }, "No workout in progress. Checking your first set starts one."));
   } else {
@@ -222,6 +229,152 @@ function currentCard(ctx, session) {
     }),
   ));
   return card;
+}
+
+// ---- templates: Start, Rename and Delete. Every rule (what Start refuses, the name rule) is in the logger. ----
+
+const selectorFor = (action, id) => `[data-action="${action}"][data-template-id="${id}"]`;
+
+function renameForm(ctx, template, label) {
+  const log = ctx.state.log;
+  const name = h("input", {
+    type: "text", "data-field": "template-name", "data-saved": template.name, autocomplete: "off",
+    value: template.name, "aria-label": `New name for ${label}`,
+  });
+  const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "template-error" });
+  const back = selectorFor("rename-template", template.id);
+  return h(
+    "form",
+    {
+      onSubmit: async (event) => {
+        event.preventDefault();
+        try {
+          const saved = await ctx.services.logger.renameTemplate(template.id, name.value);
+          log.renamingTemplateId = null;
+          log.notice = `Renamed to "${saved.name}".`;
+          ctx.state.focus = back;
+          await ctx.rerender();
+        } catch (caught) {
+          error.textContent = caught.message;
+          error.hidden = false;
+        }
+      },
+    },
+    name,
+    error,
+    h(
+      "div",
+      { class: "actions" },
+      h("button", { type: "submit", class: "primary small", "data-action": "save-rename-template" }, "Save name"),
+      button("Cancel", {
+        class: "small",
+        "data-action": "cancel-rename-template",
+        onClick: () => {
+          log.renamingTemplateId = null;
+          ctx.state.focus = back;
+          return ctx.rerender();
+        },
+      }),
+    ),
+  );
+}
+
+function deleteTemplateConfirm(ctx, template, isLast) {
+  const log = ctx.state.log;
+  return h(
+    "div",
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete template", "data-region": "confirm-delete-template" },
+    h("p", {}, `Delete the template "${template.name}"? Your workouts are not affected.`),
+    button("Delete template", {
+      class: "danger",
+      "data-action": "confirm-delete-template",
+      onClick: () => perform(ctx, async () => {
+        await ctx.services.logger.deleteTemplate(template.id);
+        Object.assign(log, { confirmDeleteTemplateId: null, notice: `Deleted the template "${template.name}".` });
+        // the section is gone with the last template, so the focus goes to the Current workout heading instead
+        ctx.state.focus = isLast ? '[data-region="current-heading"]' : '[data-region="templates-heading"]';
+      }),
+    }),
+    button("Keep template", {
+      "data-action": "cancel-delete-template",
+      onClick: () => {
+        log.confirmDeleteTemplateId = null;
+        ctx.state.focus = selectorFor("delete-template", template.id);
+        return ctx.rerender();
+      },
+    }),
+  );
+}
+
+function templateItem(ctx, template, isLast) {
+  const log = ctx.state.log;
+  const count = formatCount(template.exercises.length, "exercise");
+  const label = `"${template.name}" (${count})`; // the name plus the count tells two templates with one name apart
+  const item = h(
+    "li",
+    {},
+    h("span", { class: "pick-name" }, template.name),
+    h("span", { class: "pick-meta" }, ` · ${count}`),
+  );
+  if (log.renamingTemplateId === template.id) {
+    item.append(renameForm(ctx, template, label));
+    return item;
+  }
+  if (log.confirmDeleteTemplateId === template.id) {
+    item.append(deleteTemplateConfirm(ctx, template, isLast));
+    return item;
+  }
+  item.append(h(
+    "div",
+    { class: "actions" },
+    button("Start", {
+      class: "primary small",
+      "data-action": "start-template",
+      "data-template-id": template.id,
+      "aria-label": `Start ${label}`,
+      onClick: () => {
+        ctx.state.focus = selectorFor("start-template", template.id); // where it stays if Start is refused
+        return perform(ctx, async () => {
+          await ctx.services.logger.startFromTemplate(template.id);
+          log.notice = `Started from "${template.name}". Fill in or check each set as you do it.`;
+          ctx.state.focus = '[data-region="current-heading"]';
+        });
+      },
+    }),
+    button("Rename", {
+      class: "small",
+      "data-action": "rename-template",
+      "data-template-id": template.id,
+      "aria-label": `Rename ${label}`,
+      onClick: () => {
+        Object.assign(log, { renamingTemplateId: template.id, confirmDeleteTemplateId: null });
+        ctx.state.focus = '[data-field="template-name"]';
+        return ctx.rerender();
+      },
+    }),
+    button("Delete", {
+      class: "danger-outline small",
+      "data-action": "delete-template",
+      "data-template-id": template.id,
+      "aria-label": `Delete ${label}`,
+      onClick: () => {
+        Object.assign(log, { confirmDeleteTemplateId: template.id, renamingTemplateId: null });
+        ctx.state.focus = '[data-action="cancel-delete-template"]';
+        return ctx.rerender();
+      },
+    }),
+  ));
+  return item;
+}
+
+// Only drawn when there is at least one template.
+function templatesSection(ctx, templates) {
+  return h(
+    "section",
+    { class: "card", "aria-label": "Templates", "data-region": "templates" },
+    h("h2", { tabindex: "-1", "data-region": "templates-heading" }, "Templates"),
+    h("ul", { class: "history-list" }, templates.map((template) => templateItem(ctx, template, templates.length === 1))),
+  );
 }
 
 // A group of checkboxes; selected() returns the ticked values.
@@ -452,6 +605,7 @@ export async function renderLogView(ctx) {
   stopTicker(ctx);
   stopElapsed(ctx);
   const session = await ctx.services.logger.getSession();
+  const templates = await ctx.services.logger.listTemplates();
   const view = h("section", { class: "view", "aria-label": "New" });
 
   if (log.notice) {
@@ -463,6 +617,7 @@ export async function renderLogView(ctx) {
     log.error = null;
   }
 
+  if (templates.length > 0) view.append(templatesSection(ctx, templates));
   if (session.status.kind === "stale") {
     view.append(staleCard(ctx, session));
     return view;

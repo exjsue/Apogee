@@ -3,7 +3,67 @@
 import { h, button, exerciseHeading } from "./dom.js";
 import { formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 
-export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, notice: null, error: null });
+export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, notice: null, error: null });
+
+// "Save as template" on a finished workout: a button, then a form asking for the name. The name rule and the
+// "nothing countable" refusal live in the logger; their message is shown here and the typed name is kept.
+function templateSection(ctx, workout) {
+  const history = ctx.state.history;
+  const saveButton = '[data-action="save-template"]';
+  if (!history.savingTemplate) {
+    return h(
+      "div",
+      { class: "actions" },
+      button("Save as template", {
+        "data-action": "save-template",
+        onClick: () => {
+          history.savingTemplate = true;
+          ctx.state.focus = '[data-field="template-name"]';
+          return ctx.rerender();
+        },
+      }),
+    );
+  }
+  const name = h("input", { type: "text", "data-field": "template-name", "data-saved": "", autocomplete: "off" });
+  const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "template-error" });
+  return h(
+    "form",
+    {
+      class: "card",
+      "aria-label": "Save as template",
+      onSubmit: async (event) => {
+        event.preventDefault();
+        try {
+          const saved = await ctx.services.logger.saveWorkoutAsTemplate(workout.id, name.value);
+          history.savingTemplate = false;
+          history.notice = `Saved template "${saved.name}" with ${formatCount(saved.exercises.length, "exercise")}. It is on the New tab.`;
+          ctx.state.focus = saveButton;
+          await ctx.rerender();
+        } catch (caught) {
+          error.textContent = caught.message;
+          error.hidden = false;
+        }
+      },
+    },
+    h("h3", {}, "Save as template"),
+    h("p", { class: "muted" }, "A template keeps only the exercises, in order, and how many working sets each had."),
+    h("label", { class: "field" }, h("span", {}, "Template name"), name),
+    error,
+    h(
+      "div",
+      { class: "actions" },
+      h("button", { type: "submit", class: "primary", "data-action": "confirm-save-template" }, "Save template"),
+      button("Cancel", {
+        "data-action": "cancel-save-template",
+        onClick: () => {
+          history.savingTemplate = false;
+          ctx.state.focus = saveButton;
+          return ctx.rerender();
+        },
+      }),
+    ),
+  );
+}
 
 function deleteSection(ctx, workout) {
   const history = ctx.state.history;
@@ -61,6 +121,7 @@ async function detail(ctx, id) {
   if (workout === null) {
     history.detailId = null;
     history.confirmDelete = false;
+    history.savingTemplate = false;
     return null;
   }
   const view = h(
@@ -72,6 +133,7 @@ async function detail(ctx, id) {
       onClick: () => {
         history.detailId = null;
         history.confirmDelete = false;
+        history.savingTemplate = false;
         return ctx.rerender();
       },
     }),
@@ -98,6 +160,7 @@ async function detail(ctx, id) {
       ),
     ));
   }
+  if (workout.endedAt) view.append(templateSection(ctx, workout));
   view.append(deleteSection(ctx, workout));
   return view;
 }
@@ -132,6 +195,7 @@ async function list(ctx) {
           onClick: () => {
             history.detailId = workout.id;
             history.confirmDelete = false;
+            history.savingTemplate = false;
             return ctx.rerender();
           },
         },
