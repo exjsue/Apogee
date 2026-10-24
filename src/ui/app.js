@@ -10,13 +10,14 @@ import { h, button } from "./dom.js";
 import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
 import { renderBackupView, freshBackupState } from "./backup-view.js";
-import { WEIGHT_UNITS } from "../domain/model.js";
+import { renderSettingsView } from "./settings-view.js";
 import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
 const TABS = [
   { id: "log", label: "Log", render: renderLogView },
   { id: "history", label: "History", render: renderHistoryView },
   { id: "backup", label: "Backup", render: renderBackupView },
+  { id: "settings", label: "Settings", render: renderSettingsView },
 ];
 
 export async function mountApp(root, services) {
@@ -29,16 +30,6 @@ export async function mountApp(root, services) {
     backup: freshBackupState(),
   };
 
-  const unitButtons = WEIGHT_UNITS.map((unit) => button(unit, {
-    class: "unit-button",
-    "data-action": "set-unit",
-    "data-unit": unit,
-    onClick: async () => {
-      state.unit = await services.logger.setPreferredUnit(unit);
-      state.log.formUnit = null;
-      await render();
-    },
-  }));
   const tabButtons = TABS.map((tab) => button(tab.label, {
     class: "tab",
     "data-action": "tab",
@@ -135,7 +126,6 @@ export async function mountApp(root, services) {
       "header",
       { class: "top" },
       h("h1", {}, "Apogee"),
-      h("div", { class: "units", role: "group", "aria-label": "Display unit" }, unitButtons),
     ),
     banner,
     reminder,
@@ -217,7 +207,6 @@ export async function mountApp(root, services) {
       const current = element.dataset.tab === state.tab;
       element.setAttribute("aria-current", current ? "page" : "false");
     });
-    unitButtons.forEach((element) => element.setAttribute("aria-pressed", String(element.dataset.unit === state.unit)));
     if (state.focus !== null) {
       const target = view.querySelector(state.focus);
       state.focus = null;

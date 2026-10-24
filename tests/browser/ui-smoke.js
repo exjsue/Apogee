@@ -106,13 +106,21 @@ async function pickExercise(root, query, id) {
   await waitFor(() => lastPlanned(root), "the first unchecked row");
 }
 
-// A row has no unit menu of its own: a blank row is entered in the unit chosen with the
-// kg/lb toggle at the top. So entering a set in a unit means choosing that unit first.
-async function useUnit(root, unit) {
+// The kg/lb toggle lives in the Settings tab. A row has no unit menu of its own: a blank row
+// is entered in the unit chosen there. So entering a set in a unit means choosing that unit
+// first, then coming back to the Log tab.
+async function chooseUnit(root, unit) {
+  await goToTab(root, "settings");
   const toggle = $(root, `[data-action="set-unit"][data-unit="${unit}"]`);
-  if (toggle.getAttribute("aria-pressed") === "true") return;
-  click(toggle);
-  await waitFor(() => $(root, `[data-action="set-unit"][data-unit="${unit}"]`).getAttribute("aria-pressed") === "true", `the ${unit} choice`);
+  if (toggle.getAttribute("aria-pressed") !== "true") {
+    click(toggle);
+    await waitFor(() => $(root, `[data-action="set-unit"][data-unit="${unit}"]`).getAttribute("aria-pressed") === "true", `the ${unit} choice`);
+  }
+}
+
+async function useUnit(root, unit) {
+  await chooseUnit(root, unit);
+  await goToTab(root, "log");
 }
 
 // Types into the last unchecked row and taps its check.
@@ -142,14 +150,17 @@ const goToTab = async (root, tab) => {
 
 // ---- tests ----
 
-rule("ui: the app mounts with the log screen, tabs and unit toggle", async (ctx) => {
+rule("ui: the app mounts with the log screen and four tabs; the unit toggle is only in Settings", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     ctx.assert.ok(root.textContent.includes("Apogee"));
     ctx.assert.ok(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
-    ctx.assert.equal(root.querySelectorAll('[data-action="tab"]').length, 3);
+    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="tab"]')].map((b) => b.dataset.tab), ["log", "history", "backup", "settings"]);
+    ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 0); // not in the header, not on Log
+    ctx.assert.ok(root.textContent.includes("No workout in progress"));
+    await goToTab(root, "settings");
+    ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 2);
     const pressed = [...root.querySelectorAll('[data-action="set-unit"]')].filter((b) => b.getAttribute("aria-pressed") === "true");
     ctx.assert.deepEqual(pressed.map((b) => b.dataset.unit), ["lb"]); // the default
-    ctx.assert.ok(root.textContent.includes("No workout in progress"));
   });
 });
 
@@ -166,7 +177,8 @@ rule("ui: choosing an exercise adds an unchecked row; checking it logs the set i
     ctx.assert.equal(logged().querySelector('[data-cell="reps"]').textContent, "8");
     ctx.assert.equal(logged().querySelector('[data-cell="weight"] .cell-note'), null); // entered in kg, shown in kg
     // stored in kg; with the display switched to lb it shows the converted weight and what was entered
-    click($(root, '[data-action="set-unit"][data-unit="lb"]'));
+    await chooseUnit(root, "lb");
+    await goToTab(root, "log");
     await waitFor(() => logged().querySelector('[data-cell="weight"] .cell-value').textContent === "220.5 lb", "the weight in lb");
     ctx.assert.equal(logged().querySelector('[data-cell="weight"] .cell-note').textContent, "entered 100 kg");
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 1 });
@@ -223,12 +235,42 @@ rule("ui: the kg/lb toggle changes what is displayed and is remembered, never wh
     const weightCell = () => root.querySelector('li[data-kind="logged"] [data-cell="weight"]');
     await waitFor(() => weightCell().querySelector(".cell-value").textContent === "100 kg" && !weightCell().querySelector(".cell-note"), "weights shown in kg");
     ctx.assert.equal(await store.getPreferredUnit(), "kg");
-    click(root.querySelector('[data-action="set-unit"][data-unit="lb"]'));
+    await chooseUnit(root, "lb");
+    await goToTab(root, "log");
     await waitFor(() => weightCell().querySelector(".cell-value").textContent === "220.5 lb", "weights shown in lb");
     ctx.assert.equal(weightCell().querySelector(".cell-note").textContent, "entered 100 kg");
     ctx.assert.equal(await store.getPreferredUnit(), "lb");
     const sets = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
     ctx.assert.deepEqual(sets.map((s) => [s.weightValue, s.weightUnit]), [[100, "kg"]]);
+  });
+});
+
+rule("ui: changing the unit in Settings while a workout is open updates the weights shown on Log and keeps the workout", async (ctx) => {
+  await withApp(ctx, async ({ root, store, adapter }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "5", "100", "kg");
+    click(await waitFor(() => action(root, "add-set"), "the Add set button")); // an unchecked row stays open, entered in kg
+    const open = await waitFor(() => lastPlanned(root), "the unchecked row");
+    ctx.assert.equal(open.querySelector(".unit-suffix").textContent, "kg");
+    const weightCell = () => root.querySelector('li[data-kind="logged"] [data-cell="weight"]');
+    ctx.assert.equal(weightCell().querySelector(".cell-value").textContent, "100 kg");
+    const before = await rawCounts(adapter);
+    await chooseUnit(root, "lb");
+    ctx.assert.equal(await store.getPreferredUnit(), "lb");
+    await goToTab(root, "log");
+    // the open workout is still there, its logged weight is shown converted with what was entered, and nothing was stored differently
+    await waitFor(() => weightCell().querySelector(".cell-value").textContent === "220.5 lb", "the logged weight in lb");
+    ctx.assert.equal(weightCell().querySelector(".cell-note").textContent, "entered 100 kg");
+    ctx.assert.equal(plannedRows(root).length, 1);
+    ctx.assert.equal(plannedRows(root)[0].querySelector('[data-field="weight"]').value, "100"); // prefilled weight keeps the unit it will be stored in
+    ctx.assert.equal(plannedRows(root)[0].querySelector(".unit-suffix").textContent, "kg");
+    ctx.assert.deepEqual(await rawCounts(adapter), before);
+    const sets = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
+    ctx.assert.deepEqual(sets.map((s) => [s.weightValue, s.weightUnit]), [[100, "kg"]]);
+    // and back: kg again
+    await chooseUnit(root, "kg");
+    await goToTab(root, "log");
+    await waitFor(() => weightCell().querySelector(".cell-value").textContent === "100 kg" && !weightCell().querySelector(".cell-note"), "the logged weight in kg again");
   });
 });
 
