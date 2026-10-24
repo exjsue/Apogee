@@ -21,11 +21,13 @@ export const freshBackupState = () => ({
 // What the import preview counts. "exercises" is the library of exercises you
 // can choose from (the built-in lifts plus your own), not the exercises done in
 // workouts, so the label says so. The per-workout "entries" count is left out:
-// it is an internal grouping, and workouts and sets logged say what matters.
+// it is an internal grouping, and workouts and sets logged say what matters. Templates are replaced too
+// (a file from before schema 4 has none, which the preview says in words below the table).
 const SECTIONS = [
   ["exercises", "Exercise library (includes the built-in lifts)"],
   ["workouts", "Workouts"],
   ["sets", "Sets logged"],
+  ["templates", "Templates"],
 ];
 
 function countsTable(file, current) {
@@ -237,6 +239,16 @@ export async function renderBackupView(ctx) {
       h("h3", {}, "This file will replace your data"),
       h("p", { class: "muted" }, `Exported ${formatDateTime(summary.exportedAt)}. Nothing is merged: everything on this device is replaced by the file.`),
       countsTable(summary.counts, current),
+      summary.schemaVersion < 4
+        ? h(
+          "p",
+          { class: "warning-text", "data-region": "import-no-templates" },
+          "This file is from an older version of Apogee and has no templates. "
+          + (current.templates > 0
+            ? `Importing it removes your ${formatCount(current.templates, "saved template")}.`
+            : "You have none saved either."),
+        )
+        : null,
       h(
         "p",
         { class: "warning-text" },

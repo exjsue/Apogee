@@ -1007,6 +1007,7 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
       ["Exercise library (includes the built-in lifts)", "1", String(SEED_EXERCISES.length)],
       ["Workouts", "1", "0"],
       ["Sets logged", "2", "0"],
+      ["Templates", "0", "0"],
     ]);
     ctx.assert.ok(!/Exercises in workouts/.test(table.textContent));
     ctx.assert.ok(action(root, "export-first"));
@@ -1024,6 +1025,45 @@ rule("ui: import shows the file's counts next to the current ones and needs expl
     ctx.assert.deepEqual((await store.listExercises()).map((exercise) => exercise.id), ["ex-row"]);
     ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 1, sets: 2 });
   });
+});
+
+rule("ui: import preview has a Templates row, and a file from before schema 4 warns that it removes the saved templates", async (ctx) => {
+  const beforeSchema4 = () => {
+    const doc = JSON.parse(incomingFile());
+    doc.schemaVersion = 3;
+    delete doc.data.templates; // a schema 3 file has no templates section
+    return JSON.stringify(doc);
+  };
+  const prepare = async (store) => {
+    await store.saveTemplate({ id: "t-a", name: "Push", exercises: [{ exerciseId: BENCH, setCount: 3 }] });
+    await store.saveTemplate({ id: "t-b", name: "Pull", exercises: [{ exerciseId: BENCH, setCount: 1 }] });
+  };
+  await withApp(ctx, async ({ root, store }) => {
+    await goToTab(root, "backup");
+    const check = async (text) => {
+      setValue(await waitFor(() => field(root, "import-text"), "the paste box"), text); // editing clears the old preview
+      click(action(root, "check-import"));
+      const table = await waitFor(() => region(root, "import-counts"), "the counts table");
+      return [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((cell) => cell.textContent)).at(-1);
+    };
+    const warning = () => (region(root, "import-no-templates") ? region(root, "import-no-templates").textContent : null);
+    const OLD = "This file is from an older version of Apogee and has no templates. ";
+
+    ctx.assert.deepEqual(await check(beforeSchema4()), ["Templates", "0", "2"]);
+    ctx.assert.equal(warning(), `${OLD}Importing it removes your 2 saved templates.`);
+    ctx.assert.equal((await store.listTemplates()).length, 2); // a preview replaces nothing
+
+    ctx.assert.deepEqual(await check(incomingFile()), ["Templates", "0", "2"]); // schema 4: no warning
+    ctx.assert.equal(warning(), null);
+
+    await store.deleteTemplate("t-b");
+    await check(beforeSchema4());
+    ctx.assert.equal(warning(), `${OLD}Importing it removes your 1 saved template.`);
+
+    await store.deleteTemplate("t-a");
+    ctx.assert.deepEqual(await check(beforeSchema4()), ["Templates", "0", "0"]);
+    ctx.assert.equal(warning(), `${OLD}You have none saved either.`);
+  }, { prepare });
 });
 
 // ---- offline: the update banner and the Offline section ----
