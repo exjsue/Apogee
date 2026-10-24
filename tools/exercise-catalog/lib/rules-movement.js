@@ -105,7 +105,7 @@ const FAMILY_VARIATION_RULES = [
   ["kickback", /kickback/],
   ["lying", /\blying\b|\bsupine\b/],
   ["machine", /machine|leverage/],
-  ["narrow-grip", /narrow/],
+  ["narrow-grip", /narrow[- ]grip/],
   ["palms-down", /palms?-down|pronated/],
   ["palms-up", /palms?-up|supinated|underhand/],
   ["power", /\bpower\b/],
@@ -137,6 +137,10 @@ export function variationsFor(name, equipment, family = null) {
   const tags = VARIATION_RULES.filter(([, pattern]) => pattern.test(n)).map(([tag]) => tag);
   if (/\bbands?\b/.test(n) && !/reverse band/.test(n) && equipment !== "resistance_band") tags.push("bands");
   if (family !== null) {
+    // A grip tag needs the word "grip" in the name: "reverse" alone says nothing about the hands (Reverse Crunch,
+    // Reverse Hyperextension). The squat, deadlift and bench rules keep their approved tags, including the bare
+    // "reverse" of Reverse Triceps Bench Press.
+    for (let i = tags.length - 1; i >= 0; i -= 1) if (tags[i].endsWith("-grip") && !/grip/.test(n)) tags.splice(i, 1);
     tags.push(...FAMILY_VARIATION_RULES.filter(([, pattern]) => pattern.test(n)).map(([tag]) => tag));
     // Stretches and foam rolling are told apart by the muscle they work; cardio by its kind.
     if (family.id === "stretch" || family.id === "foam-roll") tags.push(...family.primary.map((m) => `target-${m}`));

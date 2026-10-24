@@ -41,6 +41,18 @@
     ],
     "note": "Upstream says only bands; read as a barbell bench press with bands added, like Squat with Bands and Deadlift with Bands (assumed, not verified)."
   },
+  "Bench_Sprint": {
+    "equipment": "bodyweight",
+    "note": "The bench used as a marker is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
+  "Box_Jump_Multiple_Response": {
+    "equipment": "bodyweight",
+    "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
+  "Box_Skip": {
+    "equipment": "bodyweight",
+    "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
   "Cable_Internal_Rotation": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
@@ -48,6 +60,14 @@
   "Car_Drivers": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Carioca_Quick_Step": {
+    "equipment": "bodyweight",
+    "note": "The floor marker used for the drill is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
+  "Chain_Press": {
+    "equipment": "barbell",
+    "note": "A barbell is loaded with chains, the same as Bench Press with Chains; the upstream equipment value does not say barbell."
   },
   "Chair_Squat": {
     "equipment": "bodyweight",
@@ -68,6 +88,10 @@
       "side_delts"
     ],
     "note": "A timed hold with weights raised out to the sides and level with the floor, an isometric lateral raise for the side delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Dips_-_Chest_Version": {
+    "equipment": "bodyweight",
+    "note": "The set of dip bars is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
   "Dumbbell_Incline_Shoulder_Raise": {
     "exclude": true,
@@ -101,6 +125,10 @@
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   },
+  "Front_Box_Jump": {
+    "equipment": "bodyweight",
+    "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
   "Internal_Rotation_with_Band": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
@@ -125,6 +153,10 @@
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   },
+  "Knee_Hip_Raise_On_Parallel_Bars": {
+    "equipment": "bodyweight",
+    "note": "The set of parallel bars is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
   "Kneeling_Arm_Drill": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
@@ -132,6 +164,10 @@
   "Landmine_Linear_Jammer": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Lateral_Box_Jump": {
+    "equipment": "bodyweight",
+    "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
   "Log_Lift": {
     "primaryMuscles": [
@@ -150,6 +186,10 @@
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   },
+  "Parallel_Bar_Dip": {
+    "equipment": "bodyweight",
+    "note": "The set of parallel bars is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
   "Power_Partials": {
     "primaryMuscles": [
       "side_delts"
@@ -163,6 +203,10 @@
   "Return_Push_from_Stance": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Ring_Dips": {
+    "equipment": "bodyweight",
+    "note": "The pair of gymnastic rings is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
   "Round_The_World_Shoulder_Stretch": {
     "exclude": true,
@@ -193,6 +237,10 @@
   "Side_Wrist_Pull": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Side_to_Side_Box_Shuffle": {
+    "equipment": "bodyweight",
+    "note": "The box used for the drill is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
   "Single-Arm_Linear_Jammer": {
     "exclude": true,
@@ -249,5 +297,9 @@
   "Upward_Stretch": {
     "exclude": true,
     "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Weighted_Bench_Dip": {
+    "equipment": "bodyweight",
+    "note": "The bench the hands rest on (any added weight is not a separate equipment item) is not in the equipment vocabulary, so this movement is logged as bodyweight."
   }
 }

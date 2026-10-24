@@ -373,3 +373,55 @@ test("families: the build writes families.md and outliers.md, the same on every 
     fs2.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---- grip tags and the equipment overrides ----
+
+test("families: a grip tag needs the word grip in the name (Narrow Stance Leg Press and Reverse Hyperextension get none), and Close-Grip, Wide-Grip and Reverse Grip names still do", () => {
+  const result = curate({
+    upstream: [
+      upstream("Press", "Narrow Stance Leg Press", { equipment: "machine" }),
+      upstream("Hyper", "Reverse Hyperextension", { equipment: "machine", primaryMuscles: ["hamstrings"] }),
+      upstream("Crunch", "Reverse Crunch", { primaryMuscles: ["abdominals"] }),
+      upstream("Close", "Close-Grip Front Lat Pulldown", { equipment: "cable", primaryMuscles: ["lats"] }),
+      upstream("Wide", "Wide-Grip Lat Pulldown", { equipment: "cable", primaryMuscles: ["lats"] }),
+      upstream("Rev", "Reverse Grip Bent-Over Rows", { equipment: "barbell", primaryMuscles: ["middle back"] }),
+      upstream("Narrow", "Narrow Grip Seated Row", { equipment: "cable", primaryMuscles: ["middle back"] }),
+      // an approved bench-rule entry keeps the tag it was approved with, whatever its name says
+      upstream("RevBench", "Reverse Triceps Bench Press", { equipment: "barbell", primaryMuscles: ["triceps"] }),
+    ],
+    vocabulary,
+  });
+  const tags = (id) => entryOf(result, id).variations;
+  assert.deepEqual(tags("Press"), ["narrow-stance"]);
+  assert.deepEqual(tags("Hyper"), []);
+  assert.deepEqual(tags("Crunch"), []);
+  assert.deepEqual(tags("Close"), ["close-grip", "front"]);
+  assert.deepEqual(tags("Wide"), ["wide-grip"]);
+  assert.ok(tags("Rev").includes("reverse-grip"));
+  assert.ok(tags("Narrow").includes("narrow-grip"));
+  assert.ok(tags("RevBench").includes("reverse-grip"));
+  // no family entry anywhere gets a grip tag without the word grip in its name
+  for (const e of result.entries) {
+    if (e.id !== "RevBench" && e.variations.some((v) => v.endsWith("-grip"))) assert.match(e.name.toLowerCase(), /grip/, e.name);
+  }
+});
+
+test("catalog: the equipment overrides for chain press, dips, box jumps, drills and parallel-bar raises are in overrides.json, each with a note", () => {
+  const all = JSON.parse(fs.readFileSync(path.join(here, "..", "tools", "exercise-catalog", "overrides.json"), "utf8"));
+  const want = {
+    Chain_Press: "barbell",
+    "Dips_-_Chest_Version": "bodyweight", Parallel_Bar_Dip: "bodyweight", Ring_Dips: "bodyweight", Weighted_Bench_Dip: "bodyweight",
+    Box_Jump_Multiple_Response: "bodyweight", Box_Skip: "bodyweight", Front_Box_Jump: "bodyweight", Lateral_Box_Jump: "bodyweight",
+    Bench_Sprint: "bodyweight", Carioca_Quick_Step: "bodyweight", Side_to_Side_Box_Shuffle: "bodyweight",
+    Knee_Hip_Raise_On_Parallel_Bars: "bodyweight",
+  };
+  for (const [id, equipment] of Object.entries(want)) {
+    assert.deepEqual(Object.keys(all[id] ?? {}).sort(), ["equipment", "note"], id);
+    assert.equal(all[id].equipment, equipment, id);
+    assert.ok(all[id].note.length > 20, id);
+  }
+  // equipment only: the tags follow from it, so a barbell loaded with chains is a barbell and bench
+  const stub = curate({ upstream: [upstream("Chain_Press", "Chain Press", { equipment: "other", primaryMuscles: ["chest"] })], overrides: { Chain_Press: all.Chain_Press }, vocabulary });
+  assert.equal(stub.entries[0].equipment, "barbell");
+  assert.equal(stub.entries[0].baseMovementId, "bench-press");
+});
