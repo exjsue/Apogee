@@ -155,6 +155,8 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   margin-top: 12px;
 }
 
+.actions + h2 { margin-top: 16px; } /* History detail: air between the top button row and the date */
+
 /* buttons */
 
 button {

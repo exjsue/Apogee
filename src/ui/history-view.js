@@ -11,18 +11,14 @@ function templateSection(ctx, workout) {
   const history = ctx.state.history;
   const saveButton = '[data-action="save-template"]';
   if (!history.savingTemplate) {
-    return h(
-      "div",
-      { class: "actions" },
-      button("Save as template", {
-        "data-action": "save-template",
-        onClick: () => {
-          history.savingTemplate = true;
-          ctx.state.focus = '[data-field="template-name"]';
-          return ctx.rerender();
-        },
-      }),
-    );
+    return button("Save as template", {
+      "data-action": "save-template",
+      onClick: () => {
+        history.savingTemplate = true;
+        ctx.state.focus = '[data-field="template-name"]';
+        return ctx.rerender();
+      },
+    });
   }
   const name = h("input", { type: "text", "data-field": "template-name", "data-saved": "", autocomplete: "off" });
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "template-error" });
@@ -124,19 +120,27 @@ async function detail(ctx, id) {
     history.savingTemplate = false;
     return null;
   }
+  // Top row: Back, and Save as template when finished. While the form is open it is drawn under this row instead.
+  const template = workout.endedAt ? templateSection(ctx, workout) : null;
   const view = h(
     "section",
     { class: "view", "aria-label": "Workout detail" },
-    button("Back to history", {
-      class: "small",
-      "data-action": "back-to-history",
-      onClick: () => {
-        history.detailId = null;
-        history.confirmDelete = false;
-        history.savingTemplate = false;
-        return ctx.rerender();
-      },
-    }),
+    h(
+      "div",
+      { class: "actions" },
+      button("Back to history", {
+        class: "small",
+        "data-action": "back-to-history",
+        onClick: () => {
+          history.detailId = null;
+          history.confirmDelete = false;
+          history.savingTemplate = false;
+          return ctx.rerender();
+        },
+      }),
+      history.savingTemplate ? null : template,
+    ),
+    history.savingTemplate ? template : null,
     h("h2", {}, formatDateTime(workout.startedAt)),
     workout.endedAt ? h("p", { class: "muted" }, `Finished ${formatDateTime(workout.endedAt)}`) : null,
   );
@@ -160,7 +164,6 @@ async function detail(ctx, id) {
       ),
     ));
   }
-  if (workout.endedAt) view.append(templateSection(ctx, workout));
   view.append(deleteSection(ctx, workout));
   return view;
 }
