@@ -1,6 +1,7 @@
 // Builds the exercise catalog from a pinned local copy of free-exercise-db's dist/exercises.json.
 //
-//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>]
+//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>]
+// (--pin and --overrides exist for the tests, which run on a fixture.)
 //
 // It makes no network call: the input is a file someone fetched earlier, and it must match
 // input-pin.json byte for byte (its SHA-256), so it can never run on anything else. Every output goes
@@ -12,7 +13,7 @@ import crypto from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadVocabulary, missingFromModel } from "./lib/vocabulary.js";
 import { curate, entriesWithoutPrimary, stringify } from "./lib/curate.js";
-import { renderReviewBatches, renderAudit, summarize, renderSummary } from "./lib/review.js";
+import { renderReviewBatches, renderAudit, renderExcluded, summarize, renderSummary } from "./lib/review.js";
 import { candidatePairs, renderSeedPairs } from "./lib/seed-pairs.js";
 import { SEED_EXERCISES } from "../../src/domain/seed.js";
 
@@ -24,7 +25,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--strict") args.strict = true;
-    else if (arg === "--input" || arg === "--out" || arg === "--pin") {
+    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides") {
       args[arg.slice(2)] = argv[i + 1];
       i += 1;
     } else throw new Error(`unknown argument: ${arg}`);
@@ -57,7 +58,7 @@ export function run(argv) {
   if (upstream.length !== pin.entries) throw new Error(`the pinned file should have ${pin.entries} entries, found ${upstream.length}`);
 
   const vocabulary = loadVocabulary();
-  const overrides = readJson(path.join(here, "overrides.json"));
+  const overrides = readJson(args.overrides ?? path.join(here, "overrides.json"));
   const confirmedPairs = readJson(path.join(here, "confirmed-seed-pairs.json"));
   const result = curate({ upstream, overrides, vocabulary, seeds: SEED_EXERCISES, confirmedPairs });
 
@@ -72,6 +73,7 @@ export function run(argv) {
     ["summary.txt", renderSummary(summary)],
     ["seed-pairs.md", renderSeedPairs(candidatePairs(SEED_EXERCISES, result.entries))],
     ["audit-sample.md", renderAudit(result.audit)],
+    ["excluded.md", renderExcluded(result.excludedDetails)],
     ["key-clashes.json", stringify({ keyClashes: result.keyClashes, nameClashes: result.nameClashes })],
     ...renderReviewBatches(result.review).map((b) => [b.name, b.text]),
   ];

@@ -21,7 +21,12 @@ const ROOT = path.resolve(here, "..");
 const FIXTURES = path.join(here, "fixtures", "exercise-catalog");
 const TOOL = path.join(ROOT, "tools", "exercise-catalog");
 const fixture = JSON.parse(fs.readFileSync(path.join(FIXTURES, "sample-110.json"), "utf8"));
-const overrides = JSON.parse(fs.readFileSync(path.join(TOOL, "overrides.json"), "utf8"));
+const allOverrides = JSON.parse(fs.readFileSync(path.join(TOOL, "overrides.json"), "utf8"));
+// The approved table is what the rules produce plus these four overrides. The fixture holds only 110 of
+// the 876 upstream entries and the real file also excludes or places other entries (one of them, the
+// squat-style Turkish get-up, is in the fixture), so the table is tested against exactly these four.
+const SAMPLE_OVERRIDE_IDS = ["Bench_Press_-_With_Bands", "Chair_Squat", "Split_Squats", "Squats_-_With_Bands"];
+const overrides = Object.fromEntries(SAMPLE_OVERRIDE_IDS.map((id) => [id, allOverrides[id]]));
 const vocabulary = loadVocabulary();
 
 // ---- the approved table ----
@@ -167,6 +172,22 @@ test("catalog: a shoulder is placed in a head only when the name says which, oth
   assert.ok(result.review.find((r) => r.entry.id === "Circles").reasons.includes("empty-primary"));
 });
 
+test("catalog: an upright row is read as side delts whatever implement word sits between upright and row, and a bare row is not", () => {
+  const result = plainCurate([
+    upstreamEntry({ id: "U1", name: "Upright Barbell Row", primaryMuscles: ["shoulders"], secondaryMuscles: ["traps"] }),
+    upstreamEntry({ id: "U2", name: "Upright Row", primaryMuscles: ["shoulders"] }),
+    upstreamEntry({ id: "U3", name: "Upright Cable Row", equipment: "cable", primaryMuscles: ["traps"], secondaryMuscles: ["shoulders"] }),
+    upstreamEntry({ id: "U4", name: "Seated Cable Row", equipment: "cable", primaryMuscles: ["shoulders"] }),
+  ]);
+  const e = Object.fromEntries(result.entries.map((x) => [x.id, x]));
+  assert.deepEqual(e.U1.primaryMuscles, ["side_delts"]);
+  assert.deepEqual(e.U1.secondaryMuscles, ["traps"]);
+  assert.deepEqual(e.U2.primaryMuscles, ["side_delts"]);
+  assert.deepEqual(e.U3.secondaryMuscles, ["side_delts"]);
+  assert.deepEqual(e.U4.primaryMuscles, []);
+  assert.deepEqual(e.U4.unplacedMuscles, [{ upstream: "shoulders", role: "primary" }]);
+});
+
 // ---- failures that must be loud ----
 
 test("catalog: an override whose id is not upstream fails", () => {
@@ -203,6 +224,50 @@ test("catalog: a valid override changes only what it names and placing a shoulde
   assert.equal(after.name, before.name);
 });
 
+test("catalog: a muscle placed as primary by hand leaves the secondary list, while an explicit secondary may not repeat it", () => {
+  const entry = upstreamEntry({ id: "S", name: "Arm Swing", equipment: null, primaryMuscles: ["shoulders"], secondaryMuscles: ["traps", "triceps"], category: "strength" });
+  const placed = plainCurate([entry], { overrides: { S: { primaryMuscles: ["traps"], note: "placed by hand" } } }).entries[0];
+  assert.deepEqual(placed.primaryMuscles, ["traps"]);
+  assert.deepEqual(placed.secondaryMuscles, ["triceps"]);
+  assert.equal(placed.unplacedMuscles, undefined);
+  assert.throws(
+    () => plainCurate([entry], { overrides: { S: { primaryMuscles: ["traps"], secondaryMuscles: ["traps"], note: "x" } } }),
+    /repeats a primary/,
+  );
+});
+
+test("catalog: the real overrides.json passes validation, every placement names at least one muscle, and every exclusion gives its reason", () => {
+  // The full upstream file is not in the repository, so stand-in entries carry each override's id.
+  const stubs = Object.keys(allOverrides).map((id) => upstreamEntry({ id, name: "Stand-in", equipment: null, primaryMuscles: ["shoulders"], secondaryMuscles: [], category: "strength" }));
+  assert.doesNotThrow(() => plainCurate(stubs, { overrides: allOverrides }));
+  for (const [id, override] of Object.entries(allOverrides)) {
+    assert.ok(typeof override.note === "string" && override.note.length > 10, `${id} needs a note`);
+    if (override.exclude === true) assert.equal(override.primaryMuscles, undefined, `${id} is excluded, so it should not also be placed`);
+    if (override.primaryMuscles !== undefined) assert.ok(override.primaryMuscles.length > 0, `${id} places no muscle`);
+  }
+});
+
+test("catalog: an excluded entry is left out of the catalog and listed in the excluded report with its reason", () => {
+  const entries = [upstreamEntry({ id: "Keep", name: "Keep" }), upstreamEntry({ id: "Drop", name: "Drop Me", primaryMuscles: ["shoulders"], secondaryMuscles: ["traps"] })];
+  const result = plainCurate(entries, { overrides: { Drop: { exclude: true, note: "pending a decision" } } });
+  assert.deepEqual(result.entries.map((e) => e.id), ["Keep"]);
+  assert.deepEqual(result.excludedDetails, [
+    { id: "Drop", name: "Drop Me", category: "strength", upstreamPrimary: ["shoulders"], upstreamSecondary: ["traps"], reason: "pending a decision" },
+  ]);
+  assert.ok(!result.review.some((r) => r.entry.id === "Drop"), "an excluded entry is not on the review list");
+
+  withTempFiles(({ dir, input, pin, overridesFile }) => {
+    fs.writeFileSync(overridesFile, JSON.stringify({ ...overrides, Sit_Squats: { exclude: true, note: "left out for the test" } }));
+    const out = path.join(dir, "out");
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", out]);
+    const catalog = JSON.parse(fs.readFileSync(path.join(out, "catalog.json"), "utf8"));
+    assert.equal(catalog.exercises.length, 109);
+    assert.ok(!catalog.exercises.some((e) => e.id === "Sit_Squats"));
+    const report = fs.readFileSync(path.join(out, "excluded.md"), "utf8");
+    assert.match(report, /\| Sit_Squats \| Sit Squats \|.*left out for the test/);
+  });
+});
+
 test("catalog: confirmed seed pairs are checked, and a confirmed upstream entry is left out of the catalog", () => {
   const entries = [upstreamEntry({ id: "A", name: "Bench" }), upstreamEntry({ id: "B", name: "Other" })];
   const seedId = SEED_EXERCISES[0].id;
@@ -226,7 +291,9 @@ function withTempFiles(body) {
     fs.writeFileSync(pin, JSON.stringify({
       repo: "fixture", file: "sample-110.json", commit: "none", bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), entries: 110,
     }));
-    return body({ dir, input, pin });
+    const overridesFile = path.join(dir, "overrides.json");
+    fs.writeFileSync(overridesFile, JSON.stringify(overrides));
+    return body({ dir, input, pin, overridesFile });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -243,19 +310,20 @@ test("catalog tool: it refuses an input that is not the pinned file and an outpu
 });
 
 test("catalog tool: --strict fails while an entry has no primary muscle, and the outputs are still written for review", () => {
-  withTempFiles(({ dir, input, pin }) => {
+  withTempFiles(({ dir, input, pin, overridesFile }) => {
     const out = path.join(dir, "out");
-    assert.throws(() => run(["--input", input, "--pin", pin, "--out", out, "--strict"]), /--strict: \d+ entries have no primary muscle/);
+    // In the fixture exactly one entry (the squat-style Turkish get-up) has only an unplaced shoulder.
+    assert.throws(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", out, "--strict"]), /--strict: 1 entries have no primary muscle/);
     assert.ok(fs.existsSync(path.join(out, "catalog.json")));
-    assert.doesNotThrow(() => run(["--input", input, "--pin", pin, "--out", path.join(dir, "out2")]));
+    assert.doesNotThrow(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "out2")]));
   });
 });
 
 test("catalog tool: the same input gives byte-identical output, in process and on disk", () => {
   assert.equal(stringify(curate({ upstream: fixture, overrides, vocabulary })), stringify(curate({ upstream: [...fixture].reverse(), overrides, vocabulary })));
-  withTempFiles(({ dir, input, pin }) => {
-    run(["--input", input, "--pin", pin, "--out", path.join(dir, "a")]);
-    run(["--input", input, "--pin", pin, "--out", path.join(dir, "b")]);
+  withTempFiles(({ dir, input, pin, overridesFile }) => {
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "a")]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "b")]);
     const names = fs.readdirSync(path.join(dir, "a")).sort();
     assert.deepEqual(names, fs.readdirSync(path.join(dir, "b")).sort());
     assert.ok(names.includes("catalog.json") && names.includes("summary.txt") && names.some((n) => n.startsWith("review-")));
@@ -284,10 +352,10 @@ test("catalog tool: it makes no network call (no network modules in its source, 
   }
   assert.deepEqual(found, []);
 
-  withTempFiles(({ dir, input, pin }) => {
+  withTempFiles(({ dir, input, pin, overridesFile }) => {
     const result = spawnSync(
       process.execPath,
-      ["--import", pathToImport(path.join(FIXTURES, "no-network.mjs")), path.join(TOOL, "build-catalog.js"), "--input", input, "--pin", pin, "--out", path.join(dir, "out")],
+      ["--import", pathToImport(path.join(FIXTURES, "no-network.mjs")), path.join(TOOL, "build-catalog.js"), "--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "out")],
       { encoding: "utf8" },
     );
     assert.equal(result.status, 0, result.stderr);

@@ -42,6 +42,20 @@ export function renderAudit(audit) {
   return `${lines.join("\n")}\n`;
 }
 
+// Entries an override left out of the catalog, each with the reason written in overrides.json.
+export function renderExcluded(details) {
+  const lines = [
+    `# Excluded from the catalog (${details.length} entries, by override)`,
+    "",
+    "| Upstream id | Name | Category | Upstream primary | Upstream secondary | Reason |",
+    "|---|---|---|---|---|---|",
+  ];
+  for (const d of details) {
+    lines.push(`| ${d.id} | ${d.name} | ${d.category ?? "-"} | ${list(d.upstreamPrimary)} | ${list(d.upstreamSecondary)} | ${d.reason} |`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 const tally = (items) => {
   const out = {};
   for (const item of items) out[item] = (out[item] ?? 0) + 1;

@@ -1,21 +1,253 @@
 {
+  "Alternating_Deltoid_Raise": {
+    "primaryMuscles": [
+      "front_delts",
+      "side_delts"
+    ],
+    "note": "Alternates a front raise and a lateral raise from one rep to the next, so the front and side delts share the work. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Arm_Circles": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Back_Flyes_-_With_Bands": {
+    "primaryMuscles": [
+      "rear_delts"
+    ],
+    "note": "The arms stay straight and sweep out to the sides and back against a band, a reverse fly pattern that works the rear delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Backward_Medicine_Ball_Throw": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Band_Pull_Apart": {
+    "primaryMuscles": [
+      "rear_delts"
+    ],
+    "note": "Straight arms pull a band apart at chest height, a reverse fly motion that works the rear delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Barbell_Incline_Shoulder_Raise": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Battling_Ropes": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
   "Bench_Press_-_With_Bands": {
     "equipment": "barbell",
-    "variations": ["bands"],
+    "variations": [
+      "bands"
+    ],
     "note": "Upstream says only bands; read as a barbell bench press with bands added, like Squat with Bands and Deadlift with Bands (assumed, not verified)."
+  },
+  "Cable_Internal_Rotation": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Car_Drivers": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   },
   "Chair_Squat": {
     "equipment": "bodyweight",
     "note": "Upstream tags it machine; a chair squat uses no machine (assumed)."
   },
+  "Chair_Upper_Body_Stretch": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Circus_Bell": {
+    "primaryMuscles": [
+      "front_delts"
+    ],
+    "note": "Medium confidence, inferred from the movement pattern. An oversized dumbbell is cleaned to the shoulder and pressed overhead, an overhead press pattern, so the front delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Crucifix": {
+    "primaryMuscles": [
+      "side_delts"
+    ],
+    "note": "A timed hold with weights raised out to the sides and level with the floor, an isometric lateral raise for the side delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Dumbbell_Incline_Shoulder_Raise": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Dumbbell_Raise": {
+    "primaryMuscles": [
+      "side_delts"
+    ],
+    "note": "Dumbbells are lifted at the sides toward chin height with the elbows leading, the lateral raise pattern, so the side delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Dumbbell_Scaption": {
+    "primaryMuscles": [
+      "side_delts"
+    ],
+    "note": "Medium confidence, inferred from the movement pattern. Arms rise in the plane between front and side with the thumbs up; most sources name the middle deltoid as the main mover. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Elbow_Circles": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "External_Rotation": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "External_Rotation_with_Band": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "External_Rotation_with_Cable": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Internal_Rotation_with_Band": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Iron_Cross": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Kettlebell_Halo": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Kettlebell_Pirate_Ships": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Kettlebell_Turkish_Get-Up_Lunge_style": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Kettlebell_Turkish_Get-Up_Squat_style": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Kneeling_Arm_Drill": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Landmine_Linear_Jammer": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Log_Lift": {
+    "primaryMuscles": [
+      "front_delts",
+      "side_delts"
+    ],
+    "note": "Medium confidence, inferred from the movement pattern. A log is cleaned to the chest and pressed overhead with a leg drive, an overhead press pattern, so the front and side delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Low_Pulley_Row_To_Neck": {
+    "primaryMuscles": [
+      "rear_delts"
+    ],
+    "note": "A rope row pulled toward the neck with the elbows flared and the upper arms level, the rear delt row pattern. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Medicine_Ball_Scoop_Throw": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Power_Partials": {
+    "primaryMuscles": [
+      "side_delts"
+    ],
+    "note": "A short-range lateral raise: the weights go out to the sides to about shoulder height, so the side delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Rack_Delivery": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Return_Push_from_Stance": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Round_The_World_Shoulder_Stretch": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Seated_Front_Deltoid": {
+    "primaryMuscles": [
+      "front_delts"
+    ],
+    "note": "A partner-assisted stretch named for the front deltoid, with the arms pulled back behind the body. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Shoulder_Circles": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Shoulder_Raise": {
+    "primaryMuscles": [
+      "traps"
+    ],
+    "note": "The movement is a shrug, the shoulders lifted toward the ears, so the upper trapezius rather than a deltoid head. This replaces the upstream shoulders label. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Shoulder_Stretch": {
+    "primaryMuscles": [
+      "rear_delts"
+    ],
+    "note": "A cross-body arm stretch, the usual stretch for the back of the shoulder, so the rear delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Side_Wrist_Pull": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Single-Arm_Linear_Jammer": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Single_Dumbbell_Raise": {
+    "primaryMuscles": [
+      "front_delts"
+    ],
+    "note": "One dumbbell is held with both hands and raised in front to shoulder height, which is a front raise. Upstream gave shoulders without a direction. Medium-high confidence, based on the exercise's own listing and matching front-raise descriptions; not independently verified."
+  },
+  "Sled_Overhead_Backward_Walk": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Smith_Incline_Shoulder_Raise": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
   "Split_Squats": {
-    "primaryMuscles": ["quads"],
-    "secondaryMuscles": ["calves", "glutes", "hamstrings"],
+    "primaryMuscles": [
+      "quads"
+    ],
+    "secondaryMuscles": [
+      "calves",
+      "glutes",
+      "hamstrings"
+    ],
     "note": "Upstream has hamstrings primary and quadriceps secondary; every other split squat has quads primary, so the two are swapped (assumed)."
   },
   "Squats_-_With_Bands": {
     "equipment": "barbell",
-    "variations": ["bands"],
+    "variations": [
+      "bands"
+    ],
     "note": "Upstream says only bands; its twin Squat_with_Bands is tagged barbell, so this is a barbell squat with bands (assumed)."
+  },
+  "Standing_Low-Pulley_Deltoid_Raise": {
+    "primaryMuscles": [
+      "side_delts"
+    ],
+    "note": "Medium confidence, inferred from the movement pattern. A one-arm raise from a low cable taken as a lateral raise; this replaces the earlier front delt proposal. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Standing_Two-Arm_Overhead_Throw": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
+  },
+  "Straight_Raises_on_Incline_Bench": {
+    "primaryMuscles": [
+      "front_delts"
+    ],
+    "note": "Medium confidence, inferred from the movement pattern. A face-down incline front raise with a barbell and straight arms, so the front delts. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Upward_Stretch": {
+    "exclude": true,
+    "note": "no single shoulder head fits or evidence conflicts; excluded pending a decision on a general shoulders value"
   }
 }

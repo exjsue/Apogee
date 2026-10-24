@@ -125,6 +125,9 @@ function curateOne(entry, override, vocabulary) {
       primaryMuscles = uniqueSorted(override.primaryMuscles);
       unplaced = unplaced.filter((u) => u.role !== "primary");
       how.muscles = "override";
+      // A muscle placed as primary by hand leaves the rule's secondary list (an explicit
+      // secondaryMuscles override below is taken as written, and may not repeat a primary).
+      if (override.secondaryMuscles === undefined) secondaryMuscles = secondaryMuscles.filter((m) => !primaryMuscles.includes(m));
     }
     if (override.secondaryMuscles !== undefined) {
       secondaryMuscles = uniqueSorted(override.secondaryMuscles);
@@ -139,6 +142,7 @@ function curateOne(entry, override, vocabulary) {
 
   return {
     exclude,
+    exclusionNote: exclude ? override.note : null,
     uncertainEquipment: equipmentUncertain,
     duplicatesRemoved,
     how,
@@ -172,6 +176,14 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
   const curated = sorted.map((e) => ({ source: e, ...curateOne(e, overrides[e.id], vocabulary) }));
 
   const excludedByOverride = curated.filter((c) => c.exclude).map((c) => c.entry.id);
+  const excludedDetails = curated.filter((c) => c.exclude).map((c) => ({
+    id: c.entry.id,
+    name: c.entry.name,
+    category: c.entry.category,
+    upstreamPrimary: c.source.primaryMuscles,
+    upstreamSecondary: c.source.secondaryMuscles,
+    reason: c.exclusionNote,
+  }));
   const excludedForSeeds = curated.filter((c) => seedOwned.has(c.entry.id)).map((c) => ({ upstreamId: c.entry.id, seedId: seedOwned.get(c.entry.id) }));
   const kept = curated.filter((c) => !c.exclude && !seedOwned.has(c.entry.id));
 
@@ -219,6 +231,7 @@ export function curate({ upstream, overrides = {}, vocabulary, seeds = [], confi
     keyClashes,
     nameClashes,
     excludedByOverride,
+    excludedDetails,
     excludedForSeeds,
     provenance: kept.map((c) => ({ id: c.entry.id, how: c.how, duplicatesRemoved: c.duplicatesRemoved, category: c.source.category ?? null })),
   };

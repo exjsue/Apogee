@@ -25,7 +25,8 @@ export const UPSTREAM_MUSCLES = Object.freeze([...Object.keys(DIRECT), "shoulder
 export function shoulderHead(name) {
   const n = name.toLowerCase();
   if (/rear|reverse fly|reverse flye|face pull|bent.?over (dumbbell )?(raise|lateral)|rear delt|reverse machine fly/.test(n)) return "rear_delts";
-  if (/lateral|side raise|side lateral|upright row/.test(n)) return "side_delts";
+  // "upright row" with an implement word allowed in between ("Upright Barbell Row").
+  if (/lateral|side raise|side lateral|upright(?:\s+[\w-]+)*\s+row/.test(n)) return "side_delts";
   // A bare "raise", "push" or "overhead" does not say which head, so it is left unplaced rather than guessed.
   if (/press|front.*raise|\bclean\b|snatch|jerk|arnold|thruster|handstand push|overhead.*squat|squat.*overhead/.test(n)) return "front_delts";
   return null;
