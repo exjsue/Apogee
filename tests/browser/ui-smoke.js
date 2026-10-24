@@ -1706,3 +1706,81 @@ rule("ui: an exercise and its sets can be moved with buttons that are 44 px high
     await waitFor(() => $(block(BENCH), ".move-line") === null, "the move lines to go");
   }, { width: 320 });
 });
+
+// ---- focus after a move, with renders held open so the order of events does not depend on timing ----
+
+// Makes the first call of object[method] wait until release() is called; later calls pass straight through.
+// `answer`, when given, is returned instead of calling the real method (no database read after the release).
+function holdFirstCall(object, method, answer) {
+  const original = object[method].bind(object);
+  let release = null;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const hold = { release, held: false };
+  object[method] = async (...args) => {
+    if (hold.held) return answer === undefined ? original(...args) : answer;
+    hold.held = true;
+    await gate;
+    return answer === undefined ? original(...args) : answer;
+  };
+  return hold;
+}
+
+const SQUAT_BLOCK = "seed-barbell-squat";
+const squatControl = (root, action) => $(root, `.entry[data-exercise-id="${SQUAT_BLOCK}"] [data-action="${action}"]`);
+
+async function twoExercises(root, app) {
+  await pickExercise(root, "bench", BENCH);
+  await pickExercise(root, "squat", SQUAT_BLOCK);
+  await waitFor(() => squatControl(root, "exercise-menu"), "the squat block");
+  await app.idle();
+}
+
+const focusedAction = () => document.activeElement && document.activeElement.dataset.action;
+
+rule("ui: a Move click made while the menu's render is still reading the reminder keeps its focus request (focus goes to Move down)", async (ctx) => {
+  await withApp(ctx, async ({ root, services, app }) => {
+    await twoExercises(root, app);
+    const inputs = await services.backup.getReminderInputs();
+    const menuRender = holdFirstCall(services.backup, "getReminderInputs", inputs);
+    try {
+      click(squatControl(root, "exercise-menu")); // that render draws the menu, then waits for the reminder
+      const moveUp = await waitFor(() => squatControl(root, "move-exercise-up"), "the Move up item");
+      ctx.assert.ok(menuRender.held); // the menu's render is still waiting
+      click(moveUp); // sets the focus request; the move is being written to the database
+      menuRender.release(); // the held render finishes before that write does
+      await waitFor(() => $(root, ".entry[data-exercise-id]").dataset.exerciseId === SQUAT_BLOCK, "squat to move up");
+      await app.idle();
+      ctx.assert.equal(focusedAction(), "move-exercise-down"); // Move up is now disabled
+    } finally {
+      menuRender.release(); // a failed wait must not leave a render hanging
+    }
+  });
+});
+
+rule("ui: a focus request is passed on from a render that a newer render replaced", async (ctx) => {
+  await withApp(ctx, async ({ root, services, app }) => {
+    await twoExercises(root, app);
+    click(squatControl(root, "exercise-menu"));
+    const up = await waitFor(() => squatControl(root, "move-exercise-up"), "the Move up item");
+    await app.idle();
+    const readingSession = holdFirstCall(services.logger, "getSession"); // render A, started by the move, waits here
+    const readingReminder = holdFirstCall(services.backup, "getReminderInputs"); // render B waits here, after drawing
+    try {
+      click(up); // sets the focus request
+      await waitFor(() => readingSession.held, "render A to wait");
+      ctx.assert.equal(app.state.focus, null); // A took the request when it started
+      const renderB = app.render(); // B starts with no request of its own
+      await waitFor(() => readingReminder.held, "render B to draw and wait for the reminder");
+      readingSession.release(); // A finishes, finds B has taken over, hands the request on
+      await waitFor(() => app.state.focus !== null, "render A to hand the request on");
+      readingReminder.release();
+      await renderB;
+      await app.idle();
+      ctx.assert.equal(focusedAction(), "move-exercise-down");
+      ctx.assert.equal(app.state.focus, null);
+    } finally {
+      readingSession.release(); // a failed wait must not leave a render hanging
+      readingReminder.release();
+    }
+  });
+});

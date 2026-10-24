@@ -173,8 +173,14 @@ export async function mountApp(root, services) {
   }
 
   let latest = 0;
+  let carriedFrom = 0; // the superseded render that handed its focus request back to state.focus, for a newer render still in flight
   async function renderNow() {
     const mine = ++latest;
+    // A render owns the focus request that existed when it started. An older render still waiting on the
+    // reminder must not take a request made after that (its view is about to be replaced).
+    const focus = state.focus;
+    state.focus = null;
+    carriedFrom = 0;
     const context = {
       services,
       state,
@@ -196,7 +202,13 @@ export async function mountApp(root, services) {
     } catch (error) {
       content = h("p", { class: "error", role: "alert" }, `Something went wrong: ${error.message}`);
     }
-    if (mine !== latest) return; // a newer render has taken over
+    if (mine !== latest) { // a newer render has taken over
+      if (focus !== null && state.focus === null) { // pass the request on unless a newer one was made meanwhile
+        state.focus = focus;
+        carriedFrom = mine;
+      }
+      return;
+    }
     if (state.tab !== "log" && typeof state.log.stopElapsed === "function") state.log.stopElapsed(); // the clock runs only on the Log tab
     if (state.enter) {
       content.dataset.anim = "tab"; // see the motion block in app.css
@@ -209,9 +221,11 @@ export async function mountApp(root, services) {
       const current = element.dataset.tab === state.tab;
       element.setAttribute("aria-current", current ? "page" : "false");
     });
-    if (state.focus !== null) {
-      const target = view.querySelector(state.focus);
+    const wanted = focus ?? (carriedFrom !== 0 && carriedFrom < mine ? state.focus : null);
+    if (wanted !== null) {
       state.focus = null;
+      carriedFrom = 0;
+      const target = view.querySelector(wanted);
       if (target) target.focus();
     }
   }
