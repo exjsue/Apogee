@@ -62,7 +62,7 @@ test("additions: through the build, upstream entries say origin upstream, additi
     const additions = path.join(dir, "additions.txt");
     fs.writeFileSync(additions, sampleText);
     const out = path.join(dir, "out");
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", additions, "--out", out]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", additions, "--out", out]);
     const catalog = JSON.parse(fs.readFileSync(path.join(out, "catalog.json"), "utf8"));
     assert.equal(catalog.exercises.length, 112);
     assert.ok(catalog.exercises.slice(0, 110).every((e) => e.origin === ORIGIN_UPSTREAM));
@@ -81,8 +81,8 @@ test("additions: a file with only the commented template adds nothing and leaves
     fs.writeFileSync(empty, "");
     const template = path.join(dir, "template.txt");
     fs.writeFileSync(template, templateText);
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", empty, "--out", path.join(dir, "a")]);
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", template, "--out", path.join(dir, "b")]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", empty, "--out", path.join(dir, "a")]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", template, "--out", path.join(dir, "b")]);
     const names = fs.readdirSync(path.join(dir, "a")).sort();
     assert.deepEqual(names, fs.readdirSync(path.join(dir, "b")).sort());
     for (const name of names) assert.ok(fs.readFileSync(path.join(dir, "a", name)).equals(fs.readFileSync(path.join(dir, "b", name))), `${name} differs`);
@@ -208,14 +208,14 @@ test("additions: every problem is reported together, in plain words, with block,
     fs.writeFileSync(additions, broken);
     const out = path.join(dir, "out");
     assert.throws(
-      () => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", additions, "--out", out]),
+      () => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", additions, "--out", out]),
       /The additions file has \d+ problems\. Nothing was built/,
     );
     assert.ok(fs.existsSync(path.join(out, "additions-problems.txt")));
     assert.ok(!fs.existsSync(path.join(out, "catalog.json")), "nothing else is written");
     // Fixing the file removes the old report.
     fs.writeFileSync(additions, sampleText);
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", additions, "--out", out]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", additions, "--out", out]);
     assert.ok(!fs.existsSync(path.join(out, "additions-problems.txt")));
     assert.ok(fs.existsSync(path.join(out, "catalog.json")));
   });
@@ -239,7 +239,7 @@ test("additions: output with additions is byte-identical between runs, and --str
     // The fixture's squat-style Turkish get-up has no placeable shoulder head; leave it out so --strict can pass.
     const overrides = { ...JSON.parse(fs.readFileSync(overridesFile, "utf8")), "Kettlebell_Turkish_Get-Up_Squat_style": { exclude: true, note: "left out for the test" } };
     fs.writeFileSync(overridesFile, JSON.stringify(overrides));
-    const args = (name) => ["--input", input, "--pin", pin, "--overrides", overridesFile, "--additions", additions, "--out", path.join(dir, name), "--strict"];
+    const args = (name) => ["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--additions", additions, "--out", path.join(dir, name), "--strict"];
     assert.doesNotThrow(() => run(args("a")));
     assert.doesNotThrow(() => run(args("b")));
     for (const name of fs.readdirSync(path.join(dir, "a"))) {
@@ -263,6 +263,7 @@ function withTempFiles(body) {
     const ids = ["Bench_Press_-_With_Bands", "Chair_Squat", "Split_Squats", "Squats_-_With_Bands"];
     const overridesFile = path.join(dir, "overrides.json");
     fs.writeFileSync(overridesFile, JSON.stringify(Object.fromEntries(ids.map((id) => [id, all[id]]))));
+    fs.writeFileSync(path.join(dir, "pairs.json"), "{}"); // no seed pairs: the real ones name upstream entries the 110-entry fixture does not have
     return body({ dir, input, pin, overridesFile });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

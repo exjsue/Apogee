@@ -1,1 +1,17 @@
-{}
+{
+  "seed-barbell-bench-press": "Barbell_Bench_Press_-_Medium_Grip",
+  "seed-incline-dumbbell-press": "Incline_Dumbbell_Press",
+  "seed-overhead-press": "Standing_Military_Press",
+  "seed-barbell-squat": "Barbell_Squat",
+  "seed-conventional-deadlift": "Barbell_Deadlift",
+  "seed-romanian-deadlift": "Romanian_Deadlift",
+  "seed-barbell-row": "Bent_Over_Barbell_Row",
+  "seed-pull-up": "Pullups",
+  "seed-dumbbell-curl": "Dumbbell_Bicep_Curl",
+  "seed-triceps-pushdown": "Triceps_Pushdown",
+  "seed-dumbbell-lateral-raise": "Side_Lateral_Raise",
+  "seed-leg-press": "Leg_Press",
+  "seed-seated-leg-curl": "Seated_Leg_Curl",
+  "seed-standing-calf-raise": "Standing_Calf_Raises",
+  "seed-hip-thrust": "Barbell_Hip_Thrust"
+}

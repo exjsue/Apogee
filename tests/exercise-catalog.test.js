@@ -262,7 +262,7 @@ test("catalog: an excluded entry is left out of the catalog and listed in the ex
   withTempFiles(({ dir, input, pin, overridesFile }) => {
     fs.writeFileSync(overridesFile, JSON.stringify({ ...overrides, Sit_Squats: { exclude: true, note: "left out for the test" } }));
     const out = path.join(dir, "out");
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", out]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", out]);
     const catalog = JSON.parse(fs.readFileSync(path.join(out, "catalog.json"), "utf8"));
     assert.equal(catalog.exercises.length, 109);
     assert.ok(!catalog.exercises.some((e) => e.id === "Sit_Squats"));
@@ -296,6 +296,7 @@ function withTempFiles(body) {
     }));
     const overridesFile = path.join(dir, "overrides.json");
     fs.writeFileSync(overridesFile, JSON.stringify(overrides));
+    fs.writeFileSync(path.join(dir, "pairs.json"), "{}"); // no seed pairs: the real ones name upstream entries the 110-entry fixture does not have
     return body({ dir, input, pin, overridesFile });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -316,17 +317,17 @@ test("catalog tool: --strict fails while an entry has no primary muscle, and the
   withTempFiles(({ dir, input, pin, overridesFile }) => {
     const out = path.join(dir, "out");
     // In the fixture exactly one entry (the squat-style Turkish get-up) has only an unplaced shoulder.
-    assert.throws(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", out, "--strict"]), /--strict: 1 entries have no primary muscle/);
+    assert.throws(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", out, "--strict"]), /--strict: 1 entries have no primary muscle/);
     assert.ok(fs.existsSync(path.join(out, "catalog.json")));
-    assert.doesNotThrow(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "out2")]));
+    assert.doesNotThrow(() => run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", path.join(dir, "out2")]));
   });
 });
 
 test("catalog tool: the same input gives byte-identical output, in process and on disk", () => {
   assert.equal(stringify(curate({ upstream: fixture, overrides, vocabulary })), stringify(curate({ upstream: [...fixture].reverse(), overrides, vocabulary })));
   withTempFiles(({ dir, input, pin, overridesFile }) => {
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "a")]);
-    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "b")]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", path.join(dir, "a")]);
+    run(["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", path.join(dir, "b")]);
     const names = fs.readdirSync(path.join(dir, "a")).sort();
     assert.deepEqual(names, fs.readdirSync(path.join(dir, "b")).sort());
     assert.ok(names.includes("catalog.json") && names.includes("summary.txt") && names.some((n) => n.startsWith("review-")));
@@ -358,7 +359,7 @@ test("catalog tool: it makes no network call (no network modules in its source, 
   withTempFiles(({ dir, input, pin, overridesFile }) => {
     const result = spawnSync(
       process.execPath,
-      ["--import", pathToImport(path.join(FIXTURES, "no-network.mjs")), path.join(TOOL, "build-catalog.js"), "--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, "out")],
+      ["--import", pathToImport(path.join(FIXTURES, "no-network.mjs")), path.join(TOOL, "build-catalog.js"), "--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", path.join(dir, "out")],
       { encoding: "utf8" },
     );
     assert.equal(result.status, 0, result.stderr);

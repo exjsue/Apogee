@@ -356,7 +356,8 @@ test("families: the build writes families.md and outliers.md, the same on every 
     const all = JSON.parse(fs2.readFileSync(path.join(here, "..", "tools", "exercise-catalog", "overrides.json"), "utf8"));
     const overridesFile = path.join(dir, "overrides.json");
     fs2.writeFileSync(overridesFile, JSON.stringify(Object.fromEntries(["Bench_Press_-_With_Bands", "Chair_Squat", "Split_Squats", "Squats_-_With_Bands"].map((id) => [id, all[id]]))));
-    const args = (name) => ["--input", input, "--pin", pin, "--overrides", overridesFile, "--out", path.join(dir, name)];
+    fs2.writeFileSync(path.join(dir, "pairs.json"), "{}"); // no seed pairs: the real ones name upstream entries the 110-entry fixture does not have
+    const args = (name) => ["--input", input, "--pin", pin, "--overrides", overridesFile, "--pairs", path.join(dir, "pairs.json"), "--out", path.join(dir, name)];
     run(args("a"));
     run(args("b"));
     for (const file of ["families.md", "outliers.md"]) {

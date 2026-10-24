@@ -1,7 +1,7 @@
 // Builds the exercise catalog from a pinned local copy of free-exercise-db's dist/exercises.json.
 //
-//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>] [--additions <file>]
-// (--pin, --overrides and --additions exist for the tests, which run on a fixture.)
+//   node tools/exercise-catalog/build-catalog.js --input <exercises.json> --out <folder> [--strict] [--pin <file>] [--overrides <file>] [--additions <file>] [--pairs <file>]
+// (--pin, --overrides, --additions and --pairs exist for the tests, which run on a fixture.)
 //
 // It makes no network call: the input is a file someone fetched earlier, and it must match
 // input-pin.json byte for byte (its SHA-256), so it can never run on anything else. Every output goes
@@ -26,7 +26,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--strict") args.strict = true;
-    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides" || arg === "--additions") {
+    else if (arg === "--input" || arg === "--out" || arg === "--pin" || arg === "--overrides" || arg === "--additions" || arg === "--pairs") {
       args[arg.slice(2)] = argv[i + 1];
       i += 1;
     } else throw new Error(`unknown argument: ${arg}`);
@@ -60,7 +60,7 @@ export function run(argv) {
 
   const vocabulary = loadVocabulary();
   const overrides = readJson(args.overrides ?? path.join(here, "overrides.json"));
-  const confirmedPairs = readJson(path.join(here, "confirmed-seed-pairs.json"));
+  const confirmedPairs = readJson(args.pairs ?? path.join(here, "confirmed-seed-pairs.json"));
   const result = curate({ upstream, overrides, vocabulary, seeds: SEED_EXERCISES, confirmedPairs });
 
   // The hand-written exercises are checked on their own and appended after curation. A problem stops the
