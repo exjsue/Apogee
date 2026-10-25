@@ -2022,6 +2022,74 @@ rule("motion: a new set row slides in over the shared motion length once, and a 
   }, { width: 375 });
 });
 
+// ---- the Backup section inside Settings (step 1a: the Backup tab still exists) ----
+
+rule("settings: the Backup section sits below the Weight unit card; the Backup tab still exists", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await waitFor(() => action(root, "persist"), "the Backup section");
+    ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 2);
+    for (const name of ["download-export", "check-import", "persist"]) ctx.assert.ok(action(root, name), name);
+    ctx.assert.ok(region(root, "export-warning"));
+    const unitCard = $(root, '#view .card[aria-label="Weight unit"]');
+    const heading = region(root, "backup-heading");
+    ctx.assert.ok(unitCard && heading);
+    ctx.assert.equal(heading.textContent, "Backup");
+    ctx.assert.ok(unitCard.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING, "the heading follows the Weight unit card");
+    ctx.assert.ok(heading.compareDocumentPosition(action(root, "download-export")) & Node.DOCUMENT_POSITION_FOLLOWING, "the export button follows the heading");
+    ctx.assert.ok($(root, '[data-action="tab"][data-tab="backup"]'), "the Backup tab is still there in step 1a");
+  });
+});
+
+rule("settings: if the Backup section cannot be drawn, an alert takes its place and the unit toggle survives", async (ctx) => {
+  await withApp(ctx, async ({ root, services, app }) => {
+    await goToTab(root, "settings");
+    await waitFor(() => action(root, "download-export"), "the full Backup section");
+    const real = services.backup.getExportTimes;
+    services.backup.getExportTimes = async () => { throw new Error("reading failed"); };
+    try {
+      await app.render();
+      ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 2, "the unit buttons are still there");
+      ctx.assert.equal(action(root, "download-export"), null);
+      const alert = $(root, '#view p.error[role="alert"]');
+      ctx.assert.ok(alert && /reading failed/.test(alert.textContent));
+    } finally {
+      services.backup.getExportTimes = real;
+    }
+    await app.render(); // positive control: with the stub gone the full section returns
+    ctx.assert.ok(action(root, "download-export"));
+    ctx.assert.equal($(root, '#view p.error[role="alert"]'), null);
+  });
+});
+
+rule("motion: the Backup panels inside Settings fade in once (not on a redraw), and the Settings view fades in on a tab switch", async (ctx) => {
+  const offline = stubOffline();
+  await withApp(ctx, async ({ root, app }) => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const fades = (element) => element.getAnimations().map((a) => a.animationName);
+    await goToTab(root, "settings");
+    click(await waitFor(() => action(root, "reset-offline"), "the Reset offline copy button"));
+    const opened = await waitFor(() => region(root, "confirm-reset-offline"), "the confirmation");
+    ctx.assert.equal(opened.dataset.anim, "in", "the opened confirm is marked");
+    ctx.assert.deepEqual(fades(opened), reduced ? [] : ["fade-in"], "fade-in unless motion is reduced");
+    await app.render();
+    const redrawn = region(root, "confirm-reset-offline");
+    ctx.assert.ok(redrawn !== opened && !opened.isConnected);
+    ctx.assert.equal(redrawn.dataset.anim, undefined, "a redrawn confirm is not marked");
+    ctx.assert.equal(redrawn.getAnimations().length, 0, "a redraw does not replay the fade");
+    click(action(root, "cancel-reset-offline"));
+    await waitFor(() => !region(root, "confirm-reset-offline"), "the confirm to close");
+    click(action(root, "download-export"));
+    const notice = await waitFor(() => region(root, "notice"), "the notice");
+    ctx.assert.equal(notice.dataset.anim, "in", "a new notice is marked");
+    ctx.assert.deepEqual(fades(notice), reduced ? [] : ["fade-in"]);
+    await goToTab(root, "history");
+    await goToTab(root, "settings");
+    ctx.assert.equal($(root, "#view > section.view").dataset.anim, "tab", "the outer view gets the tab fade");
+    ctx.assert.deepEqual(fades($(root, "#view > section.view")), reduced ? [] : ["fade-in"]);
+  }, { width: 320, offline });
+});
+
 // ---- the tab bar's sliding indicator (the nav's ::after, placed by data-active) ----
 
 rule("tabs: after each switch the indicator sits under the active tab (left edge and width), passes taps through, and tapping the active tab changes nothing", async (ctx) => {

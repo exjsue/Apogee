@@ -4,6 +4,7 @@
 
 import { h, button } from "./dom.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
+import { renderBackupView } from "./backup-view.js";
 
 export async function renderSettingsView(ctx) {
   const { state, services } = ctx;
@@ -19,6 +20,13 @@ export async function renderSettingsView(ctx) {
       await ctx.rerender();
     },
   }));
+  // A failure in the Backup section must not take the unit toggle down with it.
+  let backupSection;
+  try {
+    backupSection = await renderBackupView(ctx);
+  } catch (error) {
+    backupSection = h("p", { class: "error", role: "alert" }, `The Backup section could not be shown: ${error.message}`);
+  }
   return h(
     "section",
     { class: "view", "aria-label": "Settings" },
@@ -29,5 +37,7 @@ export async function renderSettingsView(ctx) {
       h("p", { class: "muted" }, "Sets how weights are shown. Weights are stored as you entered them and never change."),
       h("div", { class: "units", role: "group", "aria-label": "Display unit" }, unitButtons),
     ),
+    h("h2", { tabindex: "-1", "data-region": "backup-heading", class: "section-divider" }, "Backup"),
+    backupSection,
   );
 }

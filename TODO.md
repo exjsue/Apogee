@@ -36,6 +36,7 @@
 - [x] Recovery procedure for a broken worker is written down in OFFLINE.md, with the warning that clearing site data also deletes the workouts
 
 ## Next
+- [ ] Backup into Settings: step 1a is built (the Backup section is drawn inside Settings, the Backup tab still exists). Still to do: 1b (remove the Backup tab, send the reminder's Go to Backup button to Settings, update the tests and OFFLINE.md) and step 2 (a Body placeholder tab between History and Settings). Check 1a on the phone first.
 - [ ] Edit a logged set, and edit a finished workout (deleting one is done: History detail has Delete workout, with a confirmation)
 - [ ] Check on a real phone that the Delete workout button in History detail is hard to tap by mistake (it sits at the bottom, away from Back, and asks first; there is no undo)
 - [ ] Edit or delete a custom exercise (blocked until we decide what happens to sets that use it)

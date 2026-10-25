@@ -145,6 +145,13 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 
 .view { display: block; }
 
+/* A clear break before a long section inside one view (Settings: the Backup section). Static. */
+.section-divider {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
