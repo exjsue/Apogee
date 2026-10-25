@@ -68,14 +68,14 @@ export const BODY_REGIONS = Object.freeze({
   back: {
     silhouette: body(TORSO),
     regions: [
-      region("traps", ellipse(86, 78, 16, 9, -15)),
+      region("traps", ellipse(88, 78, 13, 9, -15)),
       region("rear_delts", ellipse(62, 80, 11, 11)),
-      region("upper_back", ellipse(88, 105, 13, 13)),
+      region("upper_back", ellipse(89, 105, 11, 13)),
       region("lats", ellipse(80, 135, 11, 24, -12)),
       region("triceps", ellipse(52, 108, 7, 17, 6)),
       region("forearms", ellipse(45, 153, 6.5, 21, 8)),
-      region("lower_back", ellipse(92, 172, 9, 13)),
-      region("glutes", ellipse(88, 215, 15, 15)),
+      region("lower_back", ellipse(92, 172, 8, 13)),
+      region("glutes", ellipse(87, 215, 12, 15)),
       region("hamstrings", ellipse(82, 262, 13, 36)),
       region("abductors", ellipse(69, 203, 6, 9)),
       region("calves", ellipse(80, 340, 9, 26)),
