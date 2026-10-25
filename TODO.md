@@ -98,7 +98,8 @@
   - Export stays self-contained and includes the builtin records (about 290 KB more per export): measure a real export on an iPhone after the schema step.
 - [ ] More animations across the app.
 - [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion off, so animations show when testing. Phase 1 (done, awaiting commit) covers the tab fade, panels, forms, notices, banners and button press at 200 ms (--motion); Phase 2: set check, rows added or removed, template Start, and the check/delete buttons' press feedback.
-- [ ] Test "styles: the check control is a 44 px target…" reads the check disc's opacity while the disc-in animation is running, so it fails on HEAD with prefers-reduced-motion: no-preference; it passes here only because this desktop's Chrome reports Reduce Motion ON. Fix in Phase 2 together with the check animation (needs John's approval to change that assertion).
+- [x] Test "styles: the check control is a 44 px target…" read the check disc's opacity while the disc-in animation was running, so it failed with prefers-reduced-motion: no-preference (it passed here only because this desktop's Chrome reports Reduce Motion ON). Fixed (Phase 2 step B1, 2026-10-25): the test now waits for the check's animations to finish before reading the opacity; the assertion itself is unchanged.
+- [ ] Known flaky browser test: "the real reset removes only this app's caches…" fails intermittently with CacheStorage.open: Unexpected internal error in headless Chrome 156 (not caused by app code; waived in DECISIONS.md 2026-10-24).
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.
 - [ ] Make the set UI slightly smaller / more compact.
 - [x] Show total workout time during a workout (done 2026-10-24 as a live elapsed time in the Current workout card; not yet tested on an iPhone).

@@ -1785,6 +1785,7 @@ rule("styles: the check control is a 44 px target with a ring when unchecked and
     ctx.assert.equal(win.getComputedStyle(unchecked).color, "rgba(0, 0, 0, 0)");
     await logOneSet(root, "8", "100", "kg");
     const checked = toggle();
+    await Promise.allSettled(checked.getAnimations({ subtree: true }).map((a) => a.finished)); // the pop and the disc fade are over
     ctx.assert.equal(win.getComputedStyle(checked, "::after").opacity, "1"); // a disc (a different shape, not only a colour)
     ctx.assert.ok(win.getComputedStyle(checked).color !== "rgba(0, 0, 0, 0)"); // the tick shows
     ctx.assert.ok(parseFloat(win.getComputedStyle(checked, "::after").width) < 44);
