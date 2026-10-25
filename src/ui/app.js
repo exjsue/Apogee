@@ -10,12 +10,14 @@ import { h, button } from "./dom.js";
 import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
 import { freshBackupState } from "./backup-view.js";
+import { renderBodyView } from "./body-view.js";
 import { renderSettingsView } from "./settings-view.js";
 import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
 const TABS = [
   { id: "log", label: "New", render: renderLogView },
   { id: "history", label: "History", render: renderHistoryView },
+  { id: "body", label: "Body", render: renderBodyView },
   { id: "settings", label: "Settings", render: renderSettingsView },
 ];
 

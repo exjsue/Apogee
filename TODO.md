@@ -118,6 +118,16 @@
 - [ ] Editing sets of finished workouts (from History). editSet only edits the current workout.
 - [ ] Focus the weight field when the set edit form opens (currently a second tap is needed on a phone). Try after a week of real use.
 
+## Body feature (added 2026-10-25; the Body tab is a placeholder today)
+- [ ] 1. Read-only check of the exercise catalog's muscle ids against the diagram's regions.
+- [ ] 2. Domain function (no DOM) for per-muscle training load, with tests.
+- [ ] 3. Static diagram from ellipse data, with fake data.
+- [ ] 4. Shading from real data, plus neglected-muscle markers.
+- [ ] 5. Detail panel for a tapped muscle.
+- [ ] 6. Editable targets. Stored-data step: plan with diffs first, owner approves each commit, run on Opus.
+- [ ] 7. "Resting" muscle flag. Stored-data step: same process, run on Opus.
+- Rule for step 7: the Resting flag never changes history or totals (workouts, sets, volume and exports stay as logged). Turning it on or off shows an inline notice in the panel, not a modal.
+
 ## Deferred
 - [ ] Optional app fix, aria-current (added 2026-10-24): in renderNow (src/ui/app.js) only set aria-current for the tab whose content was drawn, by capturing state.tab at the start of renderNow. Today an older render in flight can mark the new tab current while the previous tab's content is on screen (briefly; it corrects itself on the next draw). The tests now wait for the content instead (DECISIONS.md, 2026-10-24). Revisit at the VoiceOver pass.
 - [ ] Focus hand-back (src/ui/app.js renderNow), added 2026-10-24: untested case where the newer render has already finished when the older one hands the request back; the request is left in state.focus for a later render. Possible fix: track whether a newer render is still in flight and drop the request if not; needs a test.

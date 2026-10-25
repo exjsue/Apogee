@@ -163,7 +163,7 @@ async function logOneSet(root, reps, weight, unit) {
 // The aria-label of the section each tab draws (History may show a workout's detail instead of the list).
 // aria-current alone is not enough: an older render still in flight sets it from state.tab while it draws
 // the previous tab's content, so the content itself must be waited for.
-const TAB_CONTENT = { log: ["New"], history: ["History", "Workout detail"], settings: ["Settings"] };
+const TAB_CONTENT = { log: ["New"], history: ["History", "Workout detail"], body: ["Body"], settings: ["Settings"] };
 const goToTab = async (root, tab) => {
   click($(root, `[data-action="tab"][data-tab="${tab}"]`));
   await waitFor(() => $(root, `[data-action="tab"][data-tab="${tab}"]`).getAttribute("aria-current") === "page", `the ${tab} tab`);
@@ -172,11 +172,11 @@ const goToTab = async (root, tab) => {
 
 // ---- tests ----
 
-rule("ui: the app mounts with the log screen and three tabs; the unit toggle is only in Settings", async (ctx) => {
+rule("ui: the app mounts with the log screen and four tabs; the unit toggle is only in Settings", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     ctx.assert.ok(root.textContent.includes("Apogee"));
     ctx.assert.ok(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
-    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="tab"]')].map((b) => b.dataset.tab), ["log", "history", "settings"]);
+    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="tab"]')].map((b) => b.dataset.tab), ["log", "history", "body", "settings"]);
     ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 0); // not in the header, not on Log
     ctx.assert.ok(root.textContent.includes("No workout in progress"));
     await goToTab(root, "settings");
@@ -2127,12 +2127,12 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
       ctx.assert.ok(Math.abs(parseFloat(bar.width) - target.width) <= 1, `${tab}: bar width ${bar.width} vs tab width ${target.width}`);
     };
     ctx.assert.equal(win.getComputedStyle(nav, "::after").pointerEvents, "none", "the bar must not swallow taps");
-    // Three equal tabs: their widths and the two gaps fill the nav, and the bar is one tab wide.
+    // Four equal tabs: their widths and the three gaps fill the nav, and the bar is one tab wide.
     const tabs = [...nav.querySelectorAll('[data-action="tab"]')];
-    ctx.assert.equal(tabs.length, 3);
+    ctx.assert.equal(tabs.length, 4);
     const gap = parseFloat(win.getComputedStyle(nav).columnGap);
     const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
-    ctx.assert.ok(Math.abs(widths.reduce((a, b) => a + b, 0) + 2 * gap - nav.getBoundingClientRect().width) <= 1, "three tabs and two gaps fill the nav");
+    ctx.assert.ok(Math.abs(widths.reduce((a, b) => a + b, 0) + 3 * gap - nav.getBoundingClientRect().width) <= 1, "four tabs and three gaps fill the nav");
     ctx.assert.ok(Math.abs(parseFloat(win.getComputedStyle(nav, "::after").width) - widths[0]) <= 1, "the bar is one tab wide");
     await check("log");
     // Positive control for the waits in check(): when motion is allowed the slide really runs (so settled() waits for
@@ -2140,7 +2140,7 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
     click($(root, '[data-action="tab"][data-tab="history"]'));
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     ctx.assert.equal(nav.getAnimations({ subtree: true }).length > 0, !reduced, "the slide runs only when motion is allowed");
-    for (const tab of ["history", "settings", "log"]) {
+    for (const tab of ["history", "body", "settings", "log"]) {
       await goToTab(root, tab);
       await check(tab);
     }
@@ -2150,4 +2150,17 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
     await goToTab(root, "settings");
     await check("settings");
   }, { width: 320 });
+});
+
+rule("tabs: selecting Body shows the Body heading and no other panel", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    const sections = root.querySelectorAll("#view > section.view");
+    ctx.assert.equal(sections.length, 1, "exactly one panel is shown");
+    ctx.assert.equal(sections[0].getAttribute("aria-label"), "Body");
+    ctx.assert.equal(sections[0].querySelector("h2").textContent, "Body");
+    ctx.assert.equal(action(root, "choose-exercise"), null, "the New panel is not shown");
+    ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 0, "the Settings panel is not shown");
+    ctx.assert.equal($(root, '[data-action="tab"][data-tab="body"]').getAttribute("aria-current"), "page");
+  });
 });
