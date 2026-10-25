@@ -16,6 +16,7 @@ import {
 } from "../domain/workout-plan.js";
 import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
 import { computeMuscleLoad } from "../domain/muscle-load.js";
+import { buildMuscleDetails } from "../domain/muscle-detail.js";
 import { computeBodyStatus, WINDOW_DAYS, NEGLECTED_WEEKS } from "../domain/body-status.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
@@ -756,7 +757,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   // unfinished, of any age, as a stale workout can be continued), or it ended inside the window, or its endedAt is
   // unreadable. A finish sets endedAt at or after every set in the workout. The window ends 1 ms after now, so a set
   // logged this instant counts. Several reads, not one transaction: a set logged between them may show in one
-  // window and not the other, which a redraw puts right.
+  // window and not the other, which a redraw puts right. It also returns `details`, a MuscleDetail per displayed
+  // muscle for the tap-to-inspect panel (src/domain/muscle-detail.js), made from the same reads.
   async function getMuscleStatus() {
     const nowAt = nowDate().getTime();
     const end = nowAt + 1;
@@ -769,8 +771,14 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       if (found !== null) details.push(found);
     }
     const exercises = await store.listExercises();
-    const load = (start) => computeMuscleLoad({ workouts: details, exercises, window: { start, end } });
-    return computeBodyStatus({ recent: load(nowAt - WINDOW_DAYS * DAY_MS), longer: load(longerStart) });
+    const load = (start, stop, detail = false) => computeMuscleLoad({ workouts: details, exercises, window: { start, end: stop }, detail });
+    const recentStart = nowAt - WINDOW_DAYS * DAY_MS;
+    const recent = load(recentStart, end, true);
+    const longer = load(longerStart, end, true);
+    // The window before the recent one, [now - 14 days, now - 7 days): it ends where the recent one starts, so no set counts twice.
+    const previous = load(nowAt - 2 * WINDOW_DAYS * DAY_MS, recentStart);
+    // The detail panel's numbers come from the same reads: no read per tap.
+    return { ...computeBodyStatus({ recent, longer }), details: buildMuscleDetails({ recent, previous, longer, exercises, now: nowAt }) };
   }
 
   return {

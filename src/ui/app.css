@@ -454,6 +454,23 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .body-diagram .level-3 .shape { fill: var(--accent); fill-opacity: 0.65; }
 .body-diagram .level-4 .shape { fill: var(--accent); fill-opacity: 0.82; }
 .body-diagram .level-5 .shape { fill: var(--accent); }
+/* The muscle whose panel is open: a heavy solid outline in the text colour, in place of the dashed "not trained"
+   outline while it is selected (the panel says that in words). It follows the neglected rule, so it wins. The accent
+   ring of an above-target muscle is a separate shape outside it, so the two stay apart by weight and colour. */
+.body-diagram .selected .shape { stroke: var(--text); stroke-width: 2.6; stroke-dasharray: none; }
+/* Its second line, inside the edge, in the background colour: the outline above is invisible against the darkest fill in
+   dark mode (text and accent are both near white there) and this one is invisible against the palest fill, so one always
+   shows. A separate shape below the hit shapes (src/ui/body-diagram.js); it takes no taps. */
+.body-diagram .selected-line { fill: none; stroke: var(--bg); stroke-width: 1.4; pointer-events: none; }
+/* The panel under the diagram: a block in the normal flow, not a modal, so it never covers or moves the diagram. */
+.muscle-slot { margin-top: 12px; }
+.muscle-panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px; overflow-wrap: anywhere; }
+.muscle-panel p { margin: 0 0 8px; }
+.muscle-panel .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.muscle-panel h3 { margin: 0; }
+.muscle-panel h4 { margin: 8px 0 4px; font-size: 0.9375rem; }
+.muscle-panel li { padding: 2px 0; }
+.muscle-panel .contributors { margin-bottom: 8px; }
 /* Text for screen readers only: out of sight but still in the accessibility tree (not display: none). */
 .visually-hidden {
   position: absolute;
@@ -465,6 +482,19 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+/* The Body tab's text list is a row of buttons that open the muscle panel. It stays out of sight until one of them has
+   focus, then it is drawn in the flow below the panel, so a keyboard user can see where the focus is. */
+.body-list li + li { margin-top: 4px; }
+.body-list button { display: block; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; }
+.body-list:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 12px 0 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
 }
 
 /* set rows: a header row, then one grid row per set (set number, weight, reps, the check, a small delete) */

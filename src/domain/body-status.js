@@ -10,7 +10,8 @@ export const NEGLECTED_WEEKS = 3;
 // The weighted sets per muscle per WINDOW_DAYS days that the diagram treats as a good range, and the top of it is
 // what the darkest shade stands for. A CONTESTED DEFAULT, not a rule: the evidence is mixed (a 2026 meta-regression
 // supports fractional counting and diminishing returns; other studies put the optimum for trained lifters nearer
-// 9 to 15, and gains are reported to continue above 20). Changed here, in one place. min is not used yet.
+// 9 to 15, and gains are reported to continue above 20). Changed here, in one place. max sets the darkest shade and the
+// above-target marker; min only separates "below" from "within" in the detail panel (src/domain/muscle-detail.js).
 export const TARGET_RANGE = Object.freeze({ min: 10, max: 20 });
 
 const weightedOf = (load) => Object.fromEntries(Object.entries(load.muscles).map(([id, row]) => [id, row.weighted]));

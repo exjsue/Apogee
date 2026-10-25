@@ -12,6 +12,13 @@
 //              always the darkest shade, and an outline in the same colour as that fill would hardly show. A ring is
 //              not a ".shape" and sits below the hit shapes, so it never takes a tap.
 //
+// The selected muscle (the one whose detail panel is open, chosen by the caller) is marked with TWO lines, so it reads on
+// any shade: the class "selected" on its group, which app.css turns into a heavy solid outline on its shapes (in place of
+// the dashed "not trained" one), and one "selected-line" per shape: a thin line SELECT_INSET inside the edge, in the page
+// background colour. The outline is in the text colour, which vanishes against the darkest fill in dark mode (white on
+// white); the inner line is in the background colour, which vanishes against the palest fill; between them one always
+// shows. The inner line is not a ".shape", sits below the hit shapes and takes no taps. markSelected changes it in place.
+//
 // The SVG is cloned from the template in index.html, as the rest icon is: creating SVG elements from script
 // needs the SVG namespace URL, and the page scan allows no URLs, so the namespace is read from the cloned element.
 
@@ -58,8 +65,34 @@ export function intensityLines({ values, view, max, neglected = new Set(), above
   });
 }
 
+// How far inside its shape the selected muscle's inner line is drawn, in the diagram's units; a shape too small for it
+// gets a line of MIN_INNER_RADIUS.
+export const SELECT_INSET = 3;
+const MIN_INNER_RADIUS = 0.8;
+
+// The shapes of the selected muscle's inner line on `view`: one per shape of the muscle, same centre and rotation, smaller.
+// None for a muscle that is not on the view, or for null.
+export function selectionLines(view, muscle) {
+  const region = BODY_REGIONS[view]?.regions.find((candidate) => candidate.muscle === muscle);
+  if (region === undefined) return [];
+  return region.shapes.map((shape) => ({ ...shape, rx: Math.max(shape.rx - SELECT_INSET, MIN_INNER_RADIUS), ry: Math.max(shape.ry - SELECT_INSET, MIN_INNER_RADIUS) }));
+}
+
+// Marks `muscle` (or nothing, for null) as selected on a drawn diagram: the class and the inner lines, removing them from
+// every other muscle.
+export function markSelected(svg, view, muscle) {
+  for (const group of svg.querySelectorAll("g[data-muscle]")) {
+    const on = group.dataset.muscle === muscle;
+    group.classList.toggle("selected", on);
+    for (const old of group.querySelectorAll(".selected-line")) old.remove();
+    if (!on) continue;
+    const firstHit = group.querySelector(".hit");
+    for (const line of selectionLines(view, muscle)) group.insertBefore(makeShape(svg.namespaceURI, line, "selected-line"), firstHit);
+  }
+}
+
 // Returns the svg, or null if the page has no template for it (the caller then shows the text list alone).
-export function renderBodyDiagram({ values, view, max, label, neglected = new Set(), above = new Set() }) {
+export function renderBodyDiagram({ values, view, max, label, neglected = new Set(), above = new Set(), selected = null }) {
   if (!hasTemplate() || BODY_REGIONS[view] === undefined) return null;
   const svg = document.getElementById("body-diagram-template").content.firstElementChild.cloneNode(true);
   const ns = svg.namespaceURI;
@@ -82,5 +115,6 @@ export function renderBodyDiagram({ values, view, max, label, neglected = new Se
     for (const shape of shapes) group.append(makeShape(ns, { ...shape, ...shape.hit }, "hit")); // last, so it is on top
     svg.append(group);
   }
+  if (selected !== null) markSelected(svg, view, selected);
   return svg;
 }

@@ -36,6 +36,7 @@ export async function mountApp(root, services) {
   async function selectTab(id) {
     if (state.tab !== id) {
       state.log.seen = null; // a new screen: its rows do not animate one by one
+      state.body.selected = null; // an open muscle panel is not kept when the Body tab is left
       state.enter = true; // the new tab fades in, once
     }
     state.tab = id;

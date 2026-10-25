@@ -45,6 +45,7 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 - Never run the browser page on the owner's phone.
 - Control-character scan over tools/, tests/, src/, DECISIONS.md and TODO.md (regex \b can become a literal backspace).
 - Stop any server started for browser tests (ports 8098 and 8099) afterward.
+- Never run taskkill /IM chrome.exe or any kill by image name: it closes the owner's own Chrome. Stop only the throwaway profile's own Chrome, by the process ID started for it or by matching that profile's folder in the command line, and say which was used. Do not touch the owner's Chrome.
 
 ## Working rules
 - Use the Edit tool, never sed -i.

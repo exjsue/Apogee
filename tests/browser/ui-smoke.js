@@ -2378,6 +2378,342 @@ rule("body: at 320 px the diagram fits the width with no sideways scroll, and th
   }, { width: 320 });
 });
 
+// ---- the Body tab's detail panel (tap a muscle, or press its button in the text list) ----
+
+// A tap at a point of the diagram's own 200 x 400 box, sent to the svg itself, so the muscle can only come from the
+// geometry (src/ui/body-hit.js) and not from the element that was hit.
+const tapDiagram = (root, x, y) => {
+  const svg = diagram(root);
+  const at = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM());
+  svg.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: at.x, clientY: at.y }));
+};
+const panelOf = (root) => region(root, "muscle-panel");
+const panelName = (root) => panelOf(root)?.querySelector("h3").textContent ?? null;
+const selectedIds = (root) => [...diagram(root).querySelectorAll("g.selected")].map((g) => g.dataset.muscle);
+const pressEscape = (root) => root.ownerDocument.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+const QUADS = [78, 252];
+
+rule("body panel: tapping a muscle opens its panel below the diagram and marks it; the same muscle again, a tap elsewhere and Escape close it", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    ctx.assert.equal(panelOf(root), null, "no panel before a tap");
+    tapDiagram(root, ...QUADS);
+    ctx.assert.equal(panelName(root), "Quads");
+    ctx.assert.deepEqual(selectedIds(root), ["quads"]);
+    const [svgBox, panelBox] = [diagram(root).getBoundingClientRect(), panelOf(root).getBoundingClientRect()];
+    ctx.assert.ok(panelBox.top >= svgBox.bottom - 1, "the panel is below the diagram, not over it");
+    ctx.assert.equal(panelOf(root).closest("[role='dialog'], dialog"), null, "not a modal");
+    tapDiagram(root, ...QUADS);
+    ctx.assert.equal(panelOf(root), null, "the same muscle again closes it");
+    ctx.assert.deepEqual(selectedIds(root), []);
+    tapDiagram(root, ...QUADS);
+    click(region(root, "body-note"));
+    ctx.assert.equal(panelOf(root), null, "a tap elsewhere in the view closes it");
+    tapDiagram(root, ...QUADS);
+    tapDiagram(root, 1, 1);
+    ctx.assert.equal(panelOf(root), null, "a tap on the empty part of the diagram closes it");
+    tapDiagram(root, ...QUADS);
+    click(panelOf(root).querySelector("p"));
+    ctx.assert.equal(panelName(root), "Quads", "a tap inside the panel keeps it open");
+    pressEscape(root);
+    ctx.assert.equal(panelOf(root), null, "Escape closes it");
+    tapDiagram(root, ...QUADS);
+    click(action(root, "muscle-close"));
+    ctx.assert.equal(panelOf(root), null, "the Close button closes it");
+    tapDiagram(root, 87.4, 144.4);
+    tapDiagram(root, ...QUADS);
+    ctx.assert.equal(panelName(root), "Quads", "tapping another muscle replaces the panel");
+    ctx.assert.equal(root.querySelectorAll('[data-region="muscle-panel"]').length, 1, "one panel at a time");
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: the muscle comes from geometry: overlapping hit areas go to the smaller one, the shoulder ovals to the nearer centre", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    for (const [x, y, name] of [[62, 80, "Front delts"], [57, 80, "Side delts"], [138, 80, "Front delts"], [87.4, 144.4, "Obliques"], [112.6, 144.4, "Obliques"], [92.5, 113.3, "Abs"], [70.2, 211.9, "Abductors"], [87.7, 237, "Adductors"], [48.7, 131.3, "Biceps"]]) {
+      tapDiagram(root, x, y);
+      ctx.assert.equal(panelName(root), name, `a tap at ${x},${y}`);
+      tapDiagram(root, 1, 1);
+    }
+    await showView(root, "back");
+    for (const [x, y, name] of [[71.3, 80.5, "Traps and neck"], [55.25, 97.5, "Triceps"], [55, 94, "Rear delts"], [84.9, 115.9, "Upper back"], [88.9, 163.8, "Lower back"], [80.8, 231.8, "Glutes"]]) {
+      tapDiagram(root, x, y);
+      ctx.assert.equal(panelName(root), name, `back: a tap at ${x},${y}`);
+      tapDiagram(root, 1, 1);
+    }
+  }, { width: 390 });
+});
+
+rule("body panel: it says what the data says: the sentences, the contributors, the trend, the balance, and no zeros as data", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const text = () => panelOf(root).textContent;
+    tapDiagram(root, ...QUADS);
+    ctx.assert.ok(text().includes("22 weighted sets in the last 7 days") && text().includes("Above the default target"), text());
+    ctx.assert.ok(text().includes("Default target: 10 to 20 weighted sets in 7 days"), "labelled as a default target");
+    ctx.assert.ok(text().includes("Last trained: 2 days ago"), text());
+    ctx.assert.ok(text().includes("Trend: 22 vs 0 (+22) sets, last 7 days vs the 7 days before"), text());
+    ctx.assert.ok(text().includes("Leg press: 22 sets, 22 weighted") && text().includes("Primary credit"), text());
+    ctx.assert.ok(!text().includes("Secondary credit"), "quads have no secondary credit in this data");
+    ctx.assert.ok(text().includes("Balance: Quads 22 vs Hamstrings 11 weighted sets, ratio 2 : 1"), text());
+    tapDiagram(root, 87.7, 237); // adductors: secondary only (replaces the quads panel)
+    ctx.assert.ok(text().includes("Secondary credit") && text().includes("Leg press: 22 sets, 11 weighted") && !text().includes("Primary credit"), text());
+    ctx.assert.equal(panelOf(root).querySelector('[data-region="muscle-balance"]'), null, "adductors are in no pair: no balance row");
+    // never trained in the 3 weeks loaded: no zeros as data, and no trend
+    tapDiagram(root, 84, 99);
+    ctx.assert.equal(panelName(root), "Chest");
+    ctx.assert.ok(text().includes("No sets in the last 7 days") && !text().includes("0 weighted sets in the last 7 days"), text());
+    ctx.assert.ok(text().includes("Last trained: more than 3 weeks ago or never"), text());
+    ctx.assert.equal(panelOf(root).querySelector('[data-region="muscle-trend"]'), null);
+    ctx.assert.ok(text().includes("Balance: Push 0 vs Pull 4 weighted sets") && !text().includes("ratio"), "one side 0: totals and no ratio");
+    // calves: nothing in the last 7 days, but 5 sets 10 days ago: the time and the trend still show
+    tapDiagram(root, 78, 336);
+    ctx.assert.ok(text().includes("No sets in the last 7 days") && text().includes("Last trained: 10 days ago"), text());
+    ctx.assert.ok(text().includes("Trend: 0 vs 5 (-5) sets"), text());
+    await showView(root, "back");
+    tapDiagram(root, 71.3, 80.5);
+    ctx.assert.equal(panelName(root), "Traps and neck");
+    ctx.assert.ok(text().includes("9 weighted sets in the last 7 days") && text().includes("Neck test: 9 sets, 9 weighted"), text());
+    ctx.assert.equal(panelOf(root).querySelector('[data-region="muscle-balance"]'), null, "traps are in no pair");
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: the selection is kept over Front/Back only for a muscle on both views, and is gone after leaving the tab", async (ctx) => {
+  await withApp(ctx, async ({ root, app }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    tapDiagram(root, 43, 153); // forearms: on both views
+    ctx.assert.equal(panelName(root), "Forearms");
+    await showView(root, "back");
+    ctx.assert.equal(panelName(root), "Forearms", "forearms are on the back too: still open");
+    ctx.assert.deepEqual(selectedIds(root), ["forearms"]);
+    ctx.assert.equal(app.state.body.selected, "forearms");
+    await showView(root, "front");
+    tapDiagram(root, ...QUADS);
+    await showView(root, "back");
+    ctx.assert.equal(panelOf(root), null, "quads are not on the back: closed");
+    ctx.assert.equal(app.state.body.selected, null);
+    ctx.assert.deepEqual(selectedIds(root), []);
+    tapDiagram(root, 43, 153);
+    await goToTab(root, "settings");
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram again");
+    ctx.assert.equal(app.state.body.selected, null, "leaving the tab clears it");
+    ctx.assert.equal(panelOf(root), null);
+    // a leftover listener from the old view must not act on the new one
+    tapDiagram(root, ...QUADS);
+    pressEscape(root);
+    ctx.assert.equal(panelOf(root), null);
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: the text list is a row of buttons: out of sight until one has focus, then drawn; opening one moves focus into the panel, closing returns it", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+    const list = region(root, "body-list");
+    const buttons = [...list.querySelectorAll("button")];
+    ctx.assert.equal(buttons.length, FRONT_MUSCLES.length, "one button per muscle on the view");
+    ctx.assert.ok(buttons.every((b) => b.getAttribute("aria-expanded") === "false" && b.getAttribute("aria-controls") === "muscle-panel"));
+    const hidden = list.getBoundingClientRect();
+    ctx.assert.ok(hidden.width <= 2 && hidden.height <= 2, `the list is clipped away before focus (${hidden.width} x ${hidden.height})`);
+    const quads = $(root, '[data-action="muscle-open"][data-muscle="quads"]');
+    quads.focus();
+    ctx.assert.equal(doc.activeElement, quads);
+    const shown = list.getBoundingClientRect();
+    ctx.assert.ok(shown.width > 100 && shown.height > 44 * 5, `the list is drawn while a button has focus (${shown.width} x ${shown.height})`);
+    ctx.assert.equal(win.getComputedStyle(list).clipPath, "none", "and not clipped");
+    ctx.assert.equal(win.getComputedStyle(list).position, "static");
+    const own = quads.getBoundingClientRect();
+    ctx.assert.ok(own.width > 100 && own.height >= 44, `the focused button is a full-size target (${own.width} x ${own.height})`);
+    click(quads);
+    ctx.assert.equal(panelName(root), "Quads");
+    ctx.assert.equal(quads.getAttribute("aria-expanded"), "true");
+    ctx.assert.equal(doc.activeElement, panelOf(root).querySelector("h3"), "focus is in the panel, on its heading");
+    ctx.assert.ok(list.getBoundingClientRect().width <= 2, "the list is out of sight again");
+    pressEscape(root);
+    ctx.assert.equal(panelOf(root), null);
+    ctx.assert.equal(doc.activeElement, $(root, '[data-action="muscle-open"][data-muscle="quads"]'), "Escape returns focus to the button that opened it");
+    click(doc.activeElement); // pressing the same button again opens, then once more closes
+    ctx.assert.equal(panelName(root), "Quads");
+    click(action(root, "muscle-close"));
+    ctx.assert.equal(doc.activeElement, $(root, '[data-action="muscle-open"][data-muscle="quads"]'), "Close returns focus to the button too");
+    ctx.assert.equal([...list.querySelectorAll("li")].map((li) => li.textContent).includes("Quads: very high, above target"), true, "the words are the same as before");
+    // a tap on the diagram does not take focus away from where it was
+    quads.blur();
+    tapDiagram(root, 87.4, 144.4);
+    ctx.assert.ok(doc.activeElement !== panelOf(root).querySelector("h3"), "a tap does not move focus into the panel");
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: the panel is scrolled into view only when it is not fully visible, smoothly unless reduced motion is asked for", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const win = frame.contentWindow;
+    const original = Element.prototype.scrollIntoView;
+    const calls = [];
+    Element.prototype.scrollIntoView = function (arg) { calls.push({ id: this.id, arg }); };
+    const setReduced = (reduced) => { win.matchMedia = (query) => ({ matches: reduced && query.includes("reduce"), media: query }); };
+    try {
+      setReduced(false);
+      tapDiagram(root, ...QUADS);
+      ctx.assert.ok(panelOf(root).getBoundingClientRect().bottom <= win.innerHeight, "precondition: the tall frame shows the whole panel");
+      ctx.assert.equal(calls.length, 0, "fully visible: no scroll");
+      tapDiagram(root, ...QUADS);
+      frame.style.height = "700px"; // a phone-sized screen: the diagram alone is 640 px tall
+      tapDiagram(root, ...QUADS);
+      ctx.assert.ok(panelOf(root).getBoundingClientRect().bottom > win.innerHeight, "precondition: the panel is below the fold");
+      ctx.assert.deepEqual(calls, [{ id: "muscle-panel", arg: { block: "nearest", behavior: "smooth" } }], "not fully visible: smooth, nearest");
+      tapDiagram(root, ...QUADS);
+      calls.length = 0;
+      setReduced(true);
+      tapDiagram(root, ...QUADS);
+      ctx.assert.deepEqual(calls, [{ id: "muscle-panel", arg: { block: "nearest", behavior: "auto" } }], "reduced motion: instant");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      delete win.matchMedia;
+    }
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: the selected outline is solid and heavy, replaces the dashes while selected, and the above-target ring stays a separate shape", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const css = (element) => frame.contentWindow.getComputedStyle(element);
+    const group = (muscle) => diagram(root).querySelector(`g[data-muscle="${muscle}"]`);
+    ctx.assert.equal(css(group("chest").querySelector(".shape")).strokeDasharray.includes("3"), true, "not trained: dashed before");
+    tapDiagram(root, 84, 99);
+    ctx.assert.deepEqual(selectedIds(root), ["chest"]);
+    ctx.assert.ok(group("chest").classList.contains("neglected"), "still flagged");
+    const shape = css(group("chest").querySelector(".shape"));
+    ctx.assert.equal(shape.strokeDasharray, "none", "solid while selected");
+    ctx.assert.ok(parseFloat(shape.strokeWidth) > 2, `heavy (${shape.strokeWidth})`);
+    tapDiagram(root, ...QUADS);
+    ctx.assert.deepEqual(selectedIds(root), ["quads"]);
+    ctx.assert.equal(css(group("chest").querySelector(".shape")).strokeDasharray.includes("3"), true, "dashed again once it is not selected");
+    ctx.assert.equal(group("quads").querySelectorAll(".above-ring").length, 2, "the rings stay");
+    const [ring, quad] = [css(group("quads").querySelector(".above-ring")), css(group("quads").querySelector(".shape"))];
+    ctx.assert.ok(ring.stroke !== quad.stroke, `the ring (${ring.stroke}) and the selected outline (${quad.stroke}) differ in colour`);
+    ctx.assert.ok(parseFloat(quad.strokeWidth) > parseFloat(ring.strokeWidth), "and in weight");
+    ctx.assert.equal(diagram(root).querySelectorAll("[style]").length, 0);
+    ctx.assert.equal(panelOf(root).querySelectorAll("[style]").length, 0, "no inline style in the panel");
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: a selected muscle has an outline and a second, inner line that is a separate shape, below the hit shapes, taking no taps, and none on any other muscle", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const css = (element) => frame.contentWindow.getComputedStyle(element);
+    const group = (muscle) => diagram(root).querySelector(`g[data-muscle="${muscle}"]`);
+    ctx.assert.equal(diagram(root).querySelectorAll(".selected-line").length, 0, "none before a tap");
+    tapDiagram(root, ...QUADS);
+    ctx.assert.equal(diagram(root).querySelectorAll(".selected-line").length, 2, "one per side, on the selected muscle only");
+    const lines = [...group("quads").querySelectorAll(".selected-line")];
+    ctx.assert.equal(lines.length, 2);
+    const children = [...group("quads").children];
+    const firstHit = children.indexOf(group("quads").querySelector(".hit"));
+    ctx.assert.ok(lines.every((line) => !line.classList.contains("shape") && !line.classList.contains("hit") && children.indexOf(line) < firstHit), "separate shapes, below the hit shapes");
+    ctx.assert.ok(lines.every((line) => css(line).pointerEvents === "none" && css(line).fill === "none" && css(line).stroke !== "none"), "no taps, unfilled, stroked");
+    ctx.assert.equal(group("quads").querySelectorAll(".shape").length, 2, "the muscle's own shapes are untouched");
+    // a tap where the line is still resolves by geometry to the muscle
+    tapDiagram(root, 78, 252);
+    ctx.assert.equal(panelOf(root), null, "the same muscle again closes it");
+    ctx.assert.equal(diagram(root).querySelectorAll(".selected-line").length, 0, "closing removes the lines");
+    tapDiagram(root, ...QUADS);
+    tapDiagram(root, 87.7, 237);
+    ctx.assert.equal(group("quads").querySelectorAll(".selected-line").length, 0, "selecting another muscle moves them");
+    ctx.assert.equal(group("adductors").querySelectorAll(".selected-line").length, 2);
+    ctx.assert.deepEqual(selectedIds(root), ["adductors"]);
+    // switching view with the muscle kept (forearms are on both views) draws it again
+    tapDiagram(root, 43, 153);
+    await showView(root, "back");
+    ctx.assert.equal(group("forearms").querySelectorAll(".selected-line").length, 2, "kept over a change of view");
+    ctx.assert.equal(diagram(root).querySelectorAll(".selected-line").length, 2);
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: in this colour scheme (the suite is run in light and in dark) the selected muscle's two lines contrast with its fill at every shade, and the inner one at the darkest; the ring stays a third, different element", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const win = frame.contentWindow;
+    const css = (element) => win.getComputedStyle(element);
+    const group = (muscle) => diagram(root).querySelector(`g[data-muscle="${muscle}"]`);
+    const rgb = (text) => text.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const luminance = (colour) => {
+      const [r, g, b] = colour.map((value) => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const page = rgb(css(frame.contentDocument.body).backgroundColor);
+    const scheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    // levels in this data: quads 5, adductors 3, forearms 1, calves 0
+    for (const [muscle, x, y, level] of [["quads", 78, 252, 5], ["adductors", 87.7, 237, 3], ["forearms", 43, 153, 1], ["calves", 78, 336, 0]]) {
+      tapDiagram(root, x, y);
+      const g = group(muscle);
+      ctx.assert.ok(g.classList.contains(`level-${level}`));
+      const shape = css(g.querySelector(".shape"));
+      const alpha = parseFloat(shape.fillOpacity);
+      const fill = rgb(shape.fill);
+      const effective = fill.map((value, i) => value * alpha + page[i] * (1 - alpha)); // the fill as seen on the page
+      const outline = contrast(rgb(shape.stroke), effective);
+      const inner = contrast(rgb(css(g.querySelector(".selected-line")).stroke), effective);
+      if (Math.max(outline, inner) < 3) throw new Error(`${scheme}, ${muscle} (level ${level}): outline ${outline.toFixed(2)}, inner line ${inner.toFixed(2)}`);
+      if (level === 5) {
+        if (css(g.querySelector(".selected-line")).stroke === shape.fill) throw new Error(`${scheme}: the inner line is the colour of the level-5 fill`);
+        if (inner < 3) throw new Error(`${scheme}: inner line against the level-5 fill is ${inner.toFixed(2)}`);
+      }
+      tapDiagram(root, x, y);
+    }
+    // selected and above the target at once (quads): outline, inner line and ring are three different things
+    tapDiagram(root, ...QUADS);
+    const g = group("quads");
+    const [shape, ring, line] = ["shape", "above-ring", "selected-line"].map((name) => g.querySelector(`.${name}`));
+    ctx.assert.ok(g.querySelectorAll(".above-ring").length === 2 && g.querySelectorAll(".selected-line").length === 2 && g.classList.contains("selected") && g.classList.contains("above"));
+    ctx.assert.ok(shape !== ring && shape !== line && ring !== line, "three elements");
+    const [shapeBox, ringBox, lineBox] = [shape, ring, line].map((element) => element.getBBox());
+    ctx.assert.ok(ringBox.width > shapeBox.width && lineBox.width < shapeBox.width, "the ring is outside the muscle and the inner line inside it");
+    ctx.assert.ok(css(ring).stroke !== css(line).stroke, `the ring (${css(ring).stroke}) and the inner line (${css(line).stroke}) differ in colour`);
+    ctx.assert.ok(css(ring).stroke !== css(shape).stroke || parseFloat(css(shape).strokeWidth) > parseFloat(css(ring).strokeWidth), "and the ring differs from the outline in colour or weight");
+  }, { prepare: seedBodyWorkouts, width: 390 });
+});
+
+rule("body panel: at 320 px an open panel fits the width, with a long exercise name, and nothing scrolls sideways", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const page = frame.contentDocument.documentElement;
+    for (const [view, x, y] of [["front", ...QUADS], ["front", 62, 80]]) {
+      await showView(root, view);
+      tapDiagram(root, x, y);
+      const box = panelOf(root).getBoundingClientRect();
+      ctx.assert.ok(box.left >= 0 && box.right <= page.clientWidth + 0.5, `${panelName(root)}: panel ${box.left} to ${box.right} in a ${page.clientWidth} px page`);
+      ctx.assert.ok(page.scrollWidth <= page.clientWidth, `${panelName(root)}: no sideways scroll`);
+      ctx.assert.ok(action(root, "muscle-close").getBoundingClientRect().height >= 36, "the Close button is a real target");
+    }
+    await showView(root, "back");
+    tapDiagram(root, 71.3, 80.5);
+    ctx.assert.ok(panelOf(root).textContent.includes(LONG_NAME), "the long name is listed");
+    ctx.assert.ok(page.scrollWidth <= page.clientWidth, "a long name wraps");
+  }, {
+    width: 320,
+    prepare: async (store) => {
+      await seedBodyWorkouts(store);
+      await store.saveExercise(createExercise({ id: "long-name", name: LONG_NAME, primaryMuscles: ["traps"], secondaryMuscles: [], equipmentTags: ["bodyweight"], isCustom: true }));
+      await store.saveWorkoutWithDetails({ id: "bw-long", startedAt: new Date(Date.now() - DAY_MS).toISOString(), endedAt: new Date(Date.now() - DAY_MS + 1000).toISOString() }, [{ id: "bw-long-e", workoutId: "bw-long", exerciseId: "long-name", order: 0 }], [{ id: "bw-long-s0", entryId: "bw-long-e", order: 0, reps: 5, weightValue: 50, weightUnit: "kg", isWarmup: false, completedAt: new Date(Date.now() - DAY_MS + 500).toISOString() }]);
+    },
+  });
+});
+const LONG_NAME = "Supercalifragilisticexpialidocious_with_no_spaces_to_break_the_line_at_all";
+
 rule("tabs: selecting Body shows the Body heading and no other panel", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");

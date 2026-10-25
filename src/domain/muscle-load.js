@@ -58,13 +58,22 @@ function timeOf(completedAt) {
 //            a muscle that is not in ALL_MUSCLES (it earns no credit)
 //            badTimestamps: number of non-warm-up sets with a missing or unparseable completedAt
 // Bad data is skipped and reported, never thrown. Only a bad credit or window (a programmer error) throws.
-export function computeMuscleLoad({ workouts, exercises, window: range, credit = DEFAULT_CREDIT }) {
+//
+// detail (default false): when true the result also has two more keys, worked out in the same loop by the same
+// rule, so the detail panel never needs a second counting function. Without it the result is exactly as above.
+//   breakdown  { muscleId: [{ exerciseId, role: "primary" | "secondary", sets, weighted }] } for EVERY id in
+//              ALL_MUSCLES (an empty list when nothing counted), one entry per exercise and role; the weighted
+//              of a muscle's entries adds up to that muscle's weighted
+//   lastAt     { muscleId: ms of the latest counted set that gave the muscle a credit above 0, or null }
+export function computeMuscleLoad({ workouts, exercises, window: range, credit = DEFAULT_CREDIT, detail = false }) {
   requireCredit(credit);
   requireWindow(range);
   if (!Array.isArray(workouts)) throw new TypeError("workouts must be an array");
   const byId = exercises instanceof Map ? exercises : new Map((exercises ?? []).map((exercise) => [exercise.id, exercise]));
 
   const muscles = Object.fromEntries(ALL_MUSCLES.map((id) => [id, { weighted: 0, primarySets: 0, secondarySets: 0 }]));
+  const breakdown = detail ? Object.fromEntries(ALL_MUSCLES.map((id) => [id, []])) : null;
+  const lastAt = detail ? Object.fromEntries(ALL_MUSCLES.map((id) => [id, null])) : null;
   const unknownExerciseIds = new Set();
   const unknownMuscles = new Map(); // "exerciseId\0muscle" -> { exerciseId, muscle }
   let badTimestamps = 0;
@@ -72,6 +81,7 @@ export function computeMuscleLoad({ workouts, exercises, window: range, credit =
   for (const workout of workouts) {
     for (const entry of workout?.entries ?? []) {
       let counted = 0;
+      let latest = -Infinity; // the time of the latest counted set of this entry (only used for lastAt)
       for (const set of entry?.sets ?? []) {
         if (set?.isWarmup === true) continue;
         const at = timeOf(set?.completedAt);
@@ -79,6 +89,7 @@ export function computeMuscleLoad({ workouts, exercises, window: range, credit =
           badTimestamps += 1;
         } else if (at >= range.start && at < range.end) {
           counted += 1;
+          if (at > latest) latest = at;
         }
       }
       if (counted === 0) continue;
@@ -96,14 +107,28 @@ export function computeMuscleLoad({ workouts, exercises, window: range, credit =
           else unknownMuscles.set(`${exercise.id}\0${muscle}`, { exerciseId: exercise.id, muscle });
         }
       }
+      const note = (muscle, role, perSet) => {
+        if (!detail) return;
+        const gain = counted * perSet;
+        const found = breakdown[muscle].find((row) => row.exerciseId === exercise.id && row.role === role);
+        if (found) {
+          found.sets += counted;
+          found.weighted += gain;
+        } else {
+          breakdown[muscle].push({ exerciseId: exercise.id, role, sets: counted, weighted: gain });
+        }
+        if (perSet > 0 && (lastAt[muscle] === null || latest > lastAt[muscle])) lastAt[muscle] = latest;
+      };
       for (const muscle of primary) {
         muscles[muscle].weighted += counted * credit.primary;
         muscles[muscle].primarySets += counted;
+        note(muscle, "primary", credit.primary);
       }
       for (const muscle of secondary) {
         if (primary.has(muscle)) continue;
         muscles[muscle].weighted += counted * credit.secondary;
         muscles[muscle].secondarySets += counted;
+        note(muscle, "secondary", credit.secondary);
       }
     }
   }
@@ -115,5 +140,6 @@ export function computeMuscleLoad({ workouts, exercises, window: range, credit =
       unknownMuscles: { count: unknownMuscles.size, items: [...unknownMuscles.values()] },
       badTimestamps,
     },
+    ...(detail ? { breakdown, lastAt } : {}),
   };
 }
