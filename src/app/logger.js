@@ -15,6 +15,8 @@ import {
   heaviestSet, sameGhost, displayedExerciseIds, orderEntriesLike, swapped, reorderedRowOrders, applyRowOrders,
 } from "../domain/workout-plan.js";
 import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
+import { computeMuscleLoad } from "../domain/muscle-load.js";
+import { computeBodyStatus, WINDOW_DAYS, NEGLECTED_WEEKS } from "../domain/body-status.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
 export const DEFAULT_STALE_AFTER_HOURS = 12;
@@ -22,6 +24,7 @@ export const RECENT_LIMIT = 8; // how many exercises the picker's Recent group s
 export const RECENT_WORKOUTS = 30; // how many of the newest workouts it looks through (each is one read; 2,000 took 2 to 3.5 s)
 const UNKNOWN_EXERCISE = "Unknown exercise";
 const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 const nextOrder = (records) => (records.length === 0 ? 0 : Math.max(...records.map((record) => record.order)) + 1);
 
@@ -747,6 +750,29 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     });
   }
 
+  // What the Body tab shows (src/domain/body-status.js): the weighted sets per muscle over the last WINDOW_DAYS days,
+  // and which muscles had none over the last NEGLECTED_WEEKS weeks. Read only. Sets are placed by their own
+  // completedAt, so a workout is loaded when it can hold a set in the longer window: it has no endedAt (still
+  // unfinished, of any age, as a stale workout can be continued), or it ended inside the window, or its endedAt is
+  // unreadable. A finish sets endedAt at or after every set in the workout. The window ends 1 ms after now, so a set
+  // logged this instant counts. Several reads, not one transaction: a set logged between them may show in one
+  // window and not the other, which a redraw puts right.
+  async function getMuscleStatus() {
+    const nowAt = nowDate().getTime();
+    const end = nowAt + 1;
+    const longerStart = nowAt - NEGLECTED_WEEKS * 7 * DAY_MS;
+    const details = [];
+    for (const workout of await store.listWorkouts()) {
+      const endedMs = workout.endedAt === null || workout.endedAt === undefined ? null : Date.parse(workout.endedAt);
+      if (endedMs !== null && endedMs < longerStart) continue; // a NaN (unreadable) endedAt fails this test, so it is loaded
+      const found = await store.getWorkoutWithDetails(workout.id);
+      if (found !== null) details.push(found);
+    }
+    const exercises = await store.listExercises();
+    const load = (start) => computeMuscleLoad({ workouts: details, exercises, window: { start, end } });
+    return computeBodyStatus({ recent: load(nowAt - WINDOW_DAYS * DAY_MS), longer: load(longerStart) });
+  }
+
   return {
     getStatus,
     getCurrent,
@@ -771,6 +797,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     findExercises,
     findRecentExercises,
     getHistory,
+    getMuscleStatus,
     deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
     saveWorkoutAsTemplate,

@@ -10,6 +10,7 @@ import { checkPersistence } from "../../src/app/persistence.js";
 import { showDatabaseNotice } from "../../src/ui/db-notices.js";
 import { installPullToRefresh } from "../../src/ui/pull-refresh.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
+import { createExercise } from "../../src/domain/model.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
 import { createCatalogService, startAfterFirstPaint } from "../../src/app/catalog.js";
@@ -2152,7 +2153,32 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
   }, { width: 320 });
 });
 
-// ---- the Body tab's diagram (example data for now) ----
+// ---- the Body tab's diagram ----
+
+// Workouts for the Body tab rules, placed relative to the real clock (the app's logger reads it):
+//   2 days ago   leg press, 22 sets and 1 warm-up     quads 22 (above the target of 20); glutes, adductors, hamstrings 11
+//   1 day ago    dumbbell curl, 4 sets                biceps 4; forearms 2 (secondary, half)
+//   1 day ago    a stored exercise worked on the neck, 9 sets     neck 9, folded into the traps
+//   10 days ago  standing calf raise, 5 sets          calves 0 in the last 7 days, but trained within 3 weeks
+//   25 days ago  bench press, 3 sets                  too old to count: the chest was not trained in 3 weeks
+// With a target of 20 for the darkest shade: quads level 5, glutes/adductors/hamstrings/traps level 3, biceps and forearms level 1.
+const DAY_MS = 24 * 60 * 60 * 1000;
+async function seedBodyWorkouts(store) {
+  await store.saveExercise(createExercise({ id: "neck-test", name: "Neck test", primaryMuscles: ["neck"], secondaryMuscles: [], equipmentTags: ["bodyweight"], isCustom: true }));
+  const at = (daysAgo) => new Date(Date.now() - daysAgo * DAY_MS).toISOString();
+  const save = async (id, daysAgo, exerciseId, count, warmups = 0) => {
+    const entry = { id: `${id}-e`, workoutId: id, exerciseId, order: 0 };
+    const sets = Array.from({ length: count + warmups }, (_, order) => ({
+      id: `${id}-s${order}`, entryId: entry.id, order, reps: 5, weightValue: 50, weightUnit: "kg", isWarmup: order >= count, completedAt: at(daysAgo + 0.01),
+    }));
+    await store.saveWorkoutWithDetails({ id, startedAt: at(daysAgo + 0.02), endedAt: at(daysAgo) }, [entry], sets);
+  };
+  await save("bw-legs", 2, "seed-leg-press", 22, 1);
+  await save("bw-curl", 1, "seed-dumbbell-curl", 4);
+  await save("bw-neck", 1, "neck-test", 9);
+  await save("bw-calves", 10, "seed-standing-calf-raise", 5);
+  await save("bw-bench", 25, "seed-barbell-bench-press", 3);
+}
 
 const FRONT_MUSCLES = ["abductors", "abs", "adductors", "biceps", "calves", "chest", "forearms", "front_delts", "obliques", "quads", "side_delts"];
 const BACK_MUSCLES = ["abductors", "calves", "forearms", "glutes", "hamstrings", "lats", "lower_back", "rear_delts", "traps", "triceps", "upper_back"];
@@ -2163,7 +2189,7 @@ const showView = async (root, view) => {
   await waitFor(() => diagram(root)?.dataset.view === view, `the ${view} view`);
 };
 
-rule("body: the tab shows the example diagram with exactly the right muscles on the front and on the back, and never the neck", async (ctx) => {
+rule("body: the tab shows the diagram with exactly the right muscles on the front and on the back, and never the neck", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");
     await waitFor(() => diagram(root), "the diagram");
@@ -2185,24 +2211,26 @@ rule("body: the tab shows the example diagram with exactly the right muscles on 
   });
 });
 
-rule("body: the Example data label is visible, and the front/back buttons switch the view, press state and text list", async (ctx) => {
+rule("body: the 7-day note is shown, and the front/back buttons switch the view, press state and text list", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");
-    const label = await waitFor(() => region(root, "example-data"), "the Example data label");
-    ctx.assert.ok(label.textContent.includes("Example data") && label.getBoundingClientRect().height > 0, "the label is shown");
+    const note = await waitFor(() => region(root, "body-note"), "the 7-day note");
+    ctx.assert.ok(note.textContent.includes("Last 7 days") && note.getBoundingClientRect().height > 0, "the note is shown");
+    ctx.assert.equal(region(root, "example-data"), null, "there is no Example data label any more");
     const pressed = () => [...root.querySelectorAll('[data-action="body-view"]')].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.view);
     const listed = () => [...region(root, "body-list").querySelectorAll("li")].map((li) => li.textContent);
     ctx.assert.deepEqual(pressed(), ["front"]);
     ctx.assert.equal(listed().length, FRONT_MUSCLES.length);
-    ctx.assert.ok(listed().includes("Adductors: none") && listed().includes("Quads: very high"), "the list says the shade in words");
+    ctx.assert.ok(listed().includes("Quads: very high, above target") && listed().includes("Calves: none"), "the list says the shade in words, and the markers");
+    ctx.assert.ok(listed().includes("Chest: none, not trained in 3 weeks"), "a muscle with no sets in 3 weeks is said to be not trained");
     await showView(root, "back");
     ctx.assert.deepEqual(pressed(), ["back"]);
     ctx.assert.equal(listed().length, BACK_MUSCLES.length);
-    ctx.assert.ok(listed().includes("Traps: medium"), "the neck's value is folded into the traps (4 + 2 of 10)");
-    ctx.assert.ok(region(root, "example-data").getBoundingClientRect().height > 0, "the label stays visible on the back");
+    ctx.assert.ok(listed().includes("Traps: medium"), "the neck's value is folded into the traps (9 of 20)");
+    ctx.assert.ok(region(root, "body-note").getBoundingClientRect().height > 0, "the note stays visible on the back");
     await showView(root, "front");
     ctx.assert.deepEqual(pressed(), ["front"]);
-  });
+  }, { prepare: seedBodyWorkouts });
 });
 
 rule("body: shading is by class (level-0 to level-5) and the diagram uses no inline style", async (ctx) => {
@@ -2210,13 +2238,111 @@ rule("body: shading is by class (level-0 to level-5) and the diagram uses no inl
     await goToTab(root, "body");
     await waitFor(() => diagram(root), "the diagram");
     const level = (muscle) => [...diagram(root).querySelector(`g[data-muscle="${muscle}"]`).classList].find((name) => name.startsWith("level-"));
-    ctx.assert.equal(level("adductors"), "level-0");
+    ctx.assert.equal(level("adductors"), "level-3");
     ctx.assert.equal(level("forearms"), "level-1");
     ctx.assert.equal(level("quads"), "level-5");
+    ctx.assert.equal(level("calves"), "level-0", "trained 10 days ago, so nothing in the last 7 days");
     await showView(root, "back");
-    ctx.assert.equal(level("traps"), "level-3", "traps 4 + neck 2 = 6 of 10");
-    ctx.assert.equal(level("glutes"), "level-5");
+    ctx.assert.equal(level("traps"), "level-3", "traps: neck 9 of 20");
+    ctx.assert.equal(level("glutes"), "level-3");
     ctx.assert.equal(diagram(root).querySelectorAll("[style]").length, 0);
+    ctx.assert.equal(diagram(root).querySelectorAll("text, tspan").length, 0, "no numbers or labels on the diagram");
+  }, { prepare: seedBodyWorkouts });
+});
+
+rule("body: a muscle not trained in 3 weeks is dashed, one above the target has two rings, and neither marker takes a tap or changes the shapes", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const win = frame.contentWindow;
+    const group = (muscle) => diagram(root).querySelector(`g[data-muscle="${muscle}"]`);
+    const css = (element) => win.getComputedStyle(element);
+    // not trained in 3 weeks: the class, and a dashed outline that comes from the stylesheet
+    ctx.assert.ok(group("chest").classList.contains("neglected"));
+    ctx.assert.ok(!group("calves").classList.contains("neglected"), "calves were trained 10 days ago");
+    ctx.assert.ok(!group("quads").classList.contains("neglected"));
+    const dash = css(group("chest").querySelector(".shape")).strokeDasharray;
+    ctx.assert.ok(dash !== "none" && dash !== "", `the neglected outline is dashed (${dash})`);
+    ctx.assert.equal(css(group("quads").querySelector(".shape")).strokeDasharray, "none", "a muscle that was trained is not dashed");
+    // above the target: the class and exactly two rings, each larger than its shape, none on other muscles
+    const quads = group("quads");
+    ctx.assert.ok(quads.classList.contains("above"));
+    const rings = [...quads.querySelectorAll(".above-ring")];
+    const shapes = [...quads.querySelectorAll(".shape")];
+    ctx.assert.equal(rings.length, 2, "one ring per side");
+    for (const [i, ring] of rings.entries()) {
+      const [ringBox, shapeBox] = [ring.getBBox(), shapes[i].getBBox()];
+      ctx.assert.ok(ringBox.width > shapeBox.width && ringBox.height > shapeBox.height, "a ring is larger than its shape");
+      ctx.assert.equal(css(ring).fill, "none");
+      ctx.assert.equal(css(ring).pointerEvents, "none", "a ring takes no taps");
+      ctx.assert.ok(css(ring).stroke !== "none", "a ring has a stroke");
+      ctx.assert.ok(css(ring).strokeWidth !== css(shapes[i]).strokeWidth, "the ring is drawn heavier than a plain outline");
+    }
+    const children = [...quads.children];
+    ctx.assert.ok(children.indexOf(rings[1]) < children.indexOf(quads.querySelector(".hit")), "the rings are below the hit shapes");
+    ctx.assert.ok([...quads.querySelectorAll(".hit")].every((hit) => css(hit).stroke === "none"), "a hit shape has no stroke");
+    ctx.assert.equal(group("adductors").querySelectorAll(".above-ring").length, 0, "a muscle in range has no ring");
+    ctx.assert.equal(diagram(root).querySelectorAll(".above-ring").length, 2, "only the quads are above the target");
+    // the markers do not change what a muscle is made of
+    for (const view of ["front", "back"]) {
+      await showView(root, view);
+      for (const g of diagram(root).querySelectorAll("g[data-muscle]")) {
+        ctx.assert.equal(g.querySelectorAll(".shape").length, 2, `${g.dataset.muscle}: two shapes`);
+        ctx.assert.equal(g.querySelectorAll(".hit").length, 2, `${g.dataset.muscle}: two hit shapes`);
+      }
+    }
+  }, { prepare: seedBodyWorkouts, width: 375 });
+});
+
+rule("body: with no workouts nothing is marked not trained, and the empty line is shown", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    for (const view of ["front", "back"]) {
+      await showView(root, view);
+      ctx.assert.equal(diagram(root).querySelectorAll(".neglected, .above, .above-ring").length, 0, `${view}: no markers`);
+      ctx.assert.ok(diagram(root).querySelectorAll('[class*="level-0"]').length > 0 && diagram(root).querySelectorAll('[class*="level-1"], [class*="level-2"], [class*="level-3"], [class*="level-4"], [class*="level-5"]').length === 0, `${view}: every muscle is level 0`);
+    }
+    const empty = region(root, "body-empty");
+    ctx.assert.ok(empty && empty.textContent === "No sets logged in the last 3 weeks." && empty.getBoundingClientRect().height > 0);
+    ctx.assert.ok(![...region(root, "body-list").querySelectorAll("li")].some((li) => li.textContent.includes("not trained")), "the text list says nothing about not trained");
+  });
+});
+
+rule("body: pressing Front or Back does not read the data again, and leaving and coming back does; a failed read keeps the buttons and shows an alert", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const real = services.logger.getMuscleStatus;
+    let reads = 0;
+    let failing = false;
+    services.logger.getMuscleStatus = async (...args) => {
+      reads += 1;
+      if (failing) throw new Error("the store is broken");
+      return real(...args);
+    };
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const first = reads;
+    ctx.assert.ok(first >= 1);
+    await showView(root, "back");
+    await showView(root, "front");
+    await showView(root, "back");
+    ctx.assert.equal(reads, first, "the buttons reuse the loaded data");
+    await goToTab(root, "settings");
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram again");
+    ctx.assert.ok(reads > first, "coming back to the tab reads again");
+    failing = true;
+    await goToTab(root, "history");
+    await goToTab(root, "body");
+    const alert = await waitFor(() => region(root, "body-error"), "the alert");
+    ctx.assert.equal(alert.getAttribute("role"), "alert");
+    ctx.assert.ok(alert.textContent.includes("the store is broken"));
+    ctx.assert.equal(root.querySelectorAll('[data-action="body-view"]').length, 2, "the Front and Back buttons are still there");
+    ctx.assert.equal(diagram(root), null, "no diagram of zeros is drawn");
+    failing = false;
+    click($(root, '[data-action="body-view"][data-view="back"]'));
+    await waitFor(() => diagram(root)?.dataset.view === "back", "the diagram after the read works again");
+    ctx.assert.equal(region(root, "body-error"), null);
   });
 });
 

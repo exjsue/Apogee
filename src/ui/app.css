@@ -413,7 +413,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 
 /* Body tab: the front/back toggle and the muscle diagram. A muscle's shade is its level-N class (0 to 5, set by
    src/ui/body-diagram.js): level 0 is the line colour, levels 1 to 5 are the accent colour in five strengths. */
-.example-label { margin: 0 0 12px; }
+.body-note { margin: 0 0 12px; }
 .view-toggle { display: flex; margin-bottom: 12px; }
 .view-toggle button {
   flex: 1;
@@ -434,7 +434,12 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .body-diagram { display: block; width: 100%; max-width: 20rem; height: auto; margin: 0 auto; }
 .body-diagram .outline { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
 .body-diagram .shape { fill: var(--line); }
-.body-diagram .hit { fill: transparent; }
+.body-diagram .hit { fill: transparent; stroke: none; }
+/* Markers (set by src/ui/body-diagram.js). Not trained for 3 weeks: a dashed outline on the muscle. Above the target
+   range: a separate solid ring a little outside it, because an outline would be in the same colour as the darkest
+   fill. The ring takes no taps. Neither is a warning colour: the line colour is the text colour or the accent. */
+.body-diagram .neglected .shape { stroke: var(--text); stroke-width: 1.2; stroke-dasharray: 3 2; }
+.body-diagram .above-ring { fill: none; stroke: var(--accent); stroke-width: 1.6; pointer-events: none; }
 .body-diagram .level-1 .shape { fill: var(--accent); fill-opacity: 0.35; }
 .body-diagram .level-2 .shape { fill: var(--accent); fill-opacity: 0.5; }
 .body-diagram .level-3 .shape { fill: var(--accent); fill-opacity: 0.65; }
