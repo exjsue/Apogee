@@ -35,6 +35,9 @@ export async function mountApp(root, services) {
     if (state.tab !== id) {
       state.log.seen = null; // a new screen: its rows do not animate one by one
       state.enter = true; // the new tab fades in, once
+      const order = (tabId) => TABS.findIndex((tab) => tab.id === tabId);
+      if (order(id) > order(state.tab)) tabBar.dataset.hit = tabBar.dataset.hit === "a" ? "b" : "a"; // the bar squashes on arrival (app.css)
+      else delete tabBar.dataset.hit; // a move to the left has no squash yet, and cancels one still running
     }
     state.tab = id;
     tabBar.dataset.active = id; // the bar slides now, not when the render finishes

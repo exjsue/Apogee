@@ -376,6 +376,24 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   /* the tab bar's indicator slides to the tapped tab (under reduced motion it jumps) */
   .tabs::after { transition: transform var(--motion-tab) ease-out; }
 
+  /* After a move to the right, the bar squashes against its right edge once the slide has ended (app.js sets
+     data-hit to "a" or "b", alternating, so that each move starts the animation again). Each keyframe holds
+     only the middle: the bar's own transform is the end state, so nothing is left over afterwards. The
+     250 ms delay is --motion-tab and the 4px in each offset is --tab-gap; keyframes cannot use variables,
+     so change them together. Moves to the left have no squash yet. */
+  @keyframes bar-hit-a-history { 50% { transform: translateX(calc(100% + 4px)) scaleX(0.7); } }
+  @keyframes bar-hit-b-history { 50% { transform: translateX(calc(100% + 4px)) scaleX(0.7); } }
+  @keyframes bar-hit-a-backup { 50% { transform: translateX(calc(2 * (100% + 4px))) scaleX(0.7); } }
+  @keyframes bar-hit-b-backup { 50% { transform: translateX(calc(2 * (100% + 4px))) scaleX(0.7); } }
+  @keyframes bar-hit-a-settings { 50% { transform: translateX(calc(3 * (100% + 4px))) scaleX(0.7); } }
+  @keyframes bar-hit-b-settings { 50% { transform: translateX(calc(3 * (100% + 4px))) scaleX(0.7); } }
+  .tabs[data-hit="a"][data-active="history"]::after { transform-origin: 100% 50%; animation: bar-hit-a-history 200ms ease-in-out 250ms; }
+  .tabs[data-hit="b"][data-active="history"]::after { transform-origin: 100% 50%; animation: bar-hit-b-history 200ms ease-in-out 250ms; }
+  .tabs[data-hit="a"][data-active="backup"]::after { transform-origin: 100% 50%; animation: bar-hit-a-backup 200ms ease-in-out 250ms; }
+  .tabs[data-hit="b"][data-active="backup"]::after { transform-origin: 100% 50%; animation: bar-hit-b-backup 200ms ease-in-out 250ms; }
+  .tabs[data-hit="a"][data-active="settings"]::after { transform-origin: 100% 50%; animation: bar-hit-a-settings 200ms ease-in-out 250ms; }
+  .tabs[data-hit="b"][data-active="settings"]::after { transform-origin: 100% 50%; animation: bar-hit-b-settings 200ms ease-in-out 250ms; }
+
   /* the three-dot menu, notices, and the questions and forms that open in place (marked by renderNow);
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */
   [data-anim="in"], .banner, .pull-confirm { animation: fade-in var(--motion) ease-out; }
