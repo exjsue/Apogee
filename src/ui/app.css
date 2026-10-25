@@ -15,6 +15,10 @@
   --warn-bg: #fff4d6;
   --warn-line: #d8b45a;
   --focus: #2b6fd6;
+  --figure-head-fill: #3a3a36; /* the Body diagram's head: dark in both modes, grey outline */
+  --figure-head-line: #8a8980;
+  --figure-pelvis-fill: #ffffff; /* the front view's pelvis: quiet, an outline only a little darker than the page, not a muscle */
+  --figure-pelvis-line: #a8a69b;
   --radius: 8px;
   --gutter: 16px;
   --motion: 200ms; /* the length of the Phase 1 motion below (panels, forms, notices, banners, button press) */
@@ -34,6 +38,10 @@
     --warn-bg: #2b2413;
     --warn-line: #7a6320;
     --focus: #7ab0ff;
+    --figure-head-fill: #0d0d0b;
+    --figure-head-line: #8a8980;
+    --figure-pelvis-fill: #1d1d1a;
+    --figure-pelvis-line: #5f5e57;
   }
 }
 
@@ -432,7 +440,8 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   font-weight: 600;
 }
 .body-diagram { display: block; width: 100%; max-width: 20rem; height: auto; margin: 0 auto; }
-.body-diagram .outline { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.body-diagram .head { fill: var(--figure-head-fill); stroke: var(--figure-head-line); stroke-width: 1.2; }
+.body-diagram .pelvis { fill: var(--figure-pelvis-fill); stroke: var(--figure-pelvis-line); stroke-width: 1; }
 .body-diagram .shape { fill: var(--line); }
 .body-diagram .hit { fill: transparent; stroke: none; }
 /* Markers (set by src/ui/body-diagram.js). Not trained for 3 weeks: a dashed outline on the muscle. Above the target

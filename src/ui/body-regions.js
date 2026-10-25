@@ -1,4 +1,4 @@
-// The Body diagram's regions, as data: for each view a faint silhouette and the muscle regions drawn over it.
+// The Body diagram's regions, as data: for each view a head and the muscle regions. There is no body outline.
 // Nothing here touches the DOM, so tests can read it as it is. Drawn by src/ui/body-diagram.js.
 //
 // Coordinates are in a 200 x 400 box with the body's centre line at x = 100. A region is
@@ -34,51 +34,49 @@ const pair = (shape) => {
 };
 const region = (muscle, shape) => ({ muscle, shapes: pair(shape) });
 
-// The silhouette is only a faint outline behind the muscles: it has no hit areas and is not a region.
-const body = (torso) => [
-  ellipse(100, 28, 14, 18),
-  ellipse(100, 52, 7, 9),
-  { type: "path", d: torso },
-  ...[ellipse(52, 108, 10, 22, 6), ellipse(44, 155, 8, 25, 8), ellipse(40, 188, 6, 9, 8), ellipse(81, 255, 17, 55, -2), ellipse(80, 340, 11, 38), ellipse(78, 388, 10, 6)]
-    .flatMap((shape) => [shape, mirror(shape)]),
-];
-const TORSO = "M66 72 Q100 62 134 72 L128 130 Q126 165 124 200 L76 200 Q74 165 72 130 Z";
+// The head (both views) and the pelvis (front view only) are one ellipse each, drawn for orientation only, below the
+// muscles: they have no hit area and are not regions. The pelvis fills the gap between the abs and the thighs.
+const HEAD = ellipse(100, 48, 13, 16);
+const PELVIS = ellipse(100, 184, 19, 26);
 
 // The shoulder circle on the front view is split in half: the inner half (towards the body) is the front delt, the
 // outer half the side delt. Left shoulder: its inner half faces right.
-const SHOULDER = { cx: 62, cy: 78, r: 12 };
+const SHOULDER = { cx: 60, cy: 80, r: 12 };
 
+// Ellipses only: the V of the torso comes from the tilt of the chest, obliques and lats, the hanging arms from the tilt
+// of the upper arm and forearm, the tapered legs from a slight inward tilt.
 export const BODY_REGIONS = Object.freeze({
   front: {
-    silhouette: body(TORSO),
+    head: HEAD,
+    pelvis: PELVIS,
     regions: [
-      region("chest", ellipse(83, 96, 16, 12, 10)),
+      region("chest", ellipse(84, 99, 15, 12, 10)),
       region("front_delts", half(SHOULDER.cx, SHOULDER.cy, SHOULDER.r, "right")),
       region("side_delts", half(SHOULDER.cx, SHOULDER.cy, SHOULDER.r, "left")),
-      region("biceps", ellipse(52, 108, 7, 17, 6)),
-      region("forearms", ellipse(45, 153, 6.5, 21, 8)),
-      region("abs", ellipse(93, 130, 7, 24)),
-      region("obliques", ellipse(77, 138, 6, 18)),
-      region("quads", ellipse(81, 252, 12, 42)),
-      region("adductors", ellipse(95, 225, 4, 24)),
-      region("abductors", ellipse(65, 208, 5, 15)),
-      region("calves", ellipse(80, 338, 8, 26)),
+      region("biceps", ellipse(52, 113, 6.5, 17, 8)),
+      region("forearms", ellipse(43, 153, 6, 21, 14)),
+      region("abs", ellipse(94, 138, 5.5, 22)),
+      region("obliques", ellipse(82, 145, 5.5, 20, -8)),
+      region("quads", ellipse(78, 252, 11, 45, -3)),
+      region("adductors", ellipse(93, 230, 3.5, 22, 3)),
+      region("abductors", ellipse(65, 203, 5, 14, 6)),
+      region("calves", ellipse(78, 336, 7.5, 26, -2)),
     ],
   },
   back: {
-    silhouette: body(TORSO),
+    head: HEAD,
     regions: [
-      region("traps", ellipse(86, 78, 13, 9, -15)),
-      region("rear_delts", ellipse(62, 80, 11, 11)),
-      region("upper_back", ellipse(89, 105, 11, 13)),
-      region("lats", ellipse(80, 135, 11, 24, -12)),
-      region("triceps", ellipse(52, 108, 7, 17, 6)),
-      region("forearms", ellipse(45, 153, 6.5, 21, 8)),
-      region("lower_back", ellipse(92, 172, 8, 13)),
-      region("glutes", ellipse(87, 215, 12, 15)),
-      region("hamstrings", ellipse(82, 262, 13, 36)),
-      region("abductors", ellipse(69, 203, 6, 9)),
-      region("calves", ellipse(80, 340, 9, 26)),
+      region("traps", ellipse(84, 78, 12, 8.5, -18)),
+      region("rear_delts", ellipse(59, 82, 11, 11)),
+      region("upper_back", ellipse(92, 106, 7, 11)),
+      region("lats", ellipse(80, 138, 10, 26, -12)),
+      region("triceps", ellipse(52, 113, 6.5, 17, 8)),
+      region("forearms", ellipse(43, 153, 6, 21, 14)),
+      region("lower_back", ellipse(93, 177, 6, 13)),
+      region("glutes", ellipse(87, 215, 12.5, 15)),
+      region("hamstrings", ellipse(80, 268, 10, 34, -3)),
+      region("abductors", ellipse(66, 203, 5, 9)),
+      region("calves", ellipse(78, 335, 8, 26, -2)),
     ],
   },
 });

@@ -76,6 +76,72 @@ test("front view: each shoulder is split in two halves of one circle, the inner 
   assert.ok(!BODY_REGIONS.back.regions.some((region) => region.muscle === "side_delts"), "no side delts on the back");
 });
 
+const extent = (shape) => {
+  const r = Math.max(shape.rx, shape.ry);
+  return { x0: shape.cx - r, x1: shape.cx + r, y0: shape.cy - r, y1: shape.cy + r };
+};
+const GRID = 0.25;
+function overlapsOnGrid(a, b) {
+  const [ea, eb] = [extent(a), extent(b)];
+  for (let x = Math.max(ea.x0, eb.x0); x <= Math.min(ea.x1, eb.x1); x += GRID) {
+    for (let y = Math.max(ea.y0, eb.y0); y <= Math.min(ea.y1, eb.y1); y += GRID) {
+      if (contains(a, [x, y]) && contains(b, [x, y])) return true;
+    }
+  }
+  return false;
+}
+// The edge of a shape as points, to measure the gap between two shapes that do not overlap.
+function edge(shape) {
+  const points = [];
+  for (let i = 0; i < 360; i++) {
+    const t = (i * Math.PI) / 180;
+    points.push(rotate([shape.cx + shape.rx * Math.cos(t), shape.cy + shape.ry * Math.sin(t)], [shape.cx, shape.cy], shape.rot));
+  }
+  return points;
+}
+function gapBetween(a, b) {
+  const [pa, pb] = [edge(a), edge(b)];
+  let smallest = Infinity;
+  for (const p of pa) for (const q of pb) smallest = Math.min(smallest, Math.hypot(p[0] - q[0], p[1] - q[1]));
+  return smallest;
+}
+
+test("the visible shapes of different muscles never overlap; the two halves of one shoulder circle are the only contact", () => {
+  for (const view of VIEWS) {
+    const all = BODY_REGIONS[view].regions.flatMap(({ muscle, shapes }) => shapes.map((shape) => ({ muscle, shape })));
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        if (all[i].muscle === all[j].muscle) continue;
+        const pair = [all[i].muscle, all[j].muscle].sort().join("|");
+        if (pair === "front_delts|side_delts") continue; // two halves of one circle, meant to touch
+        assert.ok(!overlapsOnGrid(all[i].shape, all[j].shape), `${view}: ${pair} overlap`);
+      }
+    }
+  }
+});
+
+test("back view: the traps stay at least 1.5 units from the rear delts, and at least 2 from the centre line", () => {
+  const shapesOf = (muscle) => BODY_REGIONS.back.regions.find((region) => region.muscle === muscle).shapes;
+  for (const index of [0, 1]) {
+    assert.ok(gapBetween(shapesOf("traps")[index], shapesOf("rear_delts")[index]) >= 1.5, "traps vs rear delts");
+    assert.ok(edge(shapesOf("traps")[index]).every(([x]) => Math.abs(x - CENTER_X) >= 2), "traps vs centre line");
+  }
+});
+
+test("each view has exactly one head, the front has one pelvis and the back none, and neither is a region", () => {
+  for (const view of VIEWS) {
+    const { head, regions } = BODY_REGIONS[view];
+    assert.equal(head.type, "ellipse", `${view}: head`);
+    assert.equal(head.cx, CENTER_X, `${view}: head is centred`);
+    assert.ok(!("hit" in head), `${view}: the head has no hit shape`);
+    assert.ok(regions.every((region) => !["head", "pelvis"].includes(region.muscle)), `${view}: head or pelvis listed as a muscle`);
+  }
+  assert.equal(BODY_REGIONS.front.pelvis.type, "ellipse");
+  assert.equal(BODY_REGIONS.front.pelvis.cx, CENTER_X);
+  assert.ok(!("hit" in BODY_REGIONS.front.pelvis), "the pelvis has no hit shape");
+  assert.equal(BODY_REGIONS.back.pelvis, undefined, "no pelvis on the back");
+});
+
 test("every hit shape is at least as large as the shape it covers, with the same centre, rotation and face", () => {
   for (const view of VIEWS) {
     for (const { muscle, shapes } of BODY_REGIONS[view].regions) {

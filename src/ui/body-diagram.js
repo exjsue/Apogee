@@ -36,9 +36,7 @@ const ringOf = (shape) => ({ ...shape, rx: shape.rx + RING_OFFSET, ry: shape.ry 
 
 function makeShape(ns, shape, className) {
   const element = document.createElementNS(ns, shape.type === "ellipse" ? "ellipse" : "path");
-  if (shape.type === "path") {
-    element.setAttribute("d", shape.d);
-  } else if (shape.type === "half") {
+  if (shape.type === "half") {
     element.setAttribute("d", halfPath(shape, shape.ring !== true));
   } else {
     for (const name of ["cx", "cy", "rx", "ry"]) element.setAttribute(name, String(shape[name]));
@@ -70,10 +68,9 @@ export function renderBodyDiagram({ values, view, max, label, neglected = new Se
   svg.setAttribute("aria-label", label);
   svg.setAttribute("data-view", view);
 
-  const silhouette = document.createElementNS(ns, "g");
-  silhouette.setAttribute("class", "silhouette");
-  for (const shape of BODY_REGIONS[view].silhouette) silhouette.append(makeShape(ns, shape, "outline"));
-  svg.append(silhouette);
+  // Not muscles: no data-muscle, no hit shape. Drawn first, so the muscle groups are on top of the pelvis.
+  svg.append(makeShape(ns, BODY_REGIONS[view].head, "head"));
+  if (BODY_REGIONS[view].pelvis !== undefined) svg.append(makeShape(ns, BODY_REGIONS[view].pelvis, "pelvis"));
 
   const steps = new Map(intensityLines({ values, view, max }).map(({ muscle, step }) => [muscle, step]));
   for (const { muscle, shapes } of BODY_REGIONS[view].regions) {

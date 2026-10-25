@@ -2211,6 +2211,24 @@ rule("body: the tab shows the diagram with exactly the right muscles on the fron
   });
 });
 
+rule("body: each view draws one head, the front one pelvis and the back none, and neither is a muscle or has a hit shape", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    for (const [view, pelvises] of [["front", 1], ["back", 0]]) {
+      await showView(root, view);
+      const svg = diagram(root);
+      ctx.assert.equal(svg.querySelectorAll(".head").length, 1, `${view}: one head`);
+      ctx.assert.equal(svg.querySelectorAll(".pelvis").length, pelvises, `${view}: pelvis count`);
+      for (const part of svg.querySelectorAll(".head, .pelvis")) {
+        ctx.assert.ok(!part.hasAttribute("data-muscle") && part.parentElement === svg, `${view}: the ${part.getAttribute("class")} is not a muscle group`);
+        ctx.assert.ok(!part.closest("[data-muscle]"), `${view}: the ${part.getAttribute("class")} is not inside a muscle group`);
+      }
+      ctx.assert.equal([...svg.children].filter((child) => child.classList.contains("hit")).length, 0, `${view}: no hit shape beside the head or pelvis`);
+    }
+  });
+});
+
 rule("body: the 7-day note is shown, and the front/back buttons switch the view, press state and text list", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");
