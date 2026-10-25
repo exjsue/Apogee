@@ -17,7 +17,8 @@
   --focus: #2b6fd6;
   --radius: 8px;
   --gutter: 16px;
-  --motion: 200ms; /* the length of the Phase 1 motion below (tab fade, panels, forms, notices, banners, button press) */
+  --motion: 200ms; /* the length of the Phase 1 motion below (panels, forms, notices, banners, button press) */
+  --motion-tab: 250ms; /* the tab fade is longer than the other Phase 1 motion because John wanted it slower */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -306,8 +307,8 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
-   size or a position. The tab fade, the panels, forms, notices, banners and the button press use
-   --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
+   size or a position. The tab fade uses --motion-tab; the panels, forms, notices, banners and the
+   button press use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
    data-enter with a key; renderNow marks it data-anim="in" only when no element with that key
@@ -352,7 +353,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   li.set-row[data-anim="add"] { animation: row-in 150ms ease-out; }
 
   /* switching tabs */
-  .view[data-anim="tab"] { animation: fade-in var(--motion) ease-out; }
+  .view[data-anim="tab"] { animation: fade-in var(--motion-tab) ease-out; }
 
   /* the three-dot menu, notices, and the questions and forms that open in place (marked by renderNow);
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */
