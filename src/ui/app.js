@@ -35,6 +35,21 @@ export async function mountApp(root, services) {
     if (state.tab !== id) {
       state.log.seen = null; // a new screen: its rows do not animate one by one
       state.enter = true; // the new tab fades in, once
+      // The bar's slide and squash (see app.css) read data-from and data-dir. A tap while the bar is still
+      // moving snaps it to the new tab instead (data-snap). Removing data-dir and flushing styles lets a
+      // repeat in the same direction restart the animation.
+      const moving = typeof tabBar.getAnimations === "function" && tabBar.getAnimations({ subtree: true }).length > 0;
+      if (moving) {
+        tabBar.dataset.snap = "1";
+        delete tabBar.dataset.dir;
+        delete tabBar.dataset.from;
+      } else {
+        delete tabBar.dataset.snap;
+        tabBar.dataset.from = state.tab;
+        delete tabBar.dataset.dir;
+        void tabBar.offsetWidth;
+        tabBar.dataset.dir = TABS.findIndex((tab) => tab.id === id) > TABS.findIndex((tab) => tab.id === state.tab) ? "right" : "left";
+      }
     }
     state.tab = id;
     tabBar.dataset.active = id; // the bar slides now, not when the render finishes

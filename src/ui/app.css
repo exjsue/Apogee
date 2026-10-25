@@ -19,6 +19,8 @@
   --gutter: 16px;
   --motion: 200ms; /* the length of the Phase 1 motion below (panels, forms, notices, banners, button press) */
   --motion-tab: 250ms; /* the tab fade is longer than the other Phase 1 motion because John wanted it slower */
+  --bar-squash: 0.7; /* the tab bar's indicator squashes to this fraction of its width as it arrives */
+  --bar-squash-time: 200ms; /* the whole squash, in and out; it starts so that its deepest point lands as the slide ends */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -116,10 +118,11 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   width: calc((100% - 3 * var(--tab-gap)) / 4);
   background: var(--accent);
   pointer-events: none; /* or it would swallow taps on the bottom 3 px of the tabs */
+  transform: translateX(calc(var(--bar-to, 0) * (100% + var(--tab-gap)))); /* --bar-to: the active tab's index (0 for the first) */
 }
-.tabs[data-active="history"]::after { transform: translateX(calc(100% + var(--tab-gap))); }
-.tabs[data-active="backup"]::after { transform: translateX(calc(2 * (100% + var(--tab-gap)))); }
-.tabs[data-active="settings"]::after { transform: translateX(calc(3 * (100% + var(--tab-gap)))); }
+.tabs[data-active="history"] { --bar-to: 1; }
+.tabs[data-active="backup"] { --bar-to: 2; }
+.tabs[data-active="settings"] { --bar-to: 3; }
 
 .tab {
   flex: 1;
@@ -325,7 +328,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
-   size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
+   size or a position (the tab bar's indicator slides by translate and squashes by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
    button press use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
@@ -375,6 +378,29 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 
   /* the tab bar's indicator slides to the tapped tab (under reduced motion it jumps) */
   .tabs::after { transition: transform var(--motion-tab) ease-out; }
+
+  /* Where the individual translate property exists, a real tab change (app.js sets data-from and data-dir)
+     plays two animations instead: the slide on translate (from the old tab's place to 0), then a squash on
+     transform that starts so its deepest point lands as the slide ends, with the leading edge as the
+     transform origin. The base transform is already the final place, so when they end nothing is left over. */
+  @supports (translate: 0) {
+    .tabs[data-from="history"] { --bar-from: 1; }
+    .tabs[data-from="backup"] { --bar-from: 2; }
+    .tabs[data-from="settings"] { --bar-from: 3; }
+    .tabs[data-dir]::after {
+      transition: none; /* a running transition would outrank the animations */
+      animation:
+        bar-slide var(--motion-tab) ease-out,
+        bar-squash var(--bar-squash-time) ease-in-out calc(var(--motion-tab) - var(--bar-squash-time) / 2);
+    }
+    .tabs[data-dir="right"]::after { transform-origin: 100% 50%; }
+    .tabs[data-dir="left"]::after { transform-origin: 0 50%; }
+    @keyframes bar-slide { from { translate: calc((var(--bar-from, 0) - var(--bar-to, 0)) * (100% + var(--tab-gap))); } }
+    @keyframes bar-squash { 50% { transform: translateX(calc(var(--bar-to, 0) * (100% + var(--tab-gap)))) scaleX(var(--bar-squash)); } }
+  }
+
+  /* a tap while the bar was still moving: it appears at the new tab at once (after the rules above, so it wins) */
+  .tabs[data-snap]::after { transition: none; animation: none; }
 
   /* the three-dot menu, notices, and the questions and forms that open in place (marked by renderNow);
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */
