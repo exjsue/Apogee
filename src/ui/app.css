@@ -326,7 +326,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
    size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
-   button press (the set delete button included, with a deeper dip) use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
+   button press (the set delete button included, with a deeper dip) use --motion; so do the check pop and its disc (and the check's press dip); the rest line (160 ms) and new row (150 ms) keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
    data-enter with a key; renderNow marks it data-anim="in" only when no element with that key
@@ -360,9 +360,9 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 
   /* checking and unchecking: the disc fills in or out, and the circle gives a slight pop */
   button.check-toggle[data-anim="check"],
-  button.check-toggle[data-anim="uncheck"] { animation: check-pop 160ms ease-out; }
-  button.check-toggle[data-anim="check"]::after { animation: disc-in 160ms ease-out; }
-  button.check-toggle[data-anim="uncheck"]::after { animation: disc-out 160ms ease-out; }
+  button.check-toggle[data-anim="uncheck"] { animation: check-pop var(--motion) ease-out; }
+  button.check-toggle[data-anim="check"]::after { animation: disc-in var(--motion) ease-out; }
+  button.check-toggle[data-anim="uncheck"]::after { animation: disc-out var(--motion) ease-out; }
 
   /* a set's rest line changing state (template, resting, done) */
   .rest-line[data-anim="phase"] { animation: fade-in 160ms ease-out; }
@@ -380,11 +380,15 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */
   [data-anim="in"], .banner, .pull-confirm { animation: fade-in var(--motion) ease-out; }
 
-  /* a pressed button dips; the set check waits for Phase 2. The set delete button has no visible
-     background, so its dip is deeper (the same specificity as the 0.97 rule, so it must stay after it) */
+  /* a pressed button dips. The set delete button has no visible background, so its dip is deeper
+     (the same specificity as the 0.97 rule, so it must stay after it). The set check is left out of
+     the general rules above and dips by its own two rules below (deeper, as its circle is only 28 px);
+     its pop plays on the new element made by the redraw, so the two never act on one element. */
   button:not(.check-toggle) { transition: transform var(--motion) ease-out; }
   button:not(:disabled):not(.check-toggle):active { transform: scale(0.97); }
   button.delete-button:not(:disabled):active { transform: scale(0.9); }
+  button.check-toggle { transition: transform var(--motion) ease-out; }
+  button.check-toggle:not(:disabled):active { transform: scale(0.9); }
 }
 
 /* reduced motion: a pressed button changes colour at once, with no transition, transform or animation;
