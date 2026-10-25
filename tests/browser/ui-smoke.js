@@ -1948,3 +1948,33 @@ rule("motion: opening a confirm starts its fade, and a redraw with the confirm s
     ctx.assert.equal(redrawn.getAnimations().length, 0, "a redraw must not replay the fade");
   }, { width: 320 });
 });
+
+// ---- the tab bar's sliding indicator (the nav's ::after, placed by data-active) ----
+
+rule("tabs: after each switch the indicator sits under the active tab (left edge and width), passes taps through, and tapping the active tab changes nothing", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    const win = frame.contentWindow;
+    const nav = $(root, "nav.tabs");
+    const settled = () => Promise.allSettled(nav.getAnimations({ subtree: true }).map((a) => a.finished)); // the slide is over
+    const check = async (tab) => {
+      await settled();
+      ctx.assert.equal(nav.dataset.active, tab, `data-active after going to ${tab}`);
+      const bar = win.getComputedStyle(nav, "::after");
+      const barLeft = nav.getBoundingClientRect().left + new win.DOMMatrix(bar.transform).m41;
+      const target = $(root, `[data-action="tab"][data-tab="${tab}"]`).getBoundingClientRect();
+      ctx.assert.ok(Math.abs(barLeft - target.left) <= 1, `${tab}: bar left ${barLeft} vs tab left ${target.left}`);
+      ctx.assert.ok(Math.abs(parseFloat(bar.width) - target.width) <= 1, `${tab}: bar width ${bar.width} vs tab width ${target.width}`);
+    };
+    ctx.assert.equal(win.getComputedStyle(nav, "::after").pointerEvents, "none", "the bar must not swallow taps");
+    await check("log");
+    for (const tab of ["history", "backup", "settings", "log"]) {
+      await goToTab(root, tab);
+      await check(tab);
+    }
+    await goToTab(root, "backup");
+    await check("backup");
+    click($(root, '[data-action="tab"][data-tab="backup"]')); // already active
+    await goToTab(root, "backup");
+    await check("backup");
+  }, { width: 320 });
+});

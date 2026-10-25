@@ -97,11 +97,29 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 }
 
 .tabs {
+  --tab-gap: 4px;
+  position: relative;
   display: flex;
-  gap: 4px;
+  gap: var(--tab-gap);
   border-bottom: 1px solid var(--line);
   margin-bottom: 16px;
 }
+
+/* The active-tab bar: one indicator under the nav, placed by data-active (set by app.js). The offsets
+   assume exactly four equal-width tabs; change them if tabs are added or made unequal. */
+.tabs::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: calc((100% - 3 * var(--tab-gap)) / 4);
+  background: var(--accent);
+  pointer-events: none; /* or it would swallow taps on the bottom 3 px of the tabs */
+}
+.tabs[data-active="history"]::after { transform: translateX(calc(100% + var(--tab-gap))); }
+.tabs[data-active="backup"]::after { transform: translateX(calc(2 * (100% + var(--tab-gap)))); }
+.tabs[data-active="settings"]::after { transform: translateX(calc(3 * (100% + var(--tab-gap)))); }
 
 .tab {
   flex: 1;
@@ -115,11 +133,11 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   background: none;
   color: var(--muted);
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 .tab:focus-visible { outline-offset: -3px; } /* square, inside the tab: clear of its neighbours and the underline */
 .tab[aria-current="page"] {
   color: var(--text);
-  border-bottom-color: var(--accent);
   font-weight: 600;
 }
 
@@ -307,7 +325,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
-   size or a position. The tab fade uses --motion-tab; the panels, forms, notices, banners and the
+   size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
    button press use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
@@ -354,6 +372,9 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 
   /* switching tabs */
   .view[data-anim="tab"] { animation: fade-in var(--motion-tab) ease-out; }
+
+  /* the tab bar's indicator slides to the tapped tab (under reduced motion it jumps) */
+  .tabs::after { transition: transform var(--motion-tab) ease-out; }
 
   /* the three-dot menu, notices, and the questions and forms that open in place (marked by renderNow);
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */

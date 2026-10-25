@@ -37,6 +37,7 @@ export async function mountApp(root, services) {
       state.enter = true; // the new tab fades in, once
     }
     state.tab = id;
+    tabBar.dataset.active = id; // the bar slides now, not when the render finishes
     await render();
   }
 
@@ -46,6 +47,7 @@ export async function mountApp(root, services) {
     "data-tab": tab.id,
     onClick: () => selectTab(tab.id),
   }));
+  const tabBar = h("nav", { class: "tabs", "aria-label": "Sections", "data-active": state.tab }, tabButtons);
   const view = h("main", { id: "view", tabindex: "-1" });
 
   // The update banner. It appears only when a new version is waiting (or this
@@ -129,7 +131,7 @@ export async function mountApp(root, services) {
     ),
     banner,
     reminder,
-    h("nav", { class: "tabs", "aria-label": "Sections" }, tabButtons),
+    tabBar,
     view,
   );
 
@@ -224,6 +226,7 @@ export async function mountApp(root, services) {
     view.replaceChildren(content);
     // A failed read only hides the reminder; it never blocks the tab.
     await refreshReminder().catch(() => { reminder.hidden = true; });
+    tabBar.dataset.active = state.tab; // converge on state.tab even if a tap was superseded
     tabButtons.forEach((element) => {
       const current = element.dataset.tab === state.tab;
       element.setAttribute("aria-current", current ? "page" : "false");
