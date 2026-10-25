@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
-import { renderIcon, crc32, iconFileName, SIZES, BACKGROUND, FOREGROUND } from "../tools/make-icons.js";
+import { renderIcon, crc32, iconFileName, SIZES, MASTER_PATH } from "../tools/make-icons.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const iconPath = (size) => path.join(ROOT, "icons", iconFileName(size));
@@ -23,7 +23,7 @@ function decode(buffer) {
     chunks.push({ type, data });
     offset += 12 + length;
   }
-  assert.deepEqual(chunks.map((c) => c.type), ["IHDR", "IDAT", "IEND"]);
+  assert.deepEqual(chunks.map((c) => c.type), ["IHDR", "IDAT", "IEND"], "no ancillary chunk (no metadata, no C2PA, no EXIF)");
   const header = chunks[0].data;
   const width = header.readUInt32BE(0);
   const height = header.readUInt32BE(4);
@@ -60,40 +60,29 @@ test("icons: each is a valid, opaque 8-bit RGB PNG of the right size", () => {
   }
 });
 
-test("icons: a solid color square with an A: background in the corners, letter in the middle", () => {
+test("icons: the master artwork is a square of at least 512 px with no metadata chunks", () => {
+  const master = fs.readFileSync(MASTER_PATH);
+  const png = decode(master); // also checks that only IHDR, IDAT and IEND are present
+  assert.equal(png.width, png.height);
+  assert.ok(png.width >= 512, `master is ${png.width} px`);
+  assert.equal(png.colorType, 2);
+});
+
+test("icons: each is the artwork: black corners, white strokes in the middle, and not a blank square", () => {
   for (const size of SIZES) {
     const png = decode(fs.readFileSync(iconPath(size)));
-    const at = (u, v) => png.pixel(Math.floor(u * size), Math.floor(v * size));
-    for (const [u, v] of [[0.01, 0.01], [0.99, 0.01], [0.01, 0.99], [0.99, 0.99], [0.5, 0.05]]) {
-      assert.deepEqual(at(u, v), BACKGROUND, `${size}px background at ${u},${v}`);
-    }
-    assert.deepEqual(at(0.5, 0.265), FOREGROUND, "the top of the A");
-    assert.deepEqual(at(0.419, 0.5), FOREGROUND, "the left leg");
-    assert.deepEqual(at(0.581, 0.5), FOREGROUND, "the right leg");
-    assert.deepEqual(at(0.35, 0.7), FOREGROUND, "the left foot");
-    assert.deepEqual(at(0.65, 0.7), FOREGROUND, "the right foot");
-    assert.deepEqual(at(0.5, 0.56), FOREGROUND, "the crossbar");
-    // the openings that make it an A and not a solid triangle
-    assert.deepEqual(at(0.5, 0.45), BACKGROUND, "the hole above the crossbar");
-    assert.deepEqual(at(0.5, 0.65), BACKGROUND, "the gap between the legs below the crossbar");
-    assert.deepEqual(at(0.3, 0.5), BACKGROUND, "outside the left leg");
-    assert.deepEqual(at(0.5, 0.2), BACKGROUND, "above the top of the A");
+    for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) assert.deepEqual(png.pixel(x, y), [0, 0, 0], `${size}px corner ${x},${y}`);
+    let white = 0;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (png.pixel(x, y)[0] > 240) white += 1;
+    assert.ok(white > size * size * 0.03 && white < size * size * 0.3, `${size}px: ${white} white pixels`);
   }
 });
 
-test("icons: the letter stays well inside the square, so maskable cropping would not cut it", () => {
-  const size = 192;
-  const png = decode(fs.readFileSync(iconPath(size)));
+test("icons: the artwork stays inside the middle of the square, so a rounded or cropped icon would not cut it", () => {
+  const png = decode(fs.readFileSync(iconPath(512)));
   let farthest = 0;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const [r, g, b] = png.pixel(x, y);
-      const isBackground = r === BACKGROUND[0] && g === BACKGROUND[1] && b === BACKGROUND[2];
-      if (!isBackground) farthest = Math.max(farthest, Math.hypot((x + 0.5) / size - 0.5, (y + 0.5) / size - 0.5));
-    }
-  }
-  assert.ok(farthest <= 0.31, `letter reaches ${farthest.toFixed(3)} of the width from the centre`);
-  assert.ok(farthest >= 0.28, "the letter should be large enough to read");
+  for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) if (png.pixel(x, y)[0] > 40) farthest = Math.max(farthest, Math.hypot((x + 0.5) / 512 - 0.5, (y + 0.5) / 512 - 0.5));
+  assert.ok(farthest <= 0.4, `artwork reaches ${farthest.toFixed(3)} of the width from the centre (a maskable safe zone has radius 0.4)`);
 });
 
 test("icons: the CRC implementation agrees with the standard check value and with zlib", () => {

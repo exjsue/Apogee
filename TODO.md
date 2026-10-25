@@ -3,6 +3,7 @@
 ## Owner actions
 - [ ] Make the repo public and turn on GitHub Pages (Settings, Pages, deploy from branch `main`, folder `/ (root)`). Only the owner does this; the site would be https://exjsue.github.io/Apogee/
 - [ ] Do not host any other site on the exjsue.github.io account until the app has a custom domain (see DECISIONS.md: every Pages site on the account shares one origin and can read the app's IndexedDB)
+- [ ] The whole repo root is published on GitHub Pages (design/, tools/, tests/ and the .md files are all reachable by URL), so nothing private ever goes in this repo: no exports or backups, no personal files, no unstripped images with metadata.
 - [ ] Restart the dev server if it was started before the first screen was added (an older `node tools/serve.js` keeps port 8080 and serves the old files)
 - [ ] Data logged at http://127.0.0.1:8080/ stays on that origin: move it to the live site with Export, then Import
 
