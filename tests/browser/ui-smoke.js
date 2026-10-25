@@ -1949,6 +1949,22 @@ rule("motion: opening a confirm starts its fade, and a redraw with the confirm s
   }, { width: 320 });
 });
 
+// The :active state cannot be simulated from a page, so the dip itself (scale 0.9) and the reduced-motion colour cue are not tested here.
+rule("motion: the set delete button transitions its transform when motion is allowed", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(action(root, "add-set"));
+    const row = await waitFor(() => lastPlanned(root), "the new row");
+    const del = row.querySelector('[data-action="delete-set"]');
+    ctx.assert.ok(del !== null && del.classList.contains("delete-button"));
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduced) {
+      ctx.assert.ok(frame.contentWindow.getComputedStyle(del).transitionProperty.split(",").map((p) => p.trim()).includes("transform"), "the delete button should transition transform");
+    }
+  }, { width: 320 });
+});
+
 // ---- the tab bar's sliding indicator (the nav's ::after, placed by data-active) ----
 
 rule("tabs: after each switch the indicator sits under the active tab (left edge and width), passes taps through, and tapping the active tab changes nothing", async (ctx) => {

@@ -326,7 +326,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
    size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
-   button press use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
+   button press (the set delete button included, with a deeper dip) use --motion; the check pop, rest line and new row keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
    data-enter with a key; renderNow marks it data-anim="in" only when no element with that key
@@ -380,17 +380,19 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
      banners appear when they stop being hidden, and the pull-to-refresh question is created once */
   [data-anim="in"], .banner, .pull-confirm { animation: fade-in var(--motion) ease-out; }
 
-  /* a pressed button dips; the set check and the set delete button wait for Phase 2 */
-  button:not(.check-toggle):not(.delete-button) { transition: transform var(--motion) ease-out; }
-  button:not(:disabled):not(.check-toggle):not(.delete-button):active { transform: scale(0.97); }
+  /* a pressed button dips; the set check waits for Phase 2. The set delete button has no visible
+     background, so its dip is deeper (the same specificity as the 0.97 rule, so it must stay after it) */
+  button:not(.check-toggle) { transition: transform var(--motion) ease-out; }
+  button:not(:disabled):not(.check-toggle):active { transform: scale(0.97); }
+  button.delete-button:not(:disabled):active { transform: scale(0.9); }
 }
 
 /* reduced motion: a pressed button changes colour at once, with no transition, transform or animation;
    a button that is already selected (aria-pressed="true") gets no change, so its label stays readable */
 @media (prefers-reduced-motion: reduce) {
-  button:not(:disabled):not(.check-toggle):not(.delete-button):not([aria-pressed="true"]):active { background-color: var(--line); }
-  button.primary:not(:disabled):not(.check-toggle):not(.delete-button):not([aria-pressed="true"]):active,
-  button.danger:not(:disabled):not(.check-toggle):not(.delete-button):not([aria-pressed="true"]):active { background-color: var(--text); }
+  button:not(:disabled):not(.check-toggle):not([aria-pressed="true"]):active { background-color: var(--line); }
+  button.primary:not(:disabled):not(.check-toggle):not([aria-pressed="true"]):active,
+  button.danger:not(:disabled):not(.check-toggle):not([aria-pressed="true"]):active { background-color: var(--text); }
 }
 
 /* set rows: a header row, then one grid row per set (set number, weight, reps, the check, a small delete) */
