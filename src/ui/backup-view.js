@@ -49,11 +49,11 @@ export async function renderBackupView(ctx) {
   const view = h("section", { class: "view", "aria-label": "Backup" });
 
   if (b.notice) {
-    view.append(h("p", { class: "notice", role: "status", "data-region": "notice" }, b.notice));
+    view.append(h("p", { class: "notice", role: "status", "data-region": "notice", "data-enter": `notice:${b.notice}` }, b.notice));
     b.notice = null;
   }
   if (b.error) {
-    view.append(h("p", { class: "error", role: "alert", "data-region": "view-error" }, b.error));
+    view.append(h("p", { class: "error", role: "alert", "data-region": "view-error", "data-enter": `view-error:${b.error}` }, b.error));
     b.error = null;
   }
 
@@ -357,7 +357,7 @@ async function offlineCard(ctx) {
   }
   card.append(h(
     "div",
-    { class: "confirm", role: "alertdialog", "aria-label": "Confirm reset", "data-region": "confirm-reset-offline" },
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm reset", "data-region": "confirm-reset-offline", "data-enter": "confirm-reset-offline" },
     h(
       "p",
       {},

@@ -69,7 +69,7 @@ function discardConfirm(ctx, setCount) {
   const log = ctx.state.log;
   return h(
     "div",
-    { class: "confirm", role: "alertdialog", "aria-label": "Confirm discard" },
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm discard", "data-enter": "confirm-discard" },
     h("p", {}, `Discard this workout and its ${formatCount(setCount, "set")}? This cannot be undone.`),
     button("Discard workout", {
       class: "danger",
@@ -93,7 +93,7 @@ function finishConfirm(ctx, plannedCount) {
   const log = ctx.state.log;
   return h(
     "div",
-    { class: "confirm", role: "alertdialog", "aria-label": "Confirm finish", "data-region": "confirm-finish" },
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm finish", "data-region": "confirm-finish", "data-enter": "confirm-finish" },
     h("p", {}, `Finish this workout? ${formatCount(plannedCount, "unchecked set")} will be removed. Only checked sets are kept.`),
     button("Finish and remove them", {
       class: "primary",
@@ -246,6 +246,7 @@ function renameForm(ctx, template, label) {
   return h(
     "form",
     {
+      "data-enter": `rename-template:${template.id}`,
       onSubmit: async (event) => {
         event.preventDefault();
         try {
@@ -283,7 +284,7 @@ function deleteTemplateConfirm(ctx, template, isLast) {
   const log = ctx.state.log;
   return h(
     "div",
-    { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete template", "data-region": "confirm-delete-template" },
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete template", "data-region": "confirm-delete-template", "data-enter": `confirm-delete-template:${template.id}` },
     h("p", {}, `Delete the template "${template.name}"? Your workouts are not affected.`),
     button("Delete template", {
       class: "danger",
@@ -609,11 +610,11 @@ export async function renderLogView(ctx) {
   const view = h("section", { class: "view", "aria-label": "New" });
 
   if (log.notice) {
-    view.append(h("p", { class: "notice", role: "status", "data-region": "notice" }, log.notice));
+    view.append(h("p", { class: "notice", role: "status", "data-region": "notice", "data-enter": `notice:${log.notice}` }, log.notice));
     log.notice = null;
   }
   if (log.error) {
-    view.append(h("p", { class: "error", role: "alert", "data-region": "view-error" }, log.error));
+    view.append(h("p", { class: "error", role: "alert", "data-region": "view-error", "data-enter": `view-error:${log.error}` }, log.error));
     log.error = null;
   }
 

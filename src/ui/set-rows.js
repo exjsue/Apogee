@@ -40,7 +40,7 @@ function deleteConfirm(ctx, row) {
   const log = ctx.state.log;
   return h(
     "div",
-    { class: "delete-confirm", role: "group", "aria-label": "Confirm delete" },
+    { class: "delete-confirm", role: "group", "aria-label": "Confirm delete", "data-enter": `delete-set:${row.id}` },
     h("span", {}, "Delete this set?"),
     button("Delete", {
       class: "danger small",
@@ -108,6 +108,7 @@ function restEditor(ctx, row) {
     "form",
     {
       class: "rest-editor",
+      "data-enter": `rest-editor:${row.id}`,
       onSubmit: async (event) => {
         event.preventDefault();
         try {
@@ -265,6 +266,7 @@ function setEditor(ctx, row, index, exerciseName) {
     {
       class: "rest-editor set-editor",
       "data-region": "set-editor",
+      "data-enter": `set-editor:${row.id}`,
       onSubmit: async (event) => {
         event.preventDefault();
         try {
@@ -406,6 +408,7 @@ function defaultRestEditor(ctx, block) {
     {
       class: "rest-editor",
       "data-region": "default-rest-editor",
+      "data-enter": `default-rest-editor:${block.exerciseId}`,
       onSubmit: async (event) => {
         event.preventDefault();
         try {
@@ -476,7 +479,7 @@ function blockHeader(ctx, block, blocks, position) {
     const reordering = log.reorderExerciseId === block.exerciseId;
     header.append(h(
       "div",
-      { class: "menu", role: "menu" },
+      { class: "menu", role: "menu", "data-enter": `menu:${block.exerciseId}` },
       moveExercise("up", position - 1),
       moveExercise("down", position + 1),
       button("Reorder sets", {

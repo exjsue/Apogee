@@ -30,18 +30,21 @@ export async function mountApp(root, services) {
     backup: freshBackupState(),
   };
 
+  // The one way to change tab (the tab buttons and the reminder's button), so that every change fades in.
+  async function selectTab(id) {
+    if (state.tab !== id) {
+      state.log.seen = null; // a new screen: its rows do not animate one by one
+      state.enter = true; // the new tab fades in, once
+    }
+    state.tab = id;
+    await render();
+  }
+
   const tabButtons = TABS.map((tab) => button(tab.label, {
     class: "tab",
     "data-action": "tab",
     "data-tab": tab.id,
-    onClick: async () => {
-      if (state.tab !== tab.id) {
-        state.log.seen = null; // a new screen: its rows do not animate one by one
-        state.enter = true; // the new tab fades in, once
-      }
-      state.tab = tab.id;
-      await render();
-    },
+    onClick: () => selectTab(tab.id),
   }));
   const view = h("main", { id: "view", tabindex: "-1" });
 
@@ -105,10 +108,7 @@ export async function mountApp(root, services) {
       button("Go to Backup", {
         class: "small primary",
         "data-action": "reminder-backup",
-        onClick: async () => {
-          state.tab = "backup";
-          await render();
-        },
+        onClick: () => selectTab("backup"),
       }),
       button(`Dismiss (back in ${REMINDER_SNOOZE_DAYS} days)`, {
         class: "small",
@@ -213,6 +213,13 @@ export async function mountApp(root, services) {
     if (state.enter) {
       content.dataset.anim = "tab"; // see the motion block in app.css
       state.enter = false;
+    } else {
+      // A panel or form fades in only if it is new: its key (data-enter) was not on screen in the drawing
+      // being replaced. A redraw with it still open leaves it unmarked, so it does not replay.
+      const shown = new Set([...view.querySelectorAll("[data-enter]")].map((element) => element.dataset.enter));
+      for (const element of content.querySelectorAll("[data-enter]")) {
+        if (!shown.has(element.dataset.enter)) element.dataset.anim = "in";
+      }
     }
     view.replaceChildren(content);
     // A failed read only hides the reminder; it never blocks the tab.

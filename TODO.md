@@ -97,7 +97,8 @@
   - Beta testers: ask them to export before the schema upgrade (no forced prompt).
   - Export stays self-contained and includes the builtin records (about 290 KB more per export): measure a real export on an iPhone after the schema step.
 - [ ] More animations across the app.
-- [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion on, so he must turn it off to see animations when testing.
+- [ ] Make existing animations smoother and more noticeable (currently 120-160 ms and very subtle). Must still turn off under Reduce Motion. NOTE: John's iPhone has Reduce Motion off, so animations show when testing. Phase 1 (done, awaiting commit) covers the tab fade, panels, forms, notices, banners and button press at 200 ms (--motion); Phase 2: set check, rows added or removed, template Start, and the check/delete buttons' press feedback.
+- [ ] Test "styles: the check control is a 44 px target…" reads the check disc's opacity while the disc-in animation is running, so it fails on HEAD with prefers-reduced-motion: no-preference; it passes here only because this desktop's Chrome reports Reduce Motion ON. Fix in Phase 2 together with the check animation (needs John's approval to change that assertion).
 - [ ] Move UI tabs to the bottom. Respect iOS safe-area insets (home indicator) in the Home Screen app.
 - [ ] Make the set UI slightly smaller / more compact.
 - [x] Show total workout time during a workout (done 2026-10-24 as a live elapsed time in the Current workout card; not yet tested on an iPhone).

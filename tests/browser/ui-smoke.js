@@ -1923,3 +1923,28 @@ rule("ui: a focus request is passed on from a render that a newer render replace
     }
   });
 });
+
+// ---- motion: a panel fades in when it opens, and a redraw with it still open does not replay the fade ----
+
+rule("motion: opening a confirm starts its fade, and a redraw with the confirm still open starts none", async (ctx) => {
+  await withApp(ctx, async ({ root, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    click(action(root, "add-set"));
+    await waitFor(() => lastPlanned(root), "the new row");
+    click(action(root, "finish")); // an unchecked set is left, so it asks first
+    const opened = await waitFor(() => region(root, "confirm-finish"), "the confirmation");
+    // Positive control: with the real stylesheet loaded, the new panel has a running fade. If the CSS stops
+    // matching, this fails instead of the next check passing for nothing. A browser set to reduce motion
+    // (this desktop's Chrome is) shows no motion at all, so there the control is the opposite: still none.
+    // In every mode (the mark is set by the code whatever the motion setting): the new panel is marked, a redrawn one is not.
+    ctx.assert.equal(opened.dataset.anim, "in", "the opened confirm should be marked data-anim=in");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ctx.assert.deepEqual(opened.getAnimations().map((a) => a.animationName), reduced ? [] : ["fade-in"], "the opened confirm should fade in (and not at all under reduced motion)");
+    await app.render(); // a redraw nobody asked for, with the confirm still open
+    const redrawn = region(root, "confirm-finish");
+    ctx.assert.ok(redrawn !== opened && !opened.isConnected, "the redraw built a new element");
+    ctx.assert.equal(redrawn.dataset.anim, undefined, "a redrawn confirm must not be marked");
+    ctx.assert.equal(redrawn.getAnimations().length, 0, "a redraw must not replay the fade");
+  }, { width: 320 });
+});

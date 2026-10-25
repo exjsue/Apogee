@@ -27,6 +27,7 @@ function templateSection(ctx, workout) {
     {
       class: "card",
       "aria-label": "Save as template",
+      "data-enter": "save-template",
       onSubmit: async (event) => {
         event.preventDefault();
         try {
@@ -79,7 +80,7 @@ function deleteSection(ctx, workout) {
   }
   return h(
     "div",
-    { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete", "data-region": "confirm-delete" },
+    { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete", "data-region": "confirm-delete", "data-enter": "confirm-delete" },
     h(
       "p",
       {},
@@ -217,11 +218,11 @@ export async function renderHistoryView(ctx) {
   // messages from the last action, shown once at the top
   const messages = [];
   if (history.notice) {
-    messages.push(h("p", { class: "notice", role: "status", "data-region": "notice" }, history.notice));
+    messages.push(h("p", { class: "notice", role: "status", "data-region": "notice", "data-enter": `notice:${history.notice}` }, history.notice));
     history.notice = null;
   }
   if (history.error) {
-    messages.push(h("p", { class: "error", role: "alert", "data-region": "view-error" }, history.error));
+    messages.push(h("p", { class: "error", role: "alert", "data-region": "view-error", "data-enter": `view-error:${history.error}` }, history.error));
     history.error = null;
   }
   view.prepend(...messages);
