@@ -1,6 +1,6 @@
-// The Settings tab. For now it holds the kg/lb display unit, which is a stored
-// preference (meta key preferredUnit, via the logger); choosing one changes only
-// how weights are shown, never what is stored.
+// The Settings tab: the kg/lb display unit, which is a stored preference (meta key
+// preferredUnit, via the logger; choosing one changes only how weights are shown,
+// never what is stored), then the Backup section (backup-view.js).
 
 import { h, button } from "./dom.js";
 import { WEIGHT_UNITS } from "../domain/model.js";

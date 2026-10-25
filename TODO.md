@@ -11,7 +11,7 @@
 - [ ] Open the live site and the test page (/tests/browser/index.html) and confirm the app loads at the /Apogee/ subpath and the browser tests pass (every path is relative, but this is untested on Pages)
 - [ ] Check what Pages actually sends: the JavaScript content type, cache lifetime (modules could be cached for minutes after a deploy), and that nothing is requested from another origin
 - [ ] Confirm the page's CSP (meta tag only on Pages) blocks nothing the app needs
-- [ ] Offline on the live site: open it once, check Backup, Offline says Ready, then switch the network off and reload
+- [ ] Offline on the live site: open it once, check Settings, Backup, Offline says Ready, then switch the network off and reload
 - [ ] What Pages sends for sw.js, sw-manifest.js and manifest.webmanifest: JavaScript content type for the worker, a manifest content type the browser accepts, and cache lifetimes (the worker is registered with updateViaCache none, so its own files should not be held back)
 - [ ] Publish a second version and watch the update flow on the live site: the Update available banner appears, nothing changes until Reload is clicked, data survives
 
@@ -36,12 +36,12 @@
 - [x] Recovery procedure for a broken worker is written down in OFFLINE.md, with the warning that clearing site data also deletes the workouts
 
 ## Next
-- [ ] Backup into Settings: step 1a is built (the Backup section is drawn inside Settings, the Backup tab still exists). Still to do: 1b (remove the Backup tab, send the reminder's Go to Backup button to Settings, update the tests and OFFLINE.md) and step 2 (a Body placeholder tab between History and Settings). Check 1a on the phone first.
+- [ ] Backup into Settings: steps 1a and 1b are built (the Backup section is drawn inside Settings, the Backup tab is gone, the reminder's Go to Backup button opens Settings with focus on the Backup heading). Still to do: check 1b on the phone, then step 2 (a Body placeholder tab between History and Settings, which restores four tabs: a 3-line edit in the indicator CSS).
 - [ ] Edit a logged set, and edit a finished workout (deleting one is done: History detail has Delete workout, with a confirmation)
 - [ ] Check on a real phone that the Delete workout button in History detail is hard to tap by mistake (it sits at the bottom, away from Back, and asks first; there is no undo)
 - [ ] Edit or delete a custom exercise (blocked until we decide what happens to sets that use it)
 - [ ] The stale-build message ("Apogee could not open its database: ... Update the app.", src/ui/main.js and src/storage/idb-adapter.js) does not say how to update. It should say: close the app fully (on an iPhone, swipe the Home Screen app away in the app switcher) and open it again while online; it can take two launches, because the first may only download the new version and the next one runs it.
-- [ ] Show the app version more widely if it helps support (today the first 8 characters of the cache version are in Backup, Offline only)
+- [ ] Show the app version more widely if it helps support (today the first 8 characters of the cache version are in Settings, Backup, Offline only)
 - [ ] Custom domain for the app: removes the shared-origin risk and allows real response headers (frame-ancestors, nosniff) if the host supports them
 - [ ] Decide whether preferredUnit, seedVersion and the unfinished-workout choice should be part of exports (they live in meta and are not exported; a restored backup starts on lb)
 - [ ] Decide how a seeded exercise removed by an import comes back (it does not: seeding runs once per SEED_VERSION)
@@ -51,7 +51,7 @@
 - [ ] Rest timer extras, feature-detected: Wake Lock while a timer runs, a sound at the end only after a tap unlocked audio (see the notes in DECISIONS.md); vibration is documented as unsupported on iOS Safari
 - [ ] A way to mark a set as warm-up on the Log tab (isWarmup exists in the data; warm-up sets already get no timer)
 - [ ] Planned (unchecked) sets live in meta, so they are not in a backup and are lost if site data is cleared; decide whether that is acceptable
-- [ ] **Verify on iPhone (first launch after the update):** the database upgrades in place with your existing workouts (export first and confirm it, because a failed upgrade is undone but an export is your safety net), then History and the Backup tab show the same data, and Update Rest Timers in an exercise's three-dot menu changes only its unchecked sets
+- [ ] **Verify on iPhone (first launch after the update):** the database upgrades in place with your existing workouts (export first and confirm it, because a failed upgrade is undone but an export is your safety net), then History and Settings (Backup section) show the same data, and Update Rest Timers in an exercise's three-dot menu changes only its unchecked sets
 - [ ] A tab does not redraw by itself when another tab changes the workout (it shows the old state until its next action or tab change); consider a storage event or BroadcastChannel to refresh open tabs, without any network use
 - [ ] The History delete and the old logSet path do not use the session revision (see DECISIONS.md on two tabs); route them through it if they ever run while a session is open in another tab
 - [ ] **Verify on iPhone (pull-to-refresh):** see the checklist in the report of this change: does iOS fire touchmove while the page rubber-bands at the top, is there any native pull-to-refresh in the installed app, does overscroll-behavior-y: contain on html change anything, and do the guards (typing, menu, timer, unsaved text) hold on a real phone

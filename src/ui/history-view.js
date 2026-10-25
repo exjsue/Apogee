@@ -85,7 +85,7 @@ function deleteSection(ctx, workout) {
       "p",
       {},
       `Delete this workout and its ${formatCount(workout.setCount, "set")}? This cannot be undone. `
-      + "If you are not sure, export your data first on the Backup tab.",
+      + "If you are not sure, export your data first (Settings, Backup).",
     ),
     button("Delete workout", {
       class: "danger",

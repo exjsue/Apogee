@@ -1,5 +1,5 @@
 // Asks the browser to keep this app's data on every launch and stores the
-// latest answer, so the Backup tab can show it. The request is never assumed
+// latest answer, so the Backup section (in Settings) can show it. The request is never assumed
 // to succeed: the browser's answer is recorded as it is.
 
 // request: () => Promise<{ supported, persisted, error }> (requestPersistentStorage)
@@ -16,7 +16,7 @@ export async function checkPersistence({ request, store, now = () => new Date() 
   return status;
 }
 
-// What the Backup tab says. `status` is null until the first check is stored.
+// What the Backup section says. `status` is null until the first check is stored.
 export function describePersistence(status) {
   if (status === null) {
     return { label: "Checking storage…", detail: "" };

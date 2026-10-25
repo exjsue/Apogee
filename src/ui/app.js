@@ -9,14 +9,13 @@
 import { h, button } from "./dom.js";
 import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
-import { renderBackupView, freshBackupState } from "./backup-view.js";
+import { freshBackupState } from "./backup-view.js";
 import { renderSettingsView } from "./settings-view.js";
 import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
 const TABS = [
   { id: "log", label: "New", render: renderLogView },
   { id: "history", label: "History", render: renderHistoryView },
-  { id: "backup", label: "Backup", render: renderBackupView },
   { id: "settings", label: "Settings", render: renderSettingsView },
 ];
 
@@ -110,7 +109,10 @@ export async function mountApp(root, services) {
       button("Go to Backup", {
         class: "small primary",
         "data-action": "reminder-backup",
-        onClick: () => selectTab("backup"),
+        onClick: () => {
+          state.focus = '[data-region="backup-heading"]'; // the Backup section is in Settings
+          return selectTab("settings");
+        },
       }),
       button(`Dismiss (back in ${REMINDER_SNOOZE_DAYS} days)`, {
         class: "small",

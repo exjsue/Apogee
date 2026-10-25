@@ -1,4 +1,4 @@
-// The Backup tab: export, import and storage. Builds elements and calls the
+// The Backup section of the Settings tab: export, import and storage. Builds elements and calls the
 // backup module; file parsing, validation and the replace itself happen there.
 
 import { h, button } from "./dom.js";

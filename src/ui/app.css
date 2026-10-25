@@ -106,24 +106,23 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 }
 
 /* The active-tab bar: one indicator under the nav, placed by data-active (set by app.js). The offsets
-   assume exactly four equal-width tabs; change them if tabs are added or made unequal. */
+   assume exactly three equal-width tabs; change them if tabs are added or made unequal. */
 .tabs::after {
   content: "";
   position: absolute;
   left: 0;
   bottom: 0;
   height: 3px;
-  width: calc((100% - 3 * var(--tab-gap)) / 4);
+  width: calc((100% - 2 * var(--tab-gap)) / 3);
   background: var(--accent);
   pointer-events: none; /* or it would swallow taps on the bottom 3 px of the tabs */
 }
 .tabs[data-active="history"]::after { transform: translateX(calc(100% + var(--tab-gap))); }
-.tabs[data-active="backup"]::after { transform: translateX(calc(2 * (100% + var(--tab-gap)))); }
-.tabs[data-active="settings"]::after { transform: translateX(calc(3 * (100% + var(--tab-gap)))); }
+.tabs[data-active="settings"]::after { transform: translateX(calc(2 * (100% + var(--tab-gap)))); }
 
 .tab {
   flex: 1;
-  min-width: 0; /* four tabs fit a 320 px screen: the button padding must not set their minimum width */
+  min-width: 0; /* three tabs fit a 320 px screen: the button padding must not set their minimum width */
   padding: 8px 2px;
   overflow-wrap: anywhere;
   min-height: 44px;

@@ -163,7 +163,7 @@ async function logOneSet(root, reps, weight, unit) {
 // The aria-label of the section each tab draws (History may show a workout's detail instead of the list).
 // aria-current alone is not enough: an older render still in flight sets it from state.tab while it draws
 // the previous tab's content, so the content itself must be waited for.
-const TAB_CONTENT = { log: ["New"], history: ["History", "Workout detail"], backup: ["Backup"], settings: ["Settings"] };
+const TAB_CONTENT = { log: ["New"], history: ["History", "Workout detail"], settings: ["Settings"] };
 const goToTab = async (root, tab) => {
   click($(root, `[data-action="tab"][data-tab="${tab}"]`));
   await waitFor(() => $(root, `[data-action="tab"][data-tab="${tab}"]`).getAttribute("aria-current") === "page", `the ${tab} tab`);
@@ -172,11 +172,11 @@ const goToTab = async (root, tab) => {
 
 // ---- tests ----
 
-rule("ui: the app mounts with the log screen and four tabs; the unit toggle is only in Settings", async (ctx) => {
+rule("ui: the app mounts with the log screen and three tabs; the unit toggle is only in Settings", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     ctx.assert.ok(root.textContent.includes("Apogee"));
     ctx.assert.ok(await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button"));
-    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="tab"]')].map((b) => b.dataset.tab), ["log", "history", "backup", "settings"]);
+    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="tab"]')].map((b) => b.dataset.tab), ["log", "history", "settings"]);
     ctx.assert.equal(root.querySelectorAll('[data-action="set-unit"]').length, 0); // not in the header, not on Log
     ctx.assert.ok(root.textContent.includes("No workout in progress"));
     await goToTab(root, "settings");
@@ -577,7 +577,7 @@ rule("ui: Discard on an old unfinished workout asks first and removes it; Finish
 
 rule("ui: export warns that the file is unencrypted, downloads, and shows copyable text", async (ctx) => {
   await withApp(ctx, async ({ root, calls }) => {
-    await goToTab(root, "backup");
+    await goToTab(root, "settings");
     const warning = await waitFor(() => region(root, "export-warning"), "the export warning");
     ctx.assert.ok(/not encrypted/.test(warning.textContent));
     ctx.assert.ok(/cannot control where/.test(warning.textContent));
@@ -989,7 +989,7 @@ rule("ui: the backup reminder shows with a logged workout and no confirmed expor
 
 rule("ui: import shows the file's counts next to the current ones and needs explicit confirmation", async (ctx) => {
   await withApp(ctx, async ({ root, store, adapter }) => {
-    await goToTab(root, "backup");
+    await goToTab(root, "settings");
     const paste = await waitFor(() => field(root, "import-text"), "the paste box");
 
     setValue(paste, "this is not an export");
@@ -1039,7 +1039,7 @@ rule("ui: import preview has a Templates row, and a file from before schema 4 wa
     await store.saveTemplate({ id: "t-b", name: "Pull", exercises: [{ exerciseId: BENCH, setCount: 1 }] });
   };
   await withApp(ctx, async ({ root, store }) => {
-    await goToTab(root, "backup");
+    await goToTab(root, "settings");
     const check = async (text) => {
       setValue(await waitFor(() => field(root, "import-text"), "the paste box"), text); // editing clears the old preview
       click(action(root, "check-import"));
@@ -1105,8 +1105,8 @@ function stubOffline(status = {}) {
 
 rule("ui: with no offline service there is no update banner and no Offline section", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
-    await goToTab(root, "backup");
-    await waitFor(() => action(root, "persist"), "the Backup tab");
+    await goToTab(root, "settings");
+    await waitFor(() => action(root, "persist"), "the Backup section");
     ctx.assert.equal(region(root, "update-banner").hidden, true);
     ctx.assert.equal(region(root, "offline-status"), null);
     ctx.assert.equal(action(root, "reset-offline"), null);
@@ -1162,7 +1162,7 @@ rule("ui: the Offline section shows whether the app is ready and the first 8 cha
   const statusOf = async (offline) => {
     let shown;
     await withApp(ctx, async ({ root }) => {
-      await goToTab(root, "backup");
+      await goToTab(root, "settings");
       await waitFor(() => region(root, "offline-status"), "the Offline section");
       shown = { status: region(root, "offline-status").textContent, version: region(root, "offline-version").textContent };
     }, { offline });
@@ -1185,7 +1185,7 @@ rule("ui: Reset offline copy asks first, Cancel changes nothing, and the workout
   await withApp(ctx, async ({ root, adapter }) => {
     const before = await rawCounts(adapter);
     ctx.assert.deepEqual(before, { workouts: 2, entries: 2, sets: 2 });
-    await goToTab(root, "backup");
+    await goToTab(root, "settings");
     click(await waitFor(() => action(root, "reset-offline"), "the Reset offline copy button"));
     const confirm = await waitFor(() => region(root, "confirm-reset-offline"), "the confirmation");
     ctx.assert.ok(/Your workouts and settings are not affected/.test(confirm.textContent));
@@ -1226,7 +1226,7 @@ rule("ui: the real reset removes only this app's caches and leaves the database,
     await withApp(ctx, async ({ root, store, adapter }) => {
       const before = await rawCounts(adapter);
       const exercisesBefore = (await store.listExercises()).length;
-      await goToTab(root, "backup");
+      await goToTab(root, "settings");
       click(await waitFor(() => action(root, "reset-offline"), "the Reset offline copy button"));
       click(await waitFor(() => action(root, "confirm-reset-offline"), "the confirm button"));
       await waitForText(root, "Offline copy removed");
@@ -1247,7 +1247,7 @@ rule("ui: the real reset removes only this app's caches and leaves the database,
 
 rule("ui: asking for persistent storage reports the browser's answer", async (ctx) => {
   await withApp(ctx, async ({ root, calls }) => {
-    await goToTab(root, "backup");
+    await goToTab(root, "settings");
     click(await waitFor(() => action(root, "persist"), "the storage button"));
     await waitFor(() => /Not guaranteed/.test(region(root, "persist-status").textContent), "the answer");
     ctx.assert.equal(calls.persist, 1);
@@ -2024,7 +2024,7 @@ rule("motion: a new set row slides in over the shared motion length once, and a 
 
 // ---- the Backup section inside Settings (step 1a: the Backup tab still exists) ----
 
-rule("settings: the Backup section sits below the Weight unit card; the Backup tab still exists", async (ctx) => {
+rule("settings: the Backup section sits below the Weight unit card; there is no Backup tab", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "settings");
     await waitFor(() => action(root, "persist"), "the Backup section");
@@ -2037,7 +2037,7 @@ rule("settings: the Backup section sits below the Weight unit card; the Backup t
     ctx.assert.equal(heading.textContent, "Backup");
     ctx.assert.ok(unitCard.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING, "the heading follows the Weight unit card");
     ctx.assert.ok(heading.compareDocumentPosition(action(root, "download-export")) & Node.DOCUMENT_POSITION_FOLLOWING, "the export button follows the heading");
-    ctx.assert.ok($(root, '[data-action="tab"][data-tab="backup"]'), "the Backup tab is still there in step 1a");
+    ctx.assert.equal($(root, '[data-action="tab"][data-tab="backup"]'), null, "there is no Backup tab any more");
   });
 });
 
@@ -2090,6 +2090,26 @@ rule("motion: the Backup panels inside Settings fade in once (not on a redraw), 
   }, { width: 320, offline });
 });
 
+// ---- the reminder's Go to Backup button: Settings, with focus on the Backup heading ----
+
+rule("reminder: Go to Backup opens Settings and focuses the Backup heading, from New and when already in Settings", async (ctx) => {
+  const prepare = (store) => store.saveWorkout({ id: "w-remind", startedAt: "2026-10-20T10:00:00.000Z" });
+  await withApp(ctx, async ({ root }) => {
+    const heading = () => region(root, "backup-heading");
+    const focused = () => root.ownerDocument.activeElement;
+    await waitFor(() => action(root, "reminder-backup"), "the Go to Backup button");
+    ctx.assert.equal(heading(), null, "on New there is no Backup heading yet");
+    click(action(root, "reminder-backup"));
+    await waitFor(() => heading() && focused() === heading(), "focus on the Backup heading");
+    ctx.assert.equal($(root, '[data-action="tab"][data-tab="settings"]').getAttribute("aria-current"), "page");
+    // already in Settings: move focus elsewhere (positive control), then the button brings it back
+    $(root, '[data-action="set-unit"]').focus();
+    ctx.assert.ok(focused() !== heading(), "focus is on a unit button before the click");
+    click(action(root, "reminder-backup"));
+    await waitFor(() => heading() && focused() === heading(), "focus back on the Backup heading");
+  }, { prepare });
+});
+
 // ---- the tab bar's sliding indicator (the nav's ::after, placed by data-active) ----
 
 rule("tabs: after each switch the indicator sits under the active tab (left edge and width), passes taps through, and tapping the active tab changes nothing", async (ctx) => {
@@ -2107,15 +2127,27 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
       ctx.assert.ok(Math.abs(parseFloat(bar.width) - target.width) <= 1, `${tab}: bar width ${bar.width} vs tab width ${target.width}`);
     };
     ctx.assert.equal(win.getComputedStyle(nav, "::after").pointerEvents, "none", "the bar must not swallow taps");
+    // Three equal tabs: their widths and the two gaps fill the nav, and the bar is one tab wide.
+    const tabs = [...nav.querySelectorAll('[data-action="tab"]')];
+    ctx.assert.equal(tabs.length, 3);
+    const gap = parseFloat(win.getComputedStyle(nav).columnGap);
+    const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
+    ctx.assert.ok(Math.abs(widths.reduce((a, b) => a + b, 0) + 2 * gap - nav.getBoundingClientRect().width) <= 1, "three tabs and two gaps fill the nav");
+    ctx.assert.ok(Math.abs(parseFloat(win.getComputedStyle(nav, "::after").width) - widths[0]) <= 1, "the bar is one tab wide");
     await check("log");
-    for (const tab of ["history", "backup", "settings", "log"]) {
+    // Positive control for the waits in check(): when motion is allowed the slide really runs (so settled() waits for
+    // something); under reduced motion there is none.
+    click($(root, '[data-action="tab"][data-tab="history"]'));
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ctx.assert.equal(nav.getAnimations({ subtree: true }).length > 0, !reduced, "the slide runs only when motion is allowed");
+    for (const tab of ["history", "settings", "log"]) {
       await goToTab(root, tab);
       await check(tab);
     }
-    await goToTab(root, "backup");
-    await check("backup");
-    click($(root, '[data-action="tab"][data-tab="backup"]')); // already active
-    await goToTab(root, "backup");
-    await check("backup");
+    await goToTab(root, "settings");
+    await check("settings");
+    click($(root, '[data-action="tab"][data-tab="settings"]')); // already active
+    await goToTab(root, "settings");
+    await check("settings");
   }, { width: 320 });
 });
