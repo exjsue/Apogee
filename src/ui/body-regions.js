@@ -37,11 +37,11 @@ const region = (muscle, shape) => ({ muscle, shapes: pair(shape) });
 // The head (both views) and the pelvis (front view only) are one ellipse each, drawn for orientation only, below the
 // muscles: they have no hit area and are not regions. The pelvis fills the gap between the abs and the thighs.
 const HEAD = ellipse(100, 48, 13, 16);
-const PELVIS = ellipse(100, 184, 19, 26);
+const PELVIS = ellipse(100, 184, 16, 23);
 
-// The shoulder circle on the front view is split in half: the inner half (towards the body) is the front delt, the
-// outer half the side delt. Left shoulder: its inner half faces right.
-const SHOULDER = { cx: 60, cy: 80, r: 12 };
+// The front shoulder is two distinct ovals side by side with a gap: the inner one (towards the body) is the front
+// delt, the outer one the side delt. Together they fill about x 48 to 72, y 68 to 92. (The "half" shape type is not
+// used by the data any more.)
 
 // Ellipses only: the V of the torso comes from the tilt of the chest, obliques and lats, the hanging arms from the tilt
 // of the upper arm and forearm, the tapered legs from a slight inward tilt.
@@ -51,12 +51,12 @@ export const BODY_REGIONS = Object.freeze({
     pelvis: PELVIS,
     regions: [
       region("chest", ellipse(84, 99, 15, 12, 10)),
-      region("front_delts", half(SHOULDER.cx, SHOULDER.cy, SHOULDER.r, "right")),
-      region("side_delts", half(SHOULDER.cx, SHOULDER.cy, SHOULDER.r, "left")),
+      region("front_delts", ellipse(66.5, 80, 5.5, 11)),
+      region("side_delts", ellipse(53.5, 80, 5.5, 11)),
       region("biceps", ellipse(52, 113, 6.5, 17, 8)),
       region("forearms", ellipse(43, 153, 6, 21, 14)),
-      region("abs", ellipse(94, 138, 5.5, 22)),
-      region("obliques", ellipse(82, 145, 5.5, 20, -8)),
+      region("abs", ellipse(94, 138, 5, 22)),
+      region("obliques", ellipse(80.5, 145, 5.5, 20, -8)),
       region("quads", ellipse(78, 252, 11, 45, -3)),
       region("adductors", ellipse(93, 230, 3.5, 22, 3)),
       region("abductors", ellipse(65, 203, 5, 14, 6)),

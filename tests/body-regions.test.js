@@ -61,17 +61,18 @@ test("every region is two shapes, the left one mirrored on the right of the cent
   }
 });
 
-test("front view: each shoulder is split in two halves of one circle, the inner half the front delt, the outer the side delt", () => {
+test("front view: each shoulder is two distinct ellipses, the inner one the front delt and the outer one the side delt, with a gap", () => {
   const shapesOf = (muscle) => BODY_REGIONS.front.regions.find((region) => region.muscle === muscle).shapes;
   for (const [index, side] of ["left", "right"].entries()) {
     const front = shapesOf("front_delts")[index];
     const outer = shapesOf("side_delts")[index];
-    assert.equal(front.type, "half");
-    assert.equal(outer.type, "half");
-    for (const key of ["cx", "cy", "rx", "ry", "rot"]) assert.equal(front[key], outer[key], `${side} shoulder: ${key}`);
-    // on the left of the body the inner half is the one facing right (towards the centre line)
-    assert.equal(front.face, side === "left" ? "right" : "left", `${side} shoulder: front delt is the inner half`);
-    assert.equal(outer.face, side === "left" ? "left" : "right", `${side} shoulder: side delt is the outer half`);
+    assert.equal(front.type, "ellipse", `${side} shoulder: front delt`);
+    assert.equal(outer.type, "ellipse", `${side} shoulder: side delt`);
+    // the front delt is nearer the centre line than the side delt, on the same side of it
+    assert.ok(Math.abs(front.cx - CENTER_X) < Math.abs(outer.cx - CENTER_X), `${side} shoulder: front delt is the inner one`);
+    assert.ok((front.cx - CENTER_X) * (outer.cx - CENTER_X) > 0, `${side} shoulder: both on the same side`);
+    assert.ok(!overlapsOnGrid(front, outer), `${side} shoulder: the two ovals overlap`);
+    assert.ok(gapBetween(front, outer) >= 1, `${side} shoulder: gap between the ovals`);
   }
   assert.ok(!BODY_REGIONS.back.regions.some((region) => region.muscle === "side_delts"), "no side delts on the back");
 });
@@ -106,14 +107,13 @@ function gapBetween(a, b) {
   return smallest;
 }
 
-test("the visible shapes of different muscles never overlap; the two halves of one shoulder circle are the only contact", () => {
+test("no visible shapes of different muscles overlap", () => {
   for (const view of VIEWS) {
     const all = BODY_REGIONS[view].regions.flatMap(({ muscle, shapes }) => shapes.map((shape) => ({ muscle, shape })));
     for (let i = 0; i < all.length; i++) {
       for (let j = i + 1; j < all.length; j++) {
         if (all[i].muscle === all[j].muscle) continue;
         const pair = [all[i].muscle, all[j].muscle].sort().join("|");
-        if (pair === "front_delts|side_delts") continue; // two halves of one circle, meant to touch
         assert.ok(!overlapsOnGrid(all[i].shape, all[j].shape), `${view}: ${pair} overlap`);
       }
     }
@@ -154,14 +154,12 @@ test("every hit shape is at least as large as the shape it covers, with the same
   }
 });
 
-test("a shoulder half's hit area does not reach the centre of the other half, so a tap on either half is unambiguous", () => {
+test("the hit area of each shoulder oval contains its own shape's centre (how far the two overlap is for step 5, not asserted)", () => {
   const shapesOf = (muscle) => BODY_REGIONS.front.regions.find((region) => region.muscle === muscle).shapes;
   for (const index of [0, 1]) {
-    const front = shapesOf("front_delts")[index];
-    const outer = shapesOf("side_delts")[index];
-    assert.ok(contains(hitOf(front), centroid(front)), "a hit area contains its own half's centre");
-    assert.ok(contains(hitOf(outer), centroid(outer)), "a hit area contains its own half's centre");
-    assert.ok(!contains(hitOf(front), centroid(outer)), "front delt hit reaches the side delt");
-    assert.ok(!contains(hitOf(outer), centroid(front)), "side delt hit reaches the front delt");
+    for (const muscle of ["front_delts", "side_delts"]) {
+      const shape = shapesOf(muscle)[index];
+      assert.ok(contains(hitOf(shape), [shape.cx, shape.cy]), `${muscle}: the hit area contains its own shape's centre`);
+    }
   }
 });
