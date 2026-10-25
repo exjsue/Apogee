@@ -1981,7 +1981,7 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
 
 // ---- the indicator squashes against its right edge after a move to the right (data-hit; see the motion block in app.css) ----
 
-rule("tabs: a move to the right marks data-hit (a and b alternating) and squashes the indicator; a move to the left clears it; the same tab and a redraw change nothing", async (ctx) => {
+rule("tabs: a move to the right or the left marks data-dir and toggles data-hit (a and b alternating) and squashes the indicator; the same tab and a redraw change nothing", async (ctx) => {
   await withApp(ctx, async ({ root, frame, app }) => {
     const win = frame.contentWindow;
     const nav = $(root, "nav.tabs");
@@ -2003,7 +2003,9 @@ rule("tabs: a move to the right marks data-hit (a and b alternating) and squashe
       for (const a of running()) { a.pause(); a.currentTime = time; }
       return bar();
     };
+    const seen = new Set(); // every squash name that ran, for the check at the end of the rule
     const arrive = async (tab) => {
+      for (const a of squashes()) seen.add(a.animationName);
       await goToTab(root, tab);
       for (const a of running()) a.finish();
       await Promise.allSettled(running().map((a) => a.finished));
@@ -2017,31 +2019,35 @@ rule("tabs: a move to the right marks data-hit (a and b alternating) and squashe
 
     // cold start: nothing marked, nothing squashing
     ctx.assert.equal(nav.dataset.hit, undefined, "cold start");
+    ctx.assert.equal(nav.dataset.dir, undefined, "cold start: no direction");
     ctx.assert.deepEqual(squashes().map((a) => a.animationName), [], "cold start must not squash");
 
     // right moves alternate a and b
     tap("history");
     ctx.assert.equal(nav.dataset.hit, "a", "log to history");
+    ctx.assert.equal(nav.dataset.dir, "right", "log to history is a move to the right");
     if (motion) {
       ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-a-history"], "a move to the right squashes (also the positive control: fails if the CSS stops matching)");
       const first = squashes();
       const target = tabRect("history");
-      const deepest = at(350); // 250 ms delay + half of the 200 ms squash
-      ok(Math.abs(deepest.scale - 0.7) < 0.01, `350 ms: scale ${deepest.scale}`);
-      ok(Math.abs(deepest.right - target.right) <= 1, `350 ms: right edge ${deepest.right} vs tab ${target.right}`);
+      const deepest = at(220); // 160 ms delay + half of the 120 ms squash
+      ok(Math.abs(deepest.scale - 0.75) < 0.01, `220 ms: scale ${deepest.scale}`);
+      ok(Math.abs(deepest.right - target.right) <= 1, `220 ms: right edge ${deepest.right} vs tab ${target.right}`);
       await arrive("history");
       restsUnder("history", "after the squash");
       tap("backup");
       ctx.assert.equal(nav.dataset.hit, "b", "history to backup");
       ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-b-backup"], "the next move squashes with the other name");
       ok(squashes().every((a) => !first.includes(a)), "the repeat made a new animation object");
-      ok(Math.abs(at(350).right - tabRect("backup").right) <= 1, "350 ms to backup: right edge");
+      const deepBackup = at(220);
+      ok(Math.abs(deepBackup.scale - 0.75) < 0.01 && Math.abs(deepBackup.right - tabRect("backup").right) <= 1, `220 ms to backup: scale ${deepBackup.scale}, right edge ${deepBackup.right}`);
       await arrive("backup");
       restsUnder("backup", "after the second squash");
       tap("settings");
       ctx.assert.equal(nav.dataset.hit, "a", "backup to settings");
       ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-a-settings"], "settings squashes");
-      ok(Math.abs(at(350).right - tabRect("settings").right) <= 1, "350 ms to settings: right edge");
+      const deepSettings = at(220);
+      ok(Math.abs(deepSettings.scale - 0.75) < 0.01 && Math.abs(deepSettings.right - tabRect("settings").right) <= 1, `220 ms to settings: scale ${deepSettings.scale}, right edge ${deepSettings.right}`);
       await arrive("settings");
       restsUnder("settings", "after the third squash");
     } else {
@@ -2057,16 +2063,23 @@ rule("tabs: a move to the right marks data-hit (a and b alternating) and squashe
       restsUnder("settings", "reduced motion");
     }
 
-    // a move to the left clears the mark and squashes nothing
+    // a move to the left sets data-dir to left, toggles the mark, and squashes against the left edge
     tap("log");
-    ctx.assert.equal(nav.dataset.hit, undefined, "settings to log clears data-hit");
-    ctx.assert.deepEqual(squashes().map((a) => a.animationName), [], "a move to the left does not squash");
+    ctx.assert.equal(nav.dataset.hit, "b", "settings to log toggles data-hit");
+    ctx.assert.equal(nav.dataset.dir, "left", "settings to log is a move to the left");
+    if (motion) {
+      ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-b-left-log"], "a move to the left squashes (positive control)");
+      const deepestLeft = at(220);
+      ok(Math.abs(deepestLeft.scale - 0.75) < 0.01, `220 ms to log: scale ${deepestLeft.scale}`);
+      ok(Math.abs(deepestLeft.left - tabRect("log").left) <= 1, `220 ms to log: left edge ${deepestLeft.left} vs tab ${tabRect("log").left}`);
+    } else ctx.assert.deepEqual(squashes().map((a) => a.animationName), [], "reduced motion: a move to the left does not squash");
     await arrive("log");
     restsUnder("log", "after a move to the left");
 
-    // after a clear the next move to the right starts with a again
+    // the next move toggles again, and a right move sets data-dir back to right
     tap("settings");
-    ctx.assert.equal(nav.dataset.hit, "a", "log to settings after a clear");
+    ctx.assert.equal(nav.dataset.hit, "a", "log to settings toggles data-hit back");
+    ctx.assert.equal(nav.dataset.dir, "right", "log to settings is a move to the right");
     await arrive("settings");
     restsUnder("settings", "after the move from log");
 
@@ -2077,5 +2090,62 @@ rule("tabs: a move to the right marks data-hit (a and b alternating) and squashe
     await app.render();
     ctx.assert.equal(nav.dataset.hit, "a", "a redraw leaves data-hit");
     ctx.assert.deepEqual(squashes().map((a) => a.animationName), [], "a redraw does not squash");
+    ctx.assert.equal(nav.dataset.dir, "right", "a tap on the active tab and a redraw leave data-dir");
+
+    // two more moves to the left: settings to backup, then backup to history
+    tap("backup");
+    ctx.assert.equal(nav.dataset.hit, "b", "settings to backup toggles data-hit");
+    ctx.assert.equal(nav.dataset.dir, "left", "settings to backup is a move to the left");
+    if (motion) {
+      ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-b-left-backup"], "backup squashes from the right (positive control)");
+      const deepBackupLeft = at(220);
+      ok(Math.abs(deepBackupLeft.scale - 0.75) < 0.01 && Math.abs(deepBackupLeft.left - tabRect("backup").left) <= 1, `220 ms to backup, moving left: scale ${deepBackupLeft.scale}, left edge ${deepBackupLeft.left}`);
+    }
+    await arrive("backup");
+    restsUnder("backup", "after settings to backup");
+    tap("history");
+    ctx.assert.equal(nav.dataset.hit, "a", "backup to history toggles data-hit");
+    ctx.assert.equal(nav.dataset.dir, "left", "backup to history is a move to the left");
+    if (motion) {
+      ctx.assert.deepEqual(squashes().map((a) => a.animationName), ["bar-hit-a-left-history"], "history squashes from the right (positive control)");
+      const deepHistoryLeft = at(220);
+      ok(Math.abs(deepHistoryLeft.scale - 0.75) < 0.01 && Math.abs(deepHistoryLeft.left - tabRect("history").left) <= 1, `220 ms to history, moving left: scale ${deepHistoryLeft.scale}, left edge ${deepHistoryLeft.left}`);
+    }
+    await arrive("history");
+    restsUnder("history", "after backup to history");
+
+    // A second run of moves that reaches every squash rule not reached above. data-hit alternates on every
+    // move, so the letters follow from where the run starts (history, with data-hit "a").
+    ctx.assert.equal(nav.dataset.hit, "a", "the second run starts with data-hit a");
+    for (const [tab, dir, hit, name] of [
+      ["settings", "right", "b", "bar-hit-b-settings"],
+      ["backup", "left", "a", "bar-hit-a-left-backup"],
+      ["history", "left", "b", "bar-hit-b-left-history"],
+      ["backup", "right", "a", "bar-hit-a-backup"],
+      ["settings", "right", "b", "bar-hit-b-settings"],
+      ["log", "left", "a", "bar-hit-a-left-log"],
+      ["history", "right", "b", "bar-hit-b-history"],
+    ]) {
+      tap(tab);
+      ctx.assert.equal(nav.dataset.dir, dir, `second run, to ${tab}: data-dir`);
+      ctx.assert.equal(nav.dataset.hit, hit, `second run, to ${tab}: data-hit`);
+      if (motion) {
+        ctx.assert.deepEqual(squashes().map((a) => a.animationName), [name], `second run, to ${tab}: the squash that runs (positive control)`);
+        const deep = at(220);
+        const edge = dir === "right" ? deep.right - tabRect(tab).right : deep.left - tabRect(tab).left;
+        ok(Math.abs(deep.scale - 0.75) < 0.01 && Math.abs(edge) <= 1, `${name} at 220 ms: scale ${deep.scale}, ${dir === "right" ? "right" : "left"} edge off by ${edge}`);
+      } else ctx.assert.deepEqual(squashes().map((a) => a.animationName), [], `second run, to ${tab}: reduced motion does not squash`);
+      await arrive(tab);
+      restsUnder(tab, `second run, after ${name}`);
+    }
+    if (motion) {
+      const every = [];
+      for (const hit of ["a", "b"]) {
+        for (const tab of ["history", "backup", "settings"]) every.push(`bar-hit-${hit}-${tab}`);
+        for (const tab of ["log", "history", "backup"]) every.push(`bar-hit-${hit}-left-${tab}`);
+      }
+      ctx.assert.equal(seen.size, 12, "all 12 squash rules ran");
+      ctx.assert.deepEqual([...seen].sort(), every.sort(), "the 12 names are the 6 right and 6 left rules");
+    }
   }, { width: 320 });
 });
