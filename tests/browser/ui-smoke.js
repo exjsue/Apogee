@@ -1998,6 +1998,30 @@ rule("motion: the set delete button transitions its transform when motion is all
   }, { width: 320 });
 });
 
+rule("motion: a new set row slides in over the shared motion length once, and a redraw starts no slide", async (ctx) => {
+  await withApp(ctx, async ({ root, frame, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    const row = await waitFor(() => lastPlanned(root), "the new row");
+    ctx.assert.equal(row.dataset.anim, "add"); // in every mode
+    const slides = row.getAnimations().filter((a) => a.animationName === "row-in");
+    if (reduced) {
+      ctx.assert.equal(row.getAnimations().length, 0, "no animation under reduced motion");
+    } else {
+      ctx.assert.equal(slides.length, 1, "the new row should slide in");
+      ctx.assert.equal(slides[0].effect.getTiming().duration, 200, "the slide uses --motion");
+      await Promise.allSettled(slides.map((a) => a.finished));
+      ctx.assert.equal(frame.contentWindow.getComputedStyle(row).opacity, "1", "the row is fully shown afterwards");
+    }
+    await app.render();
+    const redrawn = lastPlanned(root);
+    ctx.assert.equal(redrawn.dataset.anim, undefined, "a redrawn row must not be marked");
+    ctx.assert.equal(redrawn.getAnimations().length, 0, "a redraw must not replay the slide");
+  }, { width: 375 });
+});
+
 // ---- the tab bar's sliding indicator (the nav's ::after, placed by data-active) ----
 
 rule("tabs: after each switch the indicator sits under the active tab (left edge and width), passes taps through, and tapping the active tab changes nothing", async (ctx) => {

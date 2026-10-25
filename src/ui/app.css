@@ -326,7 +326,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
    size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
-   button press (the set delete button included, with a deeper dip) use --motion; so do the check pop and its disc (and the check's press dip) and the weight and reps boxes fading back in on uncheck; the rest line (160 ms) and new row (150 ms) keep their own shorter times until Phase 2.
+   button press (the set delete button included, with a deeper dip) use --motion; so do the check pop and its disc (and the check's press dip) and the weight and reps boxes fading back in on uncheck; so does the new row slide; the rest line (160 ms) keeps its own shorter time.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
    data-enter with a key; renderNow marks it data-anim="in" only when no element with that key
@@ -373,7 +373,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   .rest-line[data-anim="phase"] { animation: fade-in 160ms ease-out; }
 
   /* a set row being added */
-  li.set-row[data-anim="add"] { animation: row-in 150ms ease-out; }
+  li.set-row[data-anim="add"] { animation: row-in var(--motion) ease-out; }
 
   /* switching tabs */
   .view[data-anim="tab"] { animation: fade-in var(--motion-tab) ease-out; }
