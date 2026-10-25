@@ -1793,6 +1793,38 @@ rule("styles: the check control is a 44 px target with a ring when unchecked and
   }, { width: 375 });
 });
 
+rule("motion: unchecking a set fades its weight and reps boxes back in once, and checking or a redraw starts no such fade", async (ctx) => {
+  await withApp(ctx, async ({ root, frame, app }) => {
+    await pickExercise(root, "bench", BENCH);
+    await logOneSet(root, "8", "100", "kg");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const row = () => $(root, "li.set-row");
+    const boxFades = (li) => li.getAnimations({ subtree: true }).filter((a) => a.animationName === "box-in");
+    // In every mode (the code sets the mark whatever the motion setting): checked shows text, not boxes.
+    ctx.assert.equal(row().dataset.anim, "check");
+    ctx.assert.ok(row().querySelector("button.cell-edit") !== null && row().querySelector(".cell input") === null);
+    ctx.assert.equal(boxFades(row()).length, 0, "checking must not fade the boxes");
+    await app.render();
+    ctx.assert.equal(row().dataset.anim, undefined, "a redraw must not mark the row");
+    click(row().querySelector('[data-action="toggle-set"]')); // uncheck
+    await waitFor(() => row().querySelector('[data-field="weight"]'), "the boxes back");
+    ctx.assert.equal(row().dataset.anim, "uncheck");
+    const fades = boxFades(row());
+    ctx.assert.deepEqual(
+      fades.map((a) => a.effect.target.dataset.field).sort(),
+      reduced ? [] : ["reps", "weight"],
+      "the weight and reps boxes should fade in (and not at all under reduced motion)",
+    );
+    await Promise.allSettled(fades.map((a) => a.finished));
+    for (const field of ["weight", "reps"]) {
+      ctx.assert.equal(frame.contentWindow.getComputedStyle(row().querySelector(`[data-field="${field}"]`)).opacity, "1", `${field} box is fully shown afterwards`);
+    }
+    await app.render();
+    ctx.assert.equal(row().dataset.anim, undefined, "a redrawn row must not be marked");
+    ctx.assert.equal(row().getAnimations({ subtree: true }).length, 0, "a redraw must not replay the fade");
+  }, { width: 375 });
+});
+
 rule("ui: an exercise and its sets can be moved with buttons that are 44 px high, labelled, and fit a 320 px screen", async (ctx) => {
   const SQUAT = "seed-barbell-squat";
   await withApp(ctx, async ({ root, adapter, frame }) => {

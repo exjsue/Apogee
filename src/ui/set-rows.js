@@ -364,7 +364,7 @@ function setRow(ctx, row, index, exerciseName, rows, reordering) {
     "li",
     {
       class: "set-row", "data-set-id": row.id, "data-phase": row.phase, "data-kind": row.kind,
-      "data-warmup": row.isWarmup ? "true" : null, "data-anim": added ? "add" : null,
+      "data-warmup": row.isWarmup ? "true" : null, "data-anim": added ? "add" : toggled ? (logged ? "check" : "uncheck") : null,
     },
     h(
       "div",

@@ -326,7 +326,7 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
 /* motion: short fades and pops, opacity and transform only, and none of it when the person asks
    for reduced motion (except an instant colour cue on a pressed button). Nothing here changes a
    size or a position (the tab bar's indicator slides by transform only). The tab fade uses --motion-tab; the panels, forms, notices, banners and the
-   button press (the set delete button included, with a deeper dip) use --motion; so do the check pop and its disc (and the check's press dip); the rest line (160 ms) and new row (150 ms) keep their own shorter times until Phase 2.
+   button press (the set delete button included, with a deeper dip) use --motion; so do the check pop and its disc (and the check's press dip) and the weight and reps boxes fading back in on uncheck; the rest line (160 ms) and new row (150 ms) keep their own shorter times until Phase 2.
    The page is rebuilt on every change, so the code marks only the thing that changed
    (data-anim) and its animation plays once, as that thing is created. A panel or form carries
    data-enter with a key; renderNow marks it data-anim="in" only when no element with that key
@@ -356,6 +356,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   @keyframes row-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   @keyframes disc-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
   @keyframes disc-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.6); } }
+  @keyframes box-in { from { opacity: 0.3; } to { opacity: 1; } }
   @keyframes check-pop { 0% { transform: scale(0.94); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
 
   /* checking and unchecking: the disc fills in or out, and the circle gives a slight pop */
@@ -363,6 +364,10 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button.check-toggle[data-anim="uncheck"] { animation: check-pop var(--motion) ease-out; }
   button.check-toggle[data-anim="check"]::after { animation: disc-in var(--motion) ease-out; }
   button.check-toggle[data-anim="uncheck"]::after { animation: disc-out var(--motion) ease-out; }
+
+  /* unchecking: the weight and reps boxes fade back in (the row is marked, so the inputs animate once);
+     only the boxes in the cells match, not the rest time editor's field. Checking has no such fade. */
+  li.set-row[data-anim="uncheck"] .cell input { animation: box-in var(--motion) ease-out; }
 
   /* a set's rest line changing state (template, resting, done) */
   .rest-line[data-anim="phase"] { animation: fade-in 160ms ease-out; }
