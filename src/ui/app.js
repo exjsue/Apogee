@@ -10,7 +10,7 @@ import { h, button } from "./dom.js";
 import { renderLogView, freshLogState } from "./workout-view.js";
 import { renderHistoryView, freshHistoryState } from "./history-view.js";
 import { freshBackupState } from "./backup-view.js";
-import { renderBodyView } from "./body-view.js";
+import { renderBodyView, freshBodyState } from "./body-view.js";
 import { renderSettingsView } from "./settings-view.js";
 import { isReminderDue, REMINDER_SNOOZE_DAYS } from "../domain/backup-reminder.js";
 
@@ -29,6 +29,7 @@ export async function mountApp(root, services) {
     log: freshLogState(),
     history: freshHistoryState(),
     backup: freshBackupState(),
+    body: freshBodyState(),
   };
 
   // The one way to change tab (the tab buttons and the reminder's button), so that every change fades in.

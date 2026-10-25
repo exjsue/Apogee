@@ -2152,6 +2152,88 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
   }, { width: 320 });
 });
 
+// ---- the Body tab's diagram (example data for now) ----
+
+const FRONT_MUSCLES = ["abductors", "abs", "adductors", "biceps", "calves", "chest", "forearms", "front_delts", "obliques", "quads", "side_delts"];
+const BACK_MUSCLES = ["abductors", "calves", "forearms", "glutes", "hamstrings", "lats", "lower_back", "rear_delts", "traps", "triceps", "upper_back"];
+const diagram = (root) => $(root, "svg.body-diagram");
+const regionIds = (root) => [...diagram(root).querySelectorAll("g[data-muscle]")].map((g) => g.dataset.muscle).sort();
+const showView = async (root, view) => {
+  click($(root, `[data-action="body-view"][data-view="${view}"]`));
+  await waitFor(() => diagram(root)?.dataset.view === view, `the ${view} view`);
+};
+
+rule("body: the tab shows the example diagram with exactly the right muscles on the front and on the back, and never the neck", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    ctx.assert.equal(diagram(root).dataset.view, "front", "the front is shown first");
+    ctx.assert.deepEqual(regionIds(root), FRONT_MUSCLES);
+    ctx.assert.equal(diagram(root).getAttribute("role"), "img");
+    ctx.assert.ok(diagram(root).getAttribute("aria-label").length > 0, "the diagram has an accessible name");
+    await showView(root, "back");
+    ctx.assert.deepEqual(regionIds(root), BACK_MUSCLES);
+    ctx.assert.equal(root.querySelectorAll('[data-muscle="neck"]').length, 0, "the neck has no region");
+    for (const view of ["front", "back"]) {
+      await showView(root, view);
+      for (const group of diagram(root).querySelectorAll("g[data-muscle]")) {
+        const shapes = group.querySelectorAll(".shape").length;
+        ctx.assert.equal(shapes, 2, `${group.dataset.muscle}: left and right`);
+        ctx.assert.equal(group.querySelectorAll(".hit").length, shapes, `${group.dataset.muscle}: one hit area per shape`);
+      }
+    }
+  });
+});
+
+rule("body: the Example data label is visible, and the front/back buttons switch the view, press state and text list", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    const label = await waitFor(() => region(root, "example-data"), "the Example data label");
+    ctx.assert.ok(label.textContent.includes("Example data") && label.getBoundingClientRect().height > 0, "the label is shown");
+    const pressed = () => [...root.querySelectorAll('[data-action="body-view"]')].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.view);
+    const listed = () => [...region(root, "body-list").querySelectorAll("li")].map((li) => li.textContent);
+    ctx.assert.deepEqual(pressed(), ["front"]);
+    ctx.assert.equal(listed().length, FRONT_MUSCLES.length);
+    ctx.assert.ok(listed().includes("Adductors: none") && listed().includes("Quads: very high"), "the list says the shade in words");
+    await showView(root, "back");
+    ctx.assert.deepEqual(pressed(), ["back"]);
+    ctx.assert.equal(listed().length, BACK_MUSCLES.length);
+    ctx.assert.ok(listed().includes("Traps: medium"), "the neck's value is folded into the traps (4 + 2 of 10)");
+    ctx.assert.ok(region(root, "example-data").getBoundingClientRect().height > 0, "the label stays visible on the back");
+    await showView(root, "front");
+    ctx.assert.deepEqual(pressed(), ["front"]);
+  });
+});
+
+rule("body: shading is by class (level-0 to level-5) and the diagram uses no inline style", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const level = (muscle) => [...diagram(root).querySelector(`g[data-muscle="${muscle}"]`).classList].find((name) => name.startsWith("level-"));
+    ctx.assert.equal(level("adductors"), "level-0");
+    ctx.assert.equal(level("forearms"), "level-1");
+    ctx.assert.equal(level("quads"), "level-5");
+    await showView(root, "back");
+    ctx.assert.equal(level("traps"), "level-3", "traps 4 + neck 2 = 6 of 10");
+    ctx.assert.equal(level("glutes"), "level-5");
+    ctx.assert.equal(diagram(root).querySelectorAll("[style]").length, 0);
+  });
+});
+
+rule("body: at 320 px the diagram fits the width with no sideways scroll, and the tabs and the toggle are 44 px tall", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const page = frame.contentDocument.documentElement;
+    const svg = diagram(root).getBoundingClientRect();
+    ctx.assert.ok(svg.width > 0 && svg.width <= page.clientWidth, `the diagram is ${svg.width} px in a ${page.clientWidth} px page`);
+    ctx.assert.ok(page.scrollWidth <= page.clientWidth, "no sideways scroll");
+    for (const button of root.querySelectorAll('.tab, [data-action="body-view"]')) {
+      ctx.assert.ok(button.getBoundingClientRect().height >= 44, `${button.textContent} is at least 44 px tall`);
+    }
+  }, { width: 320 });
+});
+
 rule("tabs: selecting Body shows the Body heading and no other panel", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");

@@ -411,6 +411,48 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button.danger:not(:disabled):not(.check-toggle):not([aria-pressed="true"]):active { background-color: var(--text); }
 }
 
+/* Body tab: the front/back toggle and the muscle diagram. A muscle's shade is its level-N class (0 to 5, set by
+   src/ui/body-diagram.js): level 0 is the line colour, levels 1 to 5 are the accent colour in five strengths. */
+.example-label { margin: 0 0 12px; }
+.view-toggle { display: flex; margin-bottom: 12px; }
+.view-toggle button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.view-toggle button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.view-toggle button:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: 0; }
+.view-toggle button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.body-diagram { display: block; width: 100%; max-width: 20rem; height: auto; margin: 0 auto; }
+.body-diagram .outline { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.body-diagram .shape { fill: var(--line); }
+.body-diagram .hit { fill: transparent; }
+.body-diagram .level-1 .shape { fill: var(--accent); fill-opacity: 0.35; }
+.body-diagram .level-2 .shape { fill: var(--accent); fill-opacity: 0.5; }
+.body-diagram .level-3 .shape { fill: var(--accent); fill-opacity: 0.65; }
+.body-diagram .level-4 .shape { fill: var(--accent); fill-opacity: 0.82; }
+.body-diagram .level-5 .shape { fill: var(--accent); }
+/* Text for screen readers only: out of sight but still in the accessibility tree (not display: none). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* set rows: a header row, then one grid row per set (set number, weight, reps, the check, a small delete) */
 
 .set-grid {
