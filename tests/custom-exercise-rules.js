@@ -344,3 +344,27 @@ rule("custom exercises: restore changes only retired, is harmless on a shown exe
   assert.deepEqual((await env.logger.findExercises("cable fly")).map((exercise) => exercise.id), ["c-fly"]);
   assert.deepEqual(await env.logger.listHiddenCustomExercises(), []);
 });
+
+// ---- neck and abductors (offered by the form since 2026-10-26) ----
+
+rule("custom exercises: one with neck and abductors saves, round-trips through export and import unchanged, and the Body tab counts it (neck as traps)", async (ctx) => {
+  const { assert } = ctx;
+  const env = await open(ctx);
+  const harness = await env.logger.addCustomExercise({ name: "Neck Harness", primaryMuscles: ["neck"], secondaryMuscles: ["abductors"] });
+  assert.deepEqual([harness.primaryMuscles, harness.secondaryMuscles], [["neck"], ["abductors"]]);
+  const text = await env.backup.exportToText({ now: NOW });
+  await env.backup.importFromText(text, { confirmReplace: true });
+  assert.deepEqual(await rawExercise(env.adapter, harness.id), harness);
+  assert.equal(await env.backup.exportToText({ now: NOW }), text);
+  const before = (await env.logger.getMuscleStatus()).values;
+  assert.deepEqual([before.traps, before.abductors], [0, 0]);
+  await workoutWith(env.store, "w1", harness.id); // 2 sets
+  const after = (await env.logger.getMuscleStatus()).values;
+  assert.deepEqual([after.traps, after.abductors, "neck" in after], [2, 1, false]);
+  // an edit from chest to neck and abductors moves past sets the same way
+  await workoutWith(env.store, "w2", MINE.id, { startedAt: "2026-10-22T09:00:00.000Z" });
+  assert.equal((await env.logger.getMuscleStatus()).values.chest, 2);
+  await env.logger.updateCustomExercise(MINE.id, { name: MINE.name, primaryMuscles: ["neck"], secondaryMuscles: ["abductors"] });
+  const edited = (await env.logger.getMuscleStatus()).values;
+  assert.deepEqual([edited.chest, edited.traps, edited.abductors], [0, 4, 2]);
+});

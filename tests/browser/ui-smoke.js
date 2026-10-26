@@ -1508,16 +1508,16 @@ rule("ui: the library note shows only if the app has a catalog service, and only
   }
 });
 
-rule("ui: the custom exercise form is unchanged: it still offers the 18 muscles and 11 equipment tags only", async (ctx) => {
+rule("ui: the custom exercise form offers all 20 muscles and all 16 equipment tags, neck, abductors and foam roll included", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await openPicker(root);
     click(action(root, "add-custom"));
     await waitFor(() => $(root, ".custom-form"), "the custom form");
-    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="primary"]').length, 18);
-    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="secondary"]').length, 18);
-    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="equipment"]').length, 11);
-    ctx.assert.equal(root.querySelector('.custom-form input[value="neck"]'), null);
-    ctx.assert.equal(root.querySelector('.custom-form input[value="foam_roll"]'), null);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="primary"]').length, 20);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="secondary"]').length, 20);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="equipment"]').length, 16);
+    ctx.assert.ok(root.querySelector('.custom-form input[data-group="primary"][value="neck"]') !== null && root.querySelector('.custom-form input[data-group="secondary"][value="neck"]') !== null);
+    ctx.assert.ok(root.querySelector('.custom-form input[data-group="equipment"][value="foam_roll"]') !== null);
   });
 });
 
@@ -2769,7 +2769,7 @@ rule("picker menu: Edit opens a prefilled form with the notice and the catalog-o
     ctx.assert.equal($(root, ".custom-form h3").textContent, "Edit exercise");
     ctx.assert.equal(region(root, "edit-custom-notice").textContent, "Changes apply everywhere this exercise appears, including past workouts: a new name shows in History, and changed muscles change how past sets count on the Body tab.");
     const ticked = (group) => [...root.querySelectorAll(`input[data-group="${group}"]`)].filter((box) => box.checked).map((box) => box.value);
-    ctx.assert.deepEqual(ticked("primary"), ["chest", "neck"]); // neck is not offered to a new exercise, but this one has it
+    ctx.assert.deepEqual(ticked("primary"), ["chest", "neck"]);
     ctx.assert.deepEqual(ticked("equipment"), ["cable", "trap_bar"]);
     ctx.assert.equal(action(root, "save-custom"), null);
     setValue(name, "Low Cable Fly");
@@ -2858,6 +2858,28 @@ rule("picker: adding a custom exercise with a hidden exercise's name offers Show
     ctx.assert.equal(region(root, "custom-error").textContent, "name: an exercise with this name already exists");
     ctx.assert.equal(action(root, "restore-hidden-name"), null);
   }, { prepare: useCurl });
+});
+
+rule("custom form: neck and abductors are offered as primary and secondary when adding and when editing, and a new exercise saves with them", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    const both = (group) => ["neck", "abductors"].every((id) => $(root, `.custom-form input[data-group="${group}"][value="${id}"]`) !== null);
+    await openPicker(root);
+    click(action(root, "add-custom"));
+    setValue(await waitFor(() => field(root, "custom-name"), "the add form"), "Neck Harness Curl");
+    ctx.assert.ok(both("primary") && both("secondary"));
+    $(root, 'input[data-group="primary"][value="neck"]').checked = true;
+    $(root, 'input[data-group="secondary"][value="abductors"]').checked = true;
+    click(action(root, "save-custom"));
+    await waitFor(() => noticeText(root) === 'Added "Neck Harness Curl".', "the added notice");
+    const stored = (await adapter.transaction(["exercises"], "readonly", (tx) => tx.getAll("exercises"))).find((exercise) => exercise.name === "Neck Harness Curl");
+    ctx.assert.deepEqual([stored.primaryMuscles, stored.secondaryMuscles, stored.isCustom], [["neck"], ["abductors"], true]);
+    click(await openMenu(root, stored.id));
+    await waitFor(() => action(root, "save-edit-custom"), "the edit form");
+    ctx.assert.ok(both("primary") && both("secondary"));
+    ctx.assert.equal($(root, 'input[data-group="primary"][value="neck"]').checked, true);
+    ctx.assert.equal($(root, 'input[data-group="secondary"][value="abductors"]').checked, true);
+    ctx.assert.equal(root.querySelectorAll('.custom-form input[data-group="primary"]').length, 20); // nothing listed twice
+  });
 });
 
 // ---- Settings: Hidden exercises ----

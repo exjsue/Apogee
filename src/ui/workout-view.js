@@ -3,7 +3,7 @@
 // Parsing, validation and every decision happen in src/app and src/domain.
 
 import { h, button, exerciseHeading } from "./dom.js";
-import { MUSCLES, EQUIPMENT, ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
+import { ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { NAME_TAKEN } from "../domain/exercise-names.js";
 import { isRunning } from "../domain/rest-timer.js";
@@ -399,9 +399,9 @@ function checkboxGroup(legend, values, group, checked = []) {
   return { element, selected: () => inputs.filter((input) => input.checked).map((input) => input.value) };
 }
 
-// The ids the form offers, plus any the record already has that it does not offer (a catalog-only muscle or
-// equipment id from an imported file, say), so a save never drops one.
-const offered = (base, all, has) => [...base, ...all.filter((id) => !base.includes(id) && has.includes(id))];
+// The ids the form offers, plus any the record already has that it does not offer (an id a later model adds and
+// an older form does not list, say), so a save never drops one.
+const offered = (base, has) => [...base, ...has.filter((id) => !base.includes(id))];
 
 // The selector of a picker row's three-dot button.
 const menuButtonFor = (id) => `[data-action="pick-menu"][data-exercise-id="${id}"]`;
@@ -417,18 +417,12 @@ function customForm(ctx, existing = null) {
     type: "text", "data-field": "custom-name", "data-saved": "", maxlength: NAME_MAX_LENGTH, autocomplete: "off",
     value: editing ? existing.name : undefined,
   });
-  const muscles = editing ? offered(MUSCLES, ALL_MUSCLES, [...existing.primaryMuscles, ...existing.secondaryMuscles]) : null;
-  const { primary, secondary, equipment } = editing
-    ? {
-      primary: checkboxGroup("Primary muscles (at least one)", muscles, "primary", existing.primaryMuscles),
-      secondary: checkboxGroup("Secondary muscles", muscles, "secondary", existing.secondaryMuscles),
-      equipment: checkboxGroup("Equipment", offered(EQUIPMENT, ALL_EQUIPMENT, existing.equipmentTags), "equipment", existing.equipmentTags),
-    }
-    : {
-      primary: checkboxGroup("Primary muscles (at least one)", MUSCLES, "primary"),
-      secondary: checkboxGroup("Secondary muscles", MUSCLES, "secondary"),
-      equipment: checkboxGroup("Equipment", EQUIPMENT, "equipment"),
-    };
+  const has = (field) => (editing ? existing[field] : []);
+  // Every id the model accepts (ALL_MUSCLES, ALL_EQUIPMENT), neck and abductors included.
+  const muscles = offered(ALL_MUSCLES, [...has("primaryMuscles"), ...has("secondaryMuscles")]);
+  const primary = checkboxGroup("Primary muscles (at least one)", muscles, "primary", has("primaryMuscles"));
+  const secondary = checkboxGroup("Secondary muscles", muscles, "secondary", has("secondaryMuscles"));
+  const equipment = checkboxGroup("Equipment", offered(ALL_EQUIPMENT, has("equipmentTags")), "equipment", has("equipmentTags"));
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "custom-error" });
   const close = () => Object.assign(log, { addingCustom: false, editingCustom: null });
 

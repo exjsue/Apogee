@@ -179,12 +179,12 @@ test("schema 3 helpers: only the model, the seeds, the upgrade step, the backup 
   for (const file of ["index.html", "sw.js"]) if (names.test(fs.readFileSync(path.join(ROOT, file), "utf8"))) users.push(file);
   // muscle-load.js (Body feature) takes the 20-id vocabulary from ALL_MUSCLES instead of redefining it; it is pure domain code
   assert.deepEqual(users.sort(), ["src/backup/backup.js", "src/domain/model.js", "src/domain/muscle-load.js", "src/domain/seed.js", "src/storage/migrations.js", "src/ui/workout-view.js"]);
-  // the picker uses the two full lists for its selects and nothing else from here; its custom form still lists MUSCLES and EQUIPMENT
+  // the picker uses the two full lists for its selects and its custom form (both muscle groups and the equipment, since 2026-10-26) and nothing else from here
   const picker = fs.readFileSync(path.join(ROOT, "src", "ui", "workout-view.js"), "utf8");
   const used = [...picker.matchAll(new RegExp(names.source, "g"))].map((m) => m[1]);
   assert.deepEqual([...new Set(used)].sort(), ["ALL_EQUIPMENT", "ALL_MUSCLES"]);
-  assert.match(picker, /checkboxGroup\("Primary muscles \(at least one\)", MUSCLES, "primary"\)/);
-  assert.match(picker, /checkboxGroup\("Equipment", EQUIPMENT, "equipment"\)/);
+  assert.match(picker, /const muscles = offered\(ALL_MUSCLES, [^\n]*\);\r?\n\s*const primary = checkboxGroup\("Primary muscles \(at least one\)", muscles, "primary", [^\n]*\);\r?\n\s*const secondary = checkboxGroup\("Secondary muscles", muscles, "secondary", /);
+  assert.match(picker, /const equipment = checkboxGroup\("Equipment", offered\(ALL_EQUIPMENT, has\("equipmentTags"\)\), "equipment", /);
 });
 
 test("schema 3 helpers: createExercise returns exactly the fifteen schema 3 fields, accepts neck, and ignores a field it does not know", async () => {
