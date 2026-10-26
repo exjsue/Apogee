@@ -26,6 +26,8 @@
 - [ ] Check whether the installed app really has storage separate from Safari's tabs (workouts logged in one must be exported and imported into the other if so), and whether the 7-day clearing of site data applies to it
 - [ ] Check offline and updates in desktop Firefox and in Firefox Focus (the end-to-end check so far ran in headless Chrome only)
 - [ ] Check that the icon, name and standalone window look right on the iPhone Home Screen (apple-touch-icon is 180 px; the G icon was only viewed as an image)
+- [ ] **Verify on iPhone (custom exercise menu, 2026-10-26):** with VoiceOver, the picker's three-dot button on your own exercises (announced as a menu button, collapsed or expanded), Edit exercise and Remove exercise, the Delete and Hide questions (read as an alert dialog, Keep exercise focused), the notice after a delete or hide and its Show it again button, the edit form's notice, and that focus lands on the search field after a remove and back on the three-dot button after an edit. Also that the menu opening inside the scrolling list is easy to reach with a thumb at 320 and 390 px.
+- [ ] Keyboard: Escape closes the picker's three-dot menu, but not the Log tab's exercise menu (it never did); make the two the same.
 
 ## Done
 - [x] Data model, storage layer, export/import, minimal logging screen (in that order)

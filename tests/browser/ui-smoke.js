@@ -2714,6 +2714,152 @@ rule("body panel: at 320 px an open panel fits the width, with a long exercise n
 });
 const LONG_NAME = "Supercalifragilisticexpialidocious_with_no_spaces_to_break_the_line_at_all";
 
+// ---- the picker's menu for the user's own exercises: edit, remove (delete or hide), show again ----
+
+const FLY = createExercise({ id: "c-fly", name: "Cable Fly", primaryMuscles: ["chest", "neck"], secondaryMuscles: [], equipmentTags: ["cable", "trap_bar"], isCustom: true });
+const CURL = createExercise({ id: "c-curl", name: "Rope Curl", primaryMuscles: ["biceps"], isCustom: true });
+const addMine = async (store) => {
+  await store.saveExercise(FLY);
+  await store.saveExercise(CURL);
+};
+// A finished workout that uses Rope Curl, so removing it hides it.
+const useCurl = async (store) => {
+  await addMine(store);
+  await store.saveWorkoutWithDetails(
+    { id: "wc", startedAt: "2026-09-01T10:00:00.000Z", endedAt: "2026-09-01T11:00:00.000Z" },
+    [{ id: "wc-e", workoutId: "wc", exerciseId: CURL.id, order: 0 }],
+    [{ id: "wc-s", entryId: "wc-e", order: 0, reps: 5, weightValue: 20, weightUnit: "kg", completedAt: "2026-09-01T10:10:00.000Z" }],
+  );
+};
+const menuButton = (root, id) => $(root, `[data-action="pick-menu"][data-exercise-id="${id}"]`);
+const openMenu = async (root, id) => {
+  await openPicker(root);
+  click(await waitFor(() => menuButton(root, id), `the menu button of ${id}`));
+  return waitFor(() => $(root, `[data-action="edit-custom"][data-exercise-id="${id}"]`), "the open menu");
+};
+const askRemove = async (root, id) => {
+  await openMenu(root, id);
+  click($(root, `[data-action="remove-custom"][data-exercise-id="${id}"]`));
+  return waitFor(() => region(root, "confirm-remove-custom"), "the remove question");
+};
+const noticeText = (root) => (region(root, "notice") ? region(root, "notice").textContent : "");
+
+rule("picker menu: only the user's own rows have the three-dot button; opening it focuses Edit exercise, and Escape closes it back onto the button", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    const edit = await openMenu(root, FLY.id);
+    const withMenu = [...root.querySelectorAll('[data-action="pick-menu"]')].map((el) => el.dataset.exerciseId).sort();
+    ctx.assert.deepEqual(withMenu, [CURL.id, FLY.id]);
+    ctx.assert.equal(pickRows(root).length, 18); // the 16 seeds have none
+    ctx.assert.equal(menuButton(root, FLY.id).getAttribute("aria-expanded"), "true");
+    ctx.assert.equal($(root, '.pick-list [role="menu"]').querySelectorAll('[role="menuitem"]').length, 2);
+    await waitFor(() => document.activeElement === edit, "focus on Edit exercise");
+    edit.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => $(root, '[data-action="edit-custom"]') === null, "the menu closed");
+    await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back on the three-dot button");
+    ctx.assert.equal(menuButton(root, FLY.id).getAttribute("aria-expanded"), "false");
+  }, { prepare: addMine });
+});
+
+rule("picker menu: Edit opens a prefilled form with the notice and the catalog-only ids it already has; Save changes only those fields and focus returns to its button", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    click(await openMenu(root, FLY.id));
+    const name = await waitFor(() => field(root, "custom-name"), "the edit form");
+    await waitFor(() => document.activeElement === name, "focus in the name field");
+    ctx.assert.equal(name.value, "Cable Fly");
+    ctx.assert.equal($(root, ".custom-form h3").textContent, "Edit exercise");
+    ctx.assert.equal(region(root, "edit-custom-notice").textContent, "Changes apply everywhere this exercise appears, including past workouts: a new name shows in History, and changed muscles change how past sets count on the Body tab.");
+    const ticked = (group) => [...root.querySelectorAll(`input[data-group="${group}"]`)].filter((box) => box.checked).map((box) => box.value);
+    ctx.assert.deepEqual(ticked("primary"), ["chest", "neck"]); // neck is not offered to a new exercise, but this one has it
+    ctx.assert.deepEqual(ticked("equipment"), ["cable", "trap_bar"]);
+    ctx.assert.equal(action(root, "save-custom"), null);
+    setValue(name, "Low Cable Fly");
+    click(action(root, "save-edit-custom"));
+    await waitFor(() => noticeText(root) === 'Saved "Low Cable Fly".', "the saved notice");
+    await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus on the row's three-dot button");
+    const stored = await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", FLY.id));
+    ctx.assert.deepEqual(stored, { ...FLY, name: "Low Cable Fly" });
+    ctx.assert.equal(plannedRows(root).length, 0); // an edit adds no set
+    // Cancel also goes back to the button
+    click(await waitFor(() => menuButton(root, FLY.id), "the button"));
+    click(await waitFor(() => action(root, "edit-custom"), "Edit exercise"));
+    click(await waitFor(() => action(root, "cancel-edit-custom"), "Cancel"));
+    await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back after Cancel");
+  }, { prepare: addMine });
+});
+
+rule("picker menu: an unused exercise is offered Delete, with Keep focused; deleting says so, focuses the search field, and the row is gone", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    const question = await askRemove(root, FLY.id);
+    ctx.assert.equal(question.getAttribute("role"), "alertdialog");
+    ctx.assert.equal(question.querySelector("p").textContent, `Delete "Cable Fly"? It isn't used in any workout, template or the current session, so it is removed for good.`);
+    ctx.assert.equal(action(root, "confirm-remove-custom").textContent, "Delete exercise");
+    await waitFor(() => document.activeElement === action(root, "cancel-remove-custom"), "focus on Keep exercise");
+    click(action(root, "confirm-remove-custom"));
+    await waitFor(() => noticeText(root) === 'Deleted "Cable Fly".', "the deleted notice");
+    ctx.assert.equal(region(root, "notice").getAttribute("role"), "status");
+    ctx.assert.equal(action(root, "restore-hidden"), null);
+    await waitFor(() => document.activeElement === field(root, "search"), "focus on the search field");
+    await waitFor(() => pickRows(root).length === 17, "the list without it");
+    ctx.assert.ok(!pickIds(root).includes(FLY.id));
+    ctx.assert.equal(await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", FLY.id)), undefined);
+  }, { prepare: addMine });
+});
+
+rule("picker menu: a used exercise is offered Hide with its uses; hiding keeps history, and Show it again in the notice brings it back", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter, services }) => {
+    await services.logger.saveWorkoutAsTemplate("wc", "Arms");
+    const question = await askRemove(root, CURL.id);
+    ctx.assert.equal(question.querySelector("p").textContent, `Hide "Rope Curl"? It is used in 1 workout and 1 template, so it is not deleted. It leaves the exercise list and search, and stays in your history, templates and backups.`);
+    ctx.assert.equal(action(root, "confirm-remove-custom").textContent, "Hide exercise");
+    click(action(root, "confirm-remove-custom"));
+    await waitFor(() => noticeText(root).startsWith('Hid "Rope Curl".'), "the hidden notice");
+    await waitFor(() => document.activeElement === field(root, "search"), "focus on the search field");
+    await waitFor(() => !pickIds(root).includes(CURL.id), "the row gone");
+    ctx.assert.equal((await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", CURL.id))).retired, true);
+    click(action(root, "restore-hidden"));
+    await waitFor(() => noticeText(root) === '"Rope Curl" is back in the exercise list.', "the restored notice");
+    await waitFor(() => pickIds(root).includes(CURL.id), "the row back");
+    await waitFor(() => document.activeElement === field(root, "search"), "focus on the search field again");
+  }, { prepare: useCurl });
+});
+
+rule("picker menu: when the outcome differs from the question (used meanwhile), the notice says what really happened", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    await askRemove(root, FLY.id);
+    ctx.assert.equal(action(root, "confirm-remove-custom").textContent, "Delete exercise");
+    await services.logger.addSet(FLY.id); // another tab plans it while the question is open
+    click(action(root, "confirm-remove-custom"));
+    await waitFor(() => noticeText(root).startsWith('Hidden instead of deleted: "Cable Fly" is now used in the current session.'), "the outcome notice");
+    ctx.assert.ok(action(root, "restore-hidden") !== null);
+  }, { prepare: addMine });
+});
+
+rule("picker: adding a custom exercise with a hidden exercise's name offers Show it again, which restores it and adds it to the session", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    await services.logger.removeCustomExercise(CURL.id); // hidden: the workout uses it
+    await openPicker(root);
+    click(action(root, "add-custom"));
+    setValue(await waitFor(() => field(root, "custom-name"), "the name field"), "rope CURL");
+    $(root, 'input[data-group="primary"][value="biceps"]').checked = true;
+    click(action(root, "save-custom"));
+    const error = await waitFor(() => (region(root, "custom-error").hidden ? null : region(root, "custom-error")), "the refusal");
+    ctx.assert.equal(error.textContent, 'You have a hidden exercise named "Rope Curl". Show it again');
+    click(action(root, "restore-hidden-name"));
+    await waitFor(() => noticeText(root) === '"Rope Curl" is back in the exercise list and added.', "the notice");
+    await waitFor(() => plannedRows(root).length === 1, "one planned row");
+    ctx.assert.deepEqual((await services.logger.listHiddenCustomExercises()).map((exercise) => exercise.id), []);
+    // a name taken by a shown exercise keeps the plain refusal
+    await openPicker(root);
+    click(action(root, "add-custom"));
+    setValue(await waitFor(() => field(root, "custom-name"), "the name field"), "cable fly");
+    $(root, 'input[data-group="primary"][value="chest"]').checked = true;
+    click(action(root, "save-custom"));
+    await waitFor(() => !region(root, "custom-error").hidden, "the refusal");
+    ctx.assert.equal(region(root, "custom-error").textContent, "name: an exercise with this name already exists");
+    ctx.assert.equal(action(root, "restore-hidden-name"), null);
+  }, { prepare: useCurl });
+});
+
 rule("tabs: selecting Body shows the Body heading and no other panel", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");

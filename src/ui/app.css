@@ -272,6 +272,10 @@ button.pick {
   text-align: left;
   gap: 2px;
 }
+/* a custom row: the pick button and its three-dot button; the menu opens in the flow, inside the scrolling list */
+.pick-row { display: flex; gap: 8px; }
+.pick-row button.pick { flex: 1; min-width: 0; }
+.pick-list .menu { position: static; margin-top: 4px; min-width: 0; max-width: none; }
 .pick-name { font-weight: 600; }
 .pick-meta { font-size: 0.875rem; color: var(--muted); }
 .name-mark { font-size: 0.75rem; font-weight: normal; color: var(--muted); }

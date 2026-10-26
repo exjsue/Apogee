@@ -5,6 +5,7 @@
 import { h, button, exerciseHeading } from "./dom.js";
 import { MUSCLES, EQUIPMENT, ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
+import { NAME_TAKEN } from "../domain/exercise-names.js";
 import { isRunning } from "../domain/rest-timer.js";
 import { exerciseBlocks, startTicker, stopTicker, perform } from "./set-rows.js";
 import { elapsedElement, startElapsed, stopElapsed } from "./elapsed.js";
@@ -20,8 +21,13 @@ export const freshLogState = () => ({
   muscle: "", // the picker's filters: a muscle id or an equipment id, "" for any
   equipment: "",
   limit: PICKER_PAGE, // rows drawn so far; "Show 50 more" raises it, any new search or filter resets it
+  pickerMenuId: null, // the custom exercise whose three-dot menu is open in the picker
+  editingCustom: null, // the custom exercise record being edited
+  confirmRemove: null, // { exercise, usage }: the remove question, worded from the usage read when it opened
+  pickerFocus: null, // a selector inside the picker's list, focused once refreshList has drawn the rows
   error: null,
   notice: null,
+  restoreOffer: null, // { id, name }: the notice after a hide offers "Show it again"
   confirmDiscard: false,
   confirmFinish: false,
   confirmDeleteSetId: null,
@@ -36,6 +42,9 @@ export const freshLogState = () => ({
   stopTicker: null,
   stopElapsed: null, // stops the elapsed-time clock of the open workout
 });
+
+// What closing the picker resets: its menu, edit form, remove question and pending focus.
+const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null });
 
 const countSets = (workout) => workout.entries.reduce((total, entry) => total + entry.sets.length, 0);
 
@@ -378,9 +387,9 @@ function templatesSection(ctx, templates) {
   );
 }
 
-// A group of checkboxes; selected() returns the ticked values.
-function checkboxGroup(legend, values, group) {
-  const inputs = values.map((value) => h("input", { type: "checkbox", value, "data-group": group }));
+// A group of checkboxes, `checked` ticked to begin with; selected() returns the ticked values.
+function checkboxGroup(legend, values, group, checked = []) {
+  const inputs = values.map((value) => h("input", { type: "checkbox", value, "data-group": group, checked: checked.includes(value) }));
   const element = h(
     "fieldset",
     { class: "checks" },
@@ -390,38 +399,103 @@ function checkboxGroup(legend, values, group) {
   return { element, selected: () => inputs.filter((input) => input.checked).map((input) => input.value) };
 }
 
-function customForm(ctx) {
+// The ids the form offers, plus any the record already has that it does not offer (a catalog-only muscle or
+// equipment id from an imported file, say), so a save never drops one.
+const offered = (base, all, has) => [...base, ...all.filter((id) => !base.includes(id) && has.includes(id))];
+
+// The selector of a picker row's three-dot button.
+const menuButtonFor = (id) => `[data-action="pick-menu"][data-exercise-id="${id}"]`;
+
+// Adding a custom exercise, or with `existing` (a stored custom record) editing one: then it is prefilled, no set
+// is added, and a notice says the change reaches past workouts. A name that is one of the user's hidden exercises
+// (code NAME_TAKEN with hiddenExerciseId) offers "Show it again" instead of the plain refusal.
+function customForm(ctx, existing = null) {
   const log = ctx.state.log;
+  const { logger } = ctx.services;
+  const editing = existing !== null;
   const name = h("input", {
     type: "text", "data-field": "custom-name", "data-saved": "", maxlength: NAME_MAX_LENGTH, autocomplete: "off",
+    value: editing ? existing.name : undefined,
   });
-  const primary = checkboxGroup("Primary muscles (at least one)", MUSCLES, "primary");
-  const secondary = checkboxGroup("Secondary muscles", MUSCLES, "secondary");
-  const equipment = checkboxGroup("Equipment", EQUIPMENT, "equipment");
+  const muscles = editing ? offered(MUSCLES, ALL_MUSCLES, [...existing.primaryMuscles, ...existing.secondaryMuscles]) : null;
+  const { primary, secondary, equipment } = editing
+    ? {
+      primary: checkboxGroup("Primary muscles (at least one)", muscles, "primary", existing.primaryMuscles),
+      secondary: checkboxGroup("Secondary muscles", muscles, "secondary", existing.secondaryMuscles),
+      equipment: checkboxGroup("Equipment", offered(EQUIPMENT, ALL_EQUIPMENT, existing.equipmentTags), "equipment", existing.equipmentTags),
+    }
+    : {
+      primary: checkboxGroup("Primary muscles (at least one)", MUSCLES, "primary"),
+      secondary: checkboxGroup("Secondary muscles", MUSCLES, "secondary"),
+      equipment: checkboxGroup("Equipment", EQUIPMENT, "equipment"),
+    };
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "custom-error" });
+  const close = () => Object.assign(log, { addingCustom: false, editingCustom: null });
+
+  // The hidden exercise comes back; when adding, it also joins the session the way Save does.
+  const showAgain = (hidden) => button("Show it again", {
+    class: "small",
+    "data-action": "restore-hidden-name",
+    onClick: () => perform(ctx, async () => {
+      await logger.restoreCustomExercise(hidden.id);
+      close();
+      if (editing) {
+        log.notice = `"${hidden.name}" is back in the exercise list.`;
+        ctx.state.focus = '[data-field="search"]';
+      } else {
+        await logger.addSet(hidden.id);
+        Object.assign(log, { pickerOpen: false, notice: `"${hidden.name}" is back in the exercise list and added.` });
+      }
+    }),
+  });
+
+  async function refuse(caught) {
+    const hidden = caught.code === NAME_TAKEN && caught.hiddenExerciseId
+      ? (await logger.listHiddenCustomExercises().catch(() => [])).find((exercise) => exercise.id === caught.hiddenExerciseId)
+      : undefined;
+    if (hidden === undefined) error.replaceChildren(caught.message);
+    else error.replaceChildren(`You have a hidden exercise named "${hidden.name}". `, showAgain(hidden));
+    error.hidden = false;
+  }
+
+  const fields = () => ({
+    name: name.value,
+    primaryMuscles: primary.selected(),
+    secondaryMuscles: secondary.selected(),
+    equipmentTags: equipment.selected(),
+  });
   const form = h(
     "form",
     {
       class: "custom-form",
+      "data-enter": editing ? `edit-custom:${existing.id}` : undefined,
       onSubmit: async (event) => {
         event.preventDefault();
         try {
-          const saved = await ctx.services.logger.addCustomExercise({
-            name: name.value,
-            primaryMuscles: primary.selected(),
-            secondaryMuscles: secondary.selected(),
-            equipmentTags: equipment.selected(),
-          });
-          await ctx.services.logger.addSet(saved.id);
-          Object.assign(log, { pickerOpen: false, addingCustom: false, notice: `Added "${saved.name}".`, error: null });
+          if (editing) {
+            const saved = await logger.updateCustomExercise(existing.id, fields());
+            close();
+            Object.assign(log, { notice: `Saved "${saved.name}".`, error: null, pickerFocus: menuButtonFor(saved.id) });
+          } else {
+            const saved = await logger.addCustomExercise(fields());
+            await logger.addSet(saved.id);
+            Object.assign(log, { pickerOpen: false, addingCustom: false, notice: `Added "${saved.name}".`, error: null });
+          }
           await ctx.rerender();
         } catch (caught) {
-          error.textContent = caught.message;
-          error.hidden = false;
+          await refuse(caught);
         }
       },
     },
-    h("h3", {}, "Add custom exercise"),
+    h("h3", {}, editing ? "Edit exercise" : "Add custom exercise"),
+    editing
+      ? h(
+        "p",
+        { class: "muted", "data-region": "edit-custom-notice" },
+        "Changes apply everywhere this exercise appears, including past workouts: a new name shows in History, "
+        + "and changed muscles change how past sets count on the Body tab.",
+      )
+      : null,
     h("label", { class: "field" }, h("span", {}, "Name"), name),
     primary.element,
     secondary.element,
@@ -430,17 +504,117 @@ function customForm(ctx) {
     h(
       "div",
       { class: "actions" },
-      h("button", { type: "submit", class: "primary", "data-action": "save-custom" }, "Save exercise"),
+      h("button", { type: "submit", class: "primary", "data-action": editing ? "save-edit-custom" : "save-custom" }, editing ? "Save changes" : "Save exercise"),
       button("Cancel", {
-        "data-action": "cancel-custom",
+        "data-action": editing ? "cancel-edit-custom" : "cancel-custom",
         onClick: () => {
-          log.addingCustom = false;
+          if (editing) log.pickerFocus = menuButtonFor(existing.id);
+          close();
           return ctx.rerender();
         },
       }),
     ),
   );
   return form;
+}
+
+// "3 workouts, 1 template and the current session": what a custom exercise is used by (see getExerciseUsage).
+function describeUsage(usage) {
+  const parts = [
+    usage.workouts > 0 ? formatCount(usage.workouts, "workout") : null,
+    usage.templates > 0 ? formatCount(usage.templates, "template") : null,
+    usage.planned ? "the current session" : null,
+    usage.catalogConflict ? "the exercise library's records" : null,
+  ].filter(Boolean);
+  return parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+// The remove question under a custom row. It says before the tap whether the exercise will be deleted (nothing
+// uses it) or hidden. removeCustomExercise decides again when it writes; if that differs, the notice says so.
+function removeConfirm(ctx, exercise, usage) {
+  const log = ctx.state.log;
+  const { logger } = ctx.services;
+  const willHide = usage.used;
+  const question = willHide
+    ? `Hide "${exercise.name}"? It is used in ${describeUsage(usage)}, so it is not deleted. `
+      + "It leaves the exercise list and search, and stays in your history, templates and backups."
+    : `Delete "${exercise.name}"? It isn't used in any workout, template or the current session, so it is removed for good.`;
+  return h(
+    "div",
+    { class: "confirm", role: "alertdialog", "aria-label": willHide ? "Confirm hide exercise" : "Confirm delete exercise", "data-region": "confirm-remove-custom", "data-enter": `confirm-remove-custom:${exercise.id}` },
+    h("p", {}, question),
+    button(willHide ? "Hide exercise" : "Delete exercise", {
+      class: "danger",
+      "data-action": "confirm-remove-custom",
+      onClick: () => perform(ctx, async () => {
+        log.confirmRemove = null;
+        const outcome = await logger.removeCustomExercise(exercise.id);
+        ctx.state.focus = '[data-field="search"]';
+        if (outcome === "hidden") {
+          log.restoreOffer = { id: exercise.id, name: exercise.name };
+          log.notice = willHide
+            ? `Hid "${exercise.name}".`
+            : `Hidden instead of deleted: "${exercise.name}" is now used in ${describeUsage(await logger.getExerciseUsage(exercise.id))}.`;
+        } else {
+          log.notice = willHide
+            ? `Deleted instead of hidden: nothing uses "${exercise.name}" any more, so it was removed for good.`
+            : `Deleted "${exercise.name}".`;
+        }
+      }),
+    }),
+    button("Keep exercise", {
+      "data-action": "cancel-remove-custom",
+      onClick: () => {
+        Object.assign(log, { confirmRemove: null, pickerFocus: menuButtonFor(exercise.id) });
+        return ctx.rerender();
+      },
+    }),
+  );
+}
+
+// The three-dot menu of a custom row: Edit exercise and Remove exercise. Escape closes it.
+function customMenu(ctx, exercise) {
+  const log = ctx.state.log;
+  const closeMenu = () => {
+    Object.assign(log, { pickerMenuId: null, pickerFocus: menuButtonFor(exercise.id) });
+    return ctx.rerender();
+  };
+  return h(
+    "div",
+    {
+      class: "menu",
+      role: "menu",
+      "data-enter": `pick-menu:${exercise.id}`,
+      onKeydown: (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        closeMenu();
+      },
+    },
+    button("Edit exercise", {
+      class: "menu-item",
+      role: "menuitem",
+      "data-action": "edit-custom",
+      "data-exercise-id": exercise.id,
+      "aria-label": `Edit ${exercise.name}`,
+      onClick: () => {
+        Object.assign(log, { pickerMenuId: null, confirmRemove: null, addingCustom: false, editingCustom: exercise });
+        ctx.state.focus = '[data-field="custom-name"]';
+        return ctx.rerender();
+      },
+    }),
+    button("Remove exercise", {
+      class: "menu-item",
+      role: "menuitem",
+      "data-action": "remove-custom",
+      "data-exercise-id": exercise.id,
+      "aria-label": `Remove ${exercise.name}`,
+      onClick: () => perform(ctx, async () => {
+        const usage = await ctx.services.logger.getExerciseUsage(exercise.id);
+        Object.assign(log, { pickerMenuId: null, confirmRemove: { exercise, usage }, pickerFocus: '[data-action="cancel-remove-custom"]' });
+      }),
+    }),
+  );
 }
 
 // A drop-down filter for the picker: "Any" or one of the ids, shown with formatLabel. value() is the chosen id or null.
@@ -474,32 +648,56 @@ function picker(ctx) {
   const equipment = filterSelect("Equipment", "filter-equipment", ALL_EQUIPMENT, log.equipment, narrow);
   const list = h("ul", { class: "pick-list", "data-region": "exercise-list", "data-no-pull": "" });
 
-  const row = (exercise) => h(
-    "li",
-    {},
-    button(
-      [
-        h("span", { class: "pick-name" }, exercise.name),
-        h(
-          "span",
-          { class: "pick-meta" },
-          [
-            ...exercise.primaryMuscles.map(formatLabel),
-            exercise.equipment ? formatLabel(exercise.equipment) : null,
-            exercise.isCustom ? "Custom" : null,
-          ].filter(Boolean).join(" · "),
-        ),
-      ],
-      {
-        class: "pick",
-        "data-action": "pick-exercise",
+  // A custom row also gets the three-dot menu (the Log tab's pattern, see blockHeader in set-rows.js) and, when
+  // asked, the remove question under it. Built-in and catalog rows have no menu.
+  const row = (exercise) => {
+    if (!exercise.isCustom) return h("li", {}, pickButton(exercise));
+    const open = log.pickerMenuId === exercise.id;
+    const item = h("li", {}, h(
+      "div",
+      { class: "pick-row" },
+      pickButton(exercise),
+      button("⋮", {
+        class: "menu-button",
+        "data-action": "pick-menu",
         "data-exercise-id": exercise.id,
-        onClick: () => perform(ctx, async () => {
-          await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
-          Object.assign(log, { pickerOpen: false, query: "", muscle: "", equipment: "", limit: PICKER_PAGE });
-        }),
-      },
-    ),
+        "aria-label": `Options for ${exercise.name}`,
+        "aria-haspopup": "menu",
+        "aria-expanded": String(open),
+        onClick: () => {
+          Object.assign(log, { pickerMenuId: open ? null : exercise.id, confirmRemove: null });
+          if (!open) log.pickerFocus = `[data-action="edit-custom"][data-exercise-id="${exercise.id}"]`;
+          return ctx.rerender();
+        },
+      }),
+    ));
+    if (open) item.append(customMenu(ctx, exercise));
+    if (log.confirmRemove?.exercise.id === exercise.id) item.append(removeConfirm(ctx, exercise, log.confirmRemove.usage));
+    return item;
+  };
+
+  const pickButton = (exercise) => button(
+    [
+      h("span", { class: "pick-name" }, exercise.name),
+      h(
+        "span",
+        { class: "pick-meta" },
+        [
+          ...exercise.primaryMuscles.map(formatLabel),
+          exercise.equipment ? formatLabel(exercise.equipment) : null,
+          exercise.isCustom ? "Custom" : null,
+        ].filter(Boolean).join(" · "),
+      ),
+    ],
+    {
+      class: "pick",
+      "data-action": "pick-exercise",
+      "data-exercise-id": exercise.id,
+      onClick: () => perform(ctx, async () => {
+        await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
+        Object.assign(log, { ...closedPicker(), query: "", muscle: "", equipment: "", limit: PICKER_PAGE });
+      }),
+    },
   );
 
   // "Showing 50 of 775" with a button for the next page, when there are more results than rows drawn.
@@ -542,6 +740,14 @@ function picker(ctx) {
         ...shown.map(row),
         ...(rest.length > shown.length ? [moreRow(recent.length + shown.length, results.length)] : []),
       ]));
+    // Focus asked for inside the list (ctx.rerender cannot: the rows did not exist yet). A row that is no longer
+    // drawn (an edited name that no longer matches the search, say) sends it to the search field.
+    if (log.pickerFocus !== null) {
+      const target = list.querySelector(log.pickerFocus) ?? search;
+      log.pickerFocus = null;
+      if (list.isConnected) target.focus();
+      else requestAnimationFrame(() => target.focus());
+    }
   }
   search.addEventListener("input", narrow);
   refreshList();
@@ -563,7 +769,9 @@ function picker(ctx) {
     libraryNote,
     list,
   );
-  if (log.addingCustom) {
+  if (log.editingCustom !== null) {
+    panel.append(customForm(ctx, log.editingCustom));
+  } else if (log.addingCustom) {
     panel.append(customForm(ctx));
   } else {
     panel.append(h(
@@ -572,14 +780,14 @@ function picker(ctx) {
       button("Add custom exercise", {
         "data-action": "add-custom",
         onClick: () => {
-          log.addingCustom = true;
+          Object.assign(log, { addingCustom: true, pickerMenuId: null, confirmRemove: null });
           return ctx.rerender();
         },
       }),
       button("Cancel", {
         "data-action": "cancel-picker",
         onClick: () => {
-          log.pickerOpen = false;
+          Object.assign(log, closedPicker());
           return ctx.rerender();
         },
       }),
@@ -610,9 +818,25 @@ export async function renderLogView(ctx) {
   const view = h("section", { class: "view", "aria-label": "New" });
 
   if (log.notice) {
-    view.append(h("p", { class: "notice", role: "status", "data-region": "notice", "data-enter": `notice:${log.notice}` }, log.notice));
+    const offer = log.restoreOffer; // after a hide: the exercise can come straight back
+    view.append(h(
+      "p",
+      { class: "notice", role: "status", "data-region": "notice", "data-enter": `notice:${log.notice}` },
+      log.notice,
+      offer === null ? null : [" ", button("Show it again", {
+        class: "small",
+        "data-action": "restore-hidden",
+        "data-exercise-id": offer.id,
+        onClick: () => perform(ctx, async () => {
+          await ctx.services.logger.restoreCustomExercise(offer.id);
+          log.notice = `"${offer.name}" is back in the exercise list.`;
+          ctx.state.focus = log.pickerOpen ? '[data-field="search"]' : '[data-action="choose-exercise"]';
+        }),
+      })],
+    ));
     log.notice = null;
   }
+  log.restoreOffer = null;
   if (log.error) {
     view.append(h("p", { class: "error", role: "alert", "data-region": "view-error", "data-enter": `view-error:${log.error}` }, log.error));
     log.error = null;
