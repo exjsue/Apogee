@@ -2860,6 +2860,89 @@ rule("picker: adding a custom exercise with a hidden exercise's name offers Show
   }, { prepare: useCurl });
 });
 
+// ---- Settings: Hidden exercises ----
+
+const hiddenIds = (root) => [...root.querySelectorAll('[data-region="hidden-exercises"] li[data-exercise-id]')].map((li) => li.dataset.exerciseId);
+const hiddenNotice = (root) => (region(root, "hidden-notice") ? region(root, "hidden-notice").textContent : "");
+const forHidden = (root, name, id) => $(root, `[data-action="${name}"][data-exercise-id="${id}"]`);
+
+rule("settings hidden list: with none hidden it says so; it lists only hidden custom exercises, never a retired catalog one", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    await goToTab(root, "settings");
+    await waitFor(() => region(root, "no-hidden"), "the empty list");
+    ctx.assert.equal(region(root, "no-hidden").textContent, "No hidden exercises.");
+    await services.logger.removeCustomExercise(CURL.id); // used: hidden
+    await goToTab(root, "log");
+    await goToTab(root, "settings");
+    await waitFor(() => hiddenIds(root).length === 1, "one hidden exercise");
+    ctx.assert.deepEqual(hiddenIds(root), [CURL.id]);
+    ctx.assert.equal(region(root, "no-hidden"), null);
+  }, {
+    prepare: async (store) => {
+      await useCurl(store);
+      await store.saveExercise({ id: "Cat_old", name: "Old Row", primaryMuscles: ["lats"], origin: "upstream", upstreamId: "Cat_old", catalogVersion: 1, retired: true });
+    },
+  });
+});
+
+rule("settings hidden list: Show again brings the exercise back to the picker, says so, and focuses the section heading", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    await services.logger.removeCustomExercise(CURL.id);
+    await goToTab(root, "settings");
+    click(await waitFor(() => forHidden(root, "show-hidden", CURL.id), "Show again"));
+    await waitFor(() => hiddenNotice(root) === '"Rope Curl" is back in the exercise list.', "the notice");
+    ctx.assert.equal(region(root, "hidden-notice").getAttribute("role"), "status");
+    await waitFor(() => document.activeElement === region(root, "hidden-exercises-heading"), "focus on the heading");
+    ctx.assert.equal(region(root, "no-hidden").textContent, "No hidden exercises.");
+    await goToTab(root, "log");
+    await openPicker(root);
+    await waitFor(() => pickIds(root).includes(CURL.id), "Rope Curl in the picker");
+  }, { prepare: useCurl });
+});
+
+rule("settings hidden list: Delete for good is offered only when nothing uses the exercise, asks first with Keep focused, and reports the outcome", async (ctx) => {
+  await withApp(ctx, async ({ root, services, adapter }) => {
+    await services.logger.saveWorkoutAsTemplate("wc", "Arms"); // Rope Curl: a workout and a template
+    await services.logger.removeCustomExercise(CURL.id);
+    await services.logger.addSet(FLY.id); // Cable Fly: planned, so hiding it...
+    await services.logger.removeCustomExercise(FLY.id);
+    await services.logger.clearPlan(); // ...and then nothing uses it any more
+    await goToTab(root, "settings");
+    await waitFor(() => hiddenIds(root).length === 2, "two hidden exercises");
+    ctx.assert.equal(forHidden(root, "delete-hidden", CURL.id), null); // used: never offered
+    ctx.assert.ok(forHidden(root, "show-hidden", CURL.id) !== null);
+    click(forHidden(root, "delete-hidden", FLY.id));
+    const question = await waitFor(() => region(root, "confirm-delete-hidden"), "the question");
+    ctx.assert.equal(question.getAttribute("role"), "alertdialog");
+    ctx.assert.equal(question.querySelector("p").textContent, 'Delete "Cable Fly" for good? Nothing uses it any more. This cannot be undone.');
+    await waitFor(() => document.activeElement === action(root, "cancel-delete-hidden"), "focus on Keep exercise");
+    click(action(root, "cancel-delete-hidden"));
+    await waitFor(() => document.activeElement === forHidden(root, "delete-hidden", FLY.id), "focus back on Delete for good");
+    click(forHidden(root, "delete-hidden", FLY.id));
+    click(await waitFor(() => action(root, "confirm-delete-hidden"), "the confirm button"));
+    await waitFor(() => hiddenNotice(root) === 'Deleted "Cable Fly" for good.', "the notice");
+    await waitFor(() => document.activeElement === region(root, "hidden-exercises-heading"), "focus on the heading");
+    ctx.assert.deepEqual(hiddenIds(root), [CURL.id]);
+    ctx.assert.equal(await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", FLY.id)), undefined);
+  }, { prepare: useCurl });
+});
+
+rule("settings hidden list: if the exercise is used again before Delete for good is confirmed, it is not deleted and the notice says so", async (ctx) => {
+  await withApp(ctx, async ({ root, services, adapter, store }) => {
+    await services.logger.addSet(FLY.id);
+    await services.logger.removeCustomExercise(FLY.id);
+    await services.logger.clearPlan();
+    await goToTab(root, "settings");
+    click(await waitFor(() => forHidden(root, "delete-hidden", FLY.id), "Delete for good"));
+    await waitFor(() => action(root, "confirm-delete-hidden"), "the question");
+    await store.saveTemplate({ id: "t-fly", name: "Chest", exercises: [{ exerciseId: FLY.id, setCount: 2 }] }); // another tab
+    click(action(root, "confirm-delete-hidden"));
+    await waitFor(() => hiddenNotice(root) === '"Cable Fly" was not deleted: it is in use again, so it stays hidden.', "the notice");
+    ctx.assert.equal((await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", FLY.id))).retired, true);
+    ctx.assert.equal(forHidden(root, "delete-hidden", FLY.id), null);
+  }, { prepare: addMine });
+});
+
 rule("tabs: selecting Body shows the Body heading and no other panel", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "body");

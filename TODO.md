@@ -27,6 +27,7 @@
 - [ ] Check offline and updates in desktop Firefox and in Firefox Focus (the end-to-end check so far ran in headless Chrome only)
 - [ ] Check that the icon, name and standalone window look right on the iPhone Home Screen (apple-touch-icon is 180 px; the G icon was only viewed as an image)
 - [ ] **Verify on iPhone (custom exercise menu, 2026-10-26):** with VoiceOver, the picker's three-dot button on your own exercises (announced as a menu button, collapsed or expanded), Edit exercise and Remove exercise, the Delete and Hide questions (read as an alert dialog, Keep exercise focused), the notice after a delete or hide and its Show it again button, the edit form's notice, and that focus lands on the search field after a remove and back on the three-dot button after an edit. Also that the menu opening inside the scrolling list is easy to reach with a thumb at 320 and 390 px.
+- [ ] **Verify on iPhone (Settings, Hidden exercises, 2026-10-26):** with VoiceOver, the section heading, each hidden exercise with Show again and (only when nothing uses it) Delete for good, the Delete for good question (alert dialog, Keep exercise focused), the notice after each action, and focus landing on the Hidden exercises heading afterwards. Also how long Settings takes to open with several hidden exercises and a long history (each hidden exercise reads every entry once to decide whether Delete for good is offered).
 - [ ] Keyboard: Escape closes the picker's three-dot menu, but not the Log tab's exercise menu (it never did); make the two the same.
 
 ## Done
