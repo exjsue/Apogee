@@ -45,6 +45,10 @@
     "equipment": "bodyweight",
     "note": "The bench used as a marker is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
+  "Bent_Over_Low-Pulley_Side_Lateral": {
+    "name": "Cable Lateral Raise",
+    "note": "Display name only: the upstream name is kept as the id. The movement is a low-pulley lateral raise, so the name says what it is."
+  },
   "Box_Jump_Multiple_Response": {
     "equipment": "bodyweight",
     "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
@@ -52,6 +56,10 @@
   "Box_Skip": {
     "equipment": "bodyweight",
     "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
+  },
+  "Butterfly": {
+    "name": "Chest Fly",
+    "note": "Display name only: the upstream name is kept as the id. A machine chest fly."
   },
   "Cable_Internal_Rotation": {
     "exclude": true,
@@ -169,6 +177,10 @@
     "equipment": "bodyweight",
     "note": "The plyometric box is not in the equipment vocabulary, so this movement is logged as bodyweight."
   },
+  "Leverage_Iso_Row": {
+    "name": "Iso-Lateral Row",
+    "note": "Display name only: the upstream name is kept as the id. The brand name is dropped; the movement is an iso-lateral machine row."
+  },
   "Log_Lift": {
     "primaryMuscles": [
       "front_delts",
@@ -181,6 +193,10 @@
       "rear_delts"
     ],
     "note": "A rope row pulled toward the neck with the elbows flared and the upper arms level, the rear delt row pattern. Placement rests on agreement between the upstream name, description and secondary muscles, not on independent verification."
+  },
+  "Machine_Shoulder_Military_Press": {
+    "name": "Machine Shoulder Press",
+    "note": "Display name only: the upstream name is kept as the id. The bracketed word is dropped; the movement is the same machine press."
   },
   "Medicine_Ball_Scoop_Throw": {
     "exclude": true,
