@@ -11,7 +11,8 @@ const byTierThenName = (a, b) => tier(a) - tier(b) || byName(a, b);
 // The search the picker uses.
 //   filters.muscle     a muscle id that must be one of the exercise's PRIMARY muscles (null: any)
 //   filters.equipment  an equipment tag that must be among the exercise's tags (null: any)
-//   filters.includeRetired  false (the default) hides retired catalog entries; they still resolve in history
+//   filters.includeRetired  false (the default) hides retired entries (catalog ones and the user's hidden
+//                          exercises); they still resolve in history
 // Returns every match, best first; the screen decides how many to draw. A later search (for example natural
 // language) replaces this function and must keep this signature.
 //

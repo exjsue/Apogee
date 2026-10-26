@@ -5,7 +5,7 @@
 import { createWorkout, createWorkoutEntry, createWorkSet, createExercise } from "../domain/model.js";
 import { parseDecimal, parseWholeNumber } from "../domain/format.js";
 import { searchExercises } from "../domain/search.js";
-import { ambiguousCustomIds } from "../domain/exercise-names.js";
+import { ambiguousCustomIds, requireFreeName } from "../domain/exercise-names.js";
 import { exerciseIdsByRecency } from "../domain/recent-exercises.js";
 import {
   DEFAULT_REST_SECONDS, startTimer, rescheduleTimer, isRunning, requireRest,
@@ -643,14 +643,17 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return { reps: last.reps, weightValue: last.weightValue, weightUnit: last.weightUnit };
   }
 
-  // Creates a custom exercise. Names must be unique, ignoring case.
+  // Creates a custom exercise. Names must be unique, ignoring case; a taken name throws with code NAME_TAKEN, and
+  // hiddenExerciseId when it is one of the user's hidden exercises (requireFreeName).
   async function addCustomExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes }) {
     const exercise = createExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom: true });
-    const taken = (await store.listExercises()).some(
-      (existing) => existing.name.toLowerCase() === exercise.name.toLowerCase(),
-    );
-    if (taken) throw new Error("name: an exercise with this name already exists");
+    requireFreeName(await store.listExercises(), exercise.name);
     return store.saveExercise(exercise);
+  }
+
+  // The user's own exercises that are hidden, alphabetical by name (for the Settings list).
+  async function listHiddenCustomExercises() {
+    return (await store.listExercises()).filter((exercise) => exercise.isCustom === true && exercise.retired === true);
   }
 
   // filters: { muscle, equipment } (ids, or null for any). Retired exercises are not offered; they still resolve in history.
@@ -802,6 +805,12 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     deleteSet,
     suggestNextSet,
     addCustomExercise,
+    // The user's own exercises (see store.js): remove deletes an unused one and hides a used one.
+    getExerciseUsage: (id) => store.getExerciseUsage(id),
+    removeCustomExercise: (id) => store.removeCustomExercise(id),
+    updateCustomExercise: (id, fields) => store.updateCustomExercise(id, fields),
+    restoreCustomExercise: (id) => store.restoreCustomExercise(id),
+    listHiddenCustomExercises,
     findExercises,
     findRecentExercises,
     getHistory,

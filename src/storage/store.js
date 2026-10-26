@@ -32,7 +32,9 @@ import {
   createWorkSet,
   createTemplate,
 } from "../domain/model.js";
-import { WORKOUT_META_KEYS, SESSION_CONFLICT } from "./schema.js";
+import { WORKOUT_META_KEYS, SESSION_CONFLICT, CATALOG_VERSION_META_KEY } from "./schema.js";
+import { normalizePlan, emptyPlan } from "../domain/workout-plan.js";
+import { requireFreeName } from "../domain/exercise-names.js";
 
 const SCHEMA_KEY = "schemaVersion";
 // Settings kept in meta. Meta is not part of exports or imports.
@@ -116,6 +118,28 @@ async function applyWorkoutMeta(tx, meta = {}) {
     if (value === null) await tx.delete("meta", key);
     else await tx.put("meta", { key, value });
   }
+}
+
+// Runs inside a transaction: every place that can refer to an exercise by id (the list is in DECISIONS.md,
+// 2026-10-26): entries of any workout (finished, open or stale), templates, the session's plan in meta (its
+// exercises and its rows; normalizePlan lists every row's exercise in exercises) and the conflicts of the catalog
+// flag in meta. The running timer refers to a set, whose entry is counted here. Reads only.
+async function readExerciseUsage(tx, id) {
+  const workoutIds = new Set((await tx.getAll("entries")).filter((entry) => entry.exerciseId === id).map((entry) => entry.workoutId));
+  const templates = (await tx.getAll("templates")).filter((template) => template.exercises.some((item) => item.exerciseId === id)).length;
+  const planned = normalizePlan((await tx.get("meta", WORKOUT_META_KEYS.plan))?.value).exercises.includes(id);
+  const flag = (await tx.get("meta", CATALOG_VERSION_META_KEY))?.value;
+  const catalogConflict = flag !== null && typeof flag === "object" && Array.isArray(flag.conflicts) && flag.conflicts.includes(id);
+  const used = workoutIds.size > 0 || templates > 0 || planned || catalogConflict;
+  return { workouts: workoutIds.size, templates, planned, catalogConflict, used };
+}
+
+// Runs inside a transaction: the stored custom exercise with this id, or an error.
+async function requireCustom(tx, id) {
+  const exercise = await tx.get("exercises", id);
+  if (exercise === undefined) throw new Error("That exercise no longer exists");
+  if (exercise.isCustom !== true) throw new Error("Only your own exercises can be changed here");
+  return exercise;
 }
 
 // Runs inside a transaction: the referenced record must already exist.
@@ -397,6 +421,61 @@ export function createStore(adapter) {
     });
   }
 
+  // Where one exercise is referred to: { workouts, templates, planned, catalogConflict, used } (see
+  // readExerciseUsage). For the wording of the remove question; removeCustomExercise decides again when it writes.
+  async function getExerciseUsage(id) {
+    requireId(id);
+    return adapter.transaction(["entries", "templates", "meta"], "readonly", (tx) => readExerciseUsage(tx, id));
+  }
+
+  // Removes one of the user's own exercises: deleted when nothing refers to it, otherwise hidden (retired: true,
+  // every other field kept), decided and written in ONE transaction, so nothing can start using it in between.
+  // A delete also raises the plan's revision (an empty plan when there is none), so a session write prepared
+  // before it is refused (checkRevision) and reads again. Resolves "deleted" or "hidden".
+  async function removeCustomExercise(id) {
+    requireId(id);
+    return adapter.transaction(["exercises", "entries", "templates", "meta"], "readwrite", async (tx) => {
+      const exercise = await requireCustom(tx, id);
+      if ((await readExerciseUsage(tx, id)).used) {
+        if (exercise.retired !== true) await tx.put("exercises", { ...exercise, retired: true });
+        return "hidden";
+      }
+      const stored = (await tx.get("meta", WORKOUT_META_KEYS.plan))?.value;
+      const plan = stored !== null && typeof stored === "object" && !Array.isArray(stored) ? stored : emptyPlan();
+      await tx.delete("exercises", id);
+      await tx.put("meta", { key: WORKOUT_META_KEYS.plan, value: { ...plan, rev: normalizePlan(stored).rev + 1 } });
+      return "deleted";
+    });
+  }
+
+  // Replaces the name, primary and secondary muscles and equipment tags of one of the user's own exercises (all
+  // four: an absent list becomes empty); every other field stays. Read, checked and written in ONE transaction, so
+  // an exercise removed or hidden meanwhile is refused, never brought back. The name must not be another stored
+  // exercise's (requireFreeName). Resolves the saved record.
+  async function updateCustomExercise(id, { name, primaryMuscles, secondaryMuscles, equipmentTags } = {}) {
+    requireId(id);
+    return adapter.transaction(["exercises"], "readwrite", async (tx) => {
+      const stored = await requireCustom(tx, id);
+      if (stored.retired === true) throw new Error("This exercise is hidden. Show it again before editing it.");
+      const next = createExercise({ ...stored, name, primaryMuscles, secondaryMuscles, equipmentTags });
+      requireFreeName(await tx.getAll("exercises"), next.name, id);
+      await tx.put("exercises", next);
+      return next;
+    });
+  }
+
+  // Shows a hidden custom exercise again: only retired changes, to false. Resolves the saved record.
+  async function restoreCustomExercise(id) {
+    requireId(id);
+    return adapter.transaction(["exercises"], "readwrite", async (tx) => {
+      const exercise = await requireCustom(tx, id);
+      if (exercise.retired !== true) return exercise;
+      const next = { ...exercise, retired: false };
+      await tx.put("exercises", next);
+      return next;
+    });
+  }
+
   const readSetting = (key) => adapter.transaction(["meta"], "readonly", async (tx) => (await tx.get("meta", key))?.value);
 
   // "kg" or "lb". Defaults to "lb" until the user chooses.
@@ -486,6 +565,10 @@ export function createStore(adapter) {
     deleteSet,
     listExercises,
     seedExercises,
+    getExerciseUsage,
+    removeCustomExercise,
+    updateCustomExercise,
+    restoreCustomExercise,
     saveTemplate,
     getTemplate: (id) => getOne("templates", id),
     listTemplates,
