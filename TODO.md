@@ -178,3 +178,4 @@
 - [ ] Edit with no weights argument resets secondaries to 0.5; make updateExercise preserve stored weights (store.updateCustomExercise; the form always sends weights, added 2026-10-30).
 - [ ] Upstream bench press (powerlifting) has triceps as primary; check catalog classification (Bench_Press_-_Powerlifting, added 2026-10-30).
 - [ ] core.autocrlf=true makes the working copy of src/catalog/*.js CRLF; the fresh-run catalog test (needs EXERCISE_CATALOG_INPUT) then fails locally; consider .gitattributes, John to decide (added 2026-10-30).
+- [ ] Flaky browser test 'picker menu: Edit opens a prefilled form...' (Timed out waiting for focus back after Cancel): failed 3 of 8 official-suite runs after the weights stage, 0 of 24 in an isolated driver with focus emulation; suspect headless window focus; investigate in the official harness (added 2026-10-30).
