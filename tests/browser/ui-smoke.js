@@ -327,6 +327,78 @@ async function twoFinishedWorkouts(store) {
   }
 }
 
+// ---- records and PR labels in a finished workout's detail ----
+
+// Finished workouts from [[reps, weight], ...] lists, one list per workout, oldest first, all in kg.
+const finishedWorkouts = (lists) => async (store) => {
+  let time = Date.now() - 48 * HOUR;
+  const logger = createLogger(store, { now: () => new Date(time) });
+  for (const sets of lists) {
+    for (const [reps, weight] of sets) {
+      await logger.logSet({ exerciseId: BENCH, reps, weight, weightUnit: "kg" });
+      time += 60 * 1000;
+    }
+    await logger.finishWorkout();
+    time += 24 * HOUR;
+  }
+};
+
+// Opens the nth row (0 is the newest) of the History list.
+async function openWorkout(root, n) {
+  await goToTab(root, "history");
+  const rows = await waitFor(() => { const found = root.querySelectorAll('[data-action="open-workout"]'); return found.length > n && found; }, "workouts in History");
+  click(rows[n]);
+  await waitFor(() => action(root, "back-to-history"), "the workout detail");
+}
+
+const recordsText = (root) => (region(root, "records") ? region(root, "records").textContent : null);
+
+rule("ui: a finished workout's detail shows its exercise's records in the preferred unit, never volume, and no ignored line when nothing is left out", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await chooseUnit(root, "kg");
+    await openWorkout(root, 0);
+    ctx.assert.equal(recordsText(root), "Records: Heaviest 120 kg · Est. 1RM 140 kg · Most reps 10");
+    ctx.assert.equal(region(root, "records-ignored"), null);
+    click(action(root, "back-to-history"));
+    await chooseUnit(root, "lb");
+    await openWorkout(root, 0);
+    ctx.assert.equal(recordsText(root), "Records: Heaviest 264.6 lb · Est. 1RM 308.7 lb · Most reps 10");
+  }, { prepare: finishedWorkouts([[["8", "100"], ["5", "120"], ["3", "50"], ["10", "0"]]]) });
+});
+
+rule("ui: a PR label marks a set that was a record when done, once, and the Records line still shows the best", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openWorkout(root, 1); // A: 5 x 100 kg
+    ctx.assert.equal(root.querySelectorAll('[data-region="pr"]').length, 1);
+    ctx.assert.ok(region(root, "pr").textContent.includes("personal record"));
+    click(action(root, "back-to-history"));
+    await openWorkout(root, 0); // B: 5 x 90 kg, later
+    ctx.assert.equal(region(root, "pr"), null);
+    ctx.assert.equal(recordsText(root), "Records: Heaviest 100 kg · Est. 1RM 116.7 kg");
+  }, { prepare: async (store) => { await store.setPreferredUnit("kg"); await finishedWorkouts([[["5", "100"]], [["5", "90"]]])(store); } });
+});
+
+rule("ui: sets left out of records are said so in the detail", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    const [first] = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
+    // A set in a unit the record maths does not know, written past the store's validation.
+    await adapter.transaction(["sets"], "readwrite", (tx) => tx.put("sets", { ...first, id: "odd-unit", order: 1, weightUnit: "st" }));
+    await openWorkout(root, 0);
+    ctx.assert.equal(region(root, "records-ignored").textContent, "1 set was left out of records: missing exercise or unit");
+    ctx.assert.ok(root.textContent.includes("2. 5 reps · 100 st")); // the bad-unit set draws as stored
+  }, { prepare: finishedWorkouts([[["5", "100"]]]) });
+});
+
+rule("ui: if the records cannot be read the detail still shows, without Records lines or PR labels", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openWorkout(root, 0);
+    ctx.assert.ok(root.textContent.includes("5 reps"));
+    ctx.assert.equal(region(root, "records"), null);
+    ctx.assert.equal(region(root, "pr"), null);
+    ctx.assert.equal(region(root, "view-error"), null);
+  }, { prepare: async (store) => { await finishedWorkouts([[["5", "100"]]])(store); store.listFinishedSetRecords = async () => { throw new Error("boom"); }; } });
+});
+
 rule("ui: deleting a finished workout asks first, cancel keeps it, confirm removes it", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     const rows = () => root.querySelectorAll('[data-action="open-workout"]');

@@ -475,6 +475,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .muscle-panel h4 { margin: 8px 0 4px; font-size: 0.9375rem; }
 .muscle-panel li { padding: 2px 0; }
 .muscle-panel .contributors { margin-bottom: 8px; }
+.pr-label { margin-left: 8px; padding: 0 4px; font-size: 0.75rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); }
 /* Text for screen readers only: out of sight but still in the accessibility tree (not display: none). */
 .visually-hidden {
   position: absolute;

@@ -112,6 +112,11 @@ function deleteSection(ctx, workout) {
   );
 }
 
+// A stored set with a unit the app does not know shows as stored ("100 st") instead of breaking the whole detail.
+function weightText(set, unit) {
+  try { return formatSetWeight(set.weightValue, set.weightUnit, unit); } catch { return `${set.weightValue} ${set.weightUnit}`; }
+}
+
 async function detail(ctx, id) {
   const history = ctx.state.history;
   const workout = await ctx.services.logger.getWorkoutDetail(id);
@@ -121,6 +126,11 @@ async function detail(ctx, id) {
     history.savingTemplate = false;
     return null;
   }
+  // Records are read once per detail open. A failure only drops the Records lines and PR labels.
+  let rec = null;
+  try { rec = await ctx.services.logger.getRecords(); } catch { rec = null; }
+  // "PR" means the set was a record when done; volume never marks.
+  const prSets = new Set((rec?.history ?? []).filter((e) => e.type !== "volume").map((e) => e.setId));
   // Top row: Back, and Save as template when finished. While the form is open it is drawn under this row instead.
   const template = workout.endedAt ? templateSection(ctx, workout) : null;
   const view = h(
@@ -146,10 +156,15 @@ async function detail(ctx, id) {
     workout.endedAt ? h("p", { class: "muted" }, `Finished ${formatDateTime(workout.endedAt)}`) : null,
   );
   for (const entry of workout.entries) {
+    const mine = rec?.records[entry.exerciseId] ?? {};
+    const parts = [["weight", "Heaviest"], ["e1rm", "Est. 1RM"], ["reps", "Most reps"]]
+      .filter(([type]) => mine[type])
+      .map(([type, label]) => (type === "reps" ? `${label} ${mine.reps.value}` : `${label} ${mine[type].value} ${rec.unit}`));
     view.append(h(
       "div",
       { class: "card entry" },
       exerciseHeading(entry.exerciseName, entry.markCustom),
+      parts.length ? h("p", { class: "muted", "data-region": "records" }, `Records: ${parts.join(" · ")}`) : null,
       h(
         "ol",
         { class: "sets" },
@@ -159,11 +174,17 @@ async function detail(ctx, id) {
           h(
             "span",
             { class: "set-text" },
-            `${index + 1}. ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, ctx.unit)}`,
+            `${index + 1}. ${formatCount(set.reps, "rep")} · ${weightText(set, ctx.unit)}`,
           ),
+          prSets.has(set.id)
+            ? h("span", { class: "pr-label", "data-region": "pr" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
+            : null,
         )),
       ),
     ));
+  }
+  if (rec?.ignored > 0) {
+    view.append(h("p", { class: "muted", "data-region": "records-ignored" }, `${formatCount(rec.ignored, "set")} ${rec.ignored === 1 ? "was" : "were"} left out of records: missing exercise or unit`));
   }
   view.append(deleteSection(ctx, workout));
   return view;
