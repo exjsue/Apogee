@@ -32,7 +32,7 @@ async function save(store, { startedAgo, endedAgo, exerciseId, setTimes, isWarmu
 test("getMuscleStatus: sets of the last 7 days are weighted, a workout that ended before 3 weeks ago is not loaded, and an unfinished old workout is", async () => {
   const { store, logger } = await setup();
   const HOUR = DAY / 24;
-  // leg press, 3 sets, 5 days ago: quads 3, glutes, adductors and hamstrings 1.5 each
+  // leg press, 3 sets, 5 days ago: quads 3, glutes and adductors 1.5 each (0.5 a set), hamstrings 0.75 shown as 1 (0.25 a set)
   await save(store, { startedAgo: 5 * DAY, endedAgo: 5 * DAY - HOUR, exerciseId: "seed-leg-press", setTimes: [5 * DAY - 10 * 60000, 5 * DAY - 20 * 60000, 5 * DAY - 30 * 60000] });
   // bench, 40 days ago and finished then: outside the 3 weeks, so chest has no sets in the window
   await save(store, { startedAgo: 40 * DAY, endedAgo: 40 * DAY - HOUR, exerciseId: "seed-barbell-bench-press", setTimes: [40 * DAY - 10 * 60000] });
@@ -42,7 +42,7 @@ test("getMuscleStatus: sets of the last 7 days are weighted, a workout that ende
   assert.equal(status.values.quads, 3);
   assert.equal(status.values.glutes, 1.5);
   assert.equal(status.values.adductors, 1.5);
-  assert.equal(status.values.hamstrings, 1.5);
+  assert.equal(status.values.hamstrings, 1);
   assert.equal(status.values.biceps, 1);
   assert.equal(status.values.forearms, 0.5);
   assert.equal(status.values.chest, 0);

@@ -174,3 +174,6 @@
 - [ ] Importers (Strong, Liftoff) must give every set a completedAt, taken from the workout date, because sets without it are ignored by PRs with no error. Verify against a real export file.
 - [ ] Record the browser-suite motion-mode method in CLAUDE.md (added 2026-10-30): run tests/browser/index.html once with prefers-reduced-motion emulated as no-preference and once as reduce, via Chrome media emulation. It is not documented there.
 - [ ] Check whether backup import can create a set with an unknown unit or a missing exercise id (added 2026-10-30). If it can, add validation. The History detail now shows such a set as plain text and counts it as left out of records.
+- [ ] Workout with only warm-ups can be finished and shows 0 sets (added 2026-10-30).
+- [ ] Edit with no weights argument resets secondaries to 0.5; make updateExercise preserve stored weights (store.updateCustomExercise; the form always sends weights, added 2026-10-30).
+- [ ] Upstream bench press (powerlifting) has triceps as primary; check catalog classification (Bench_Press_-_Powerlifting, added 2026-10-30).

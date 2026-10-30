@@ -42,7 +42,7 @@ test("details: 19 muscles, no neck, built from the same read as the values, with
   assert.ok(!("neck" in status.details));
   for (const id of Object.keys(status.values)) assert.equal(status.details[id].weighted, status.values[id], id);
   assert.deepEqual(status.details.biceps.contributors.primary.map((row) => [row.name, row.sets, row.weighted]), [["Dumbbell curl", 1, 1]]);
-  assert.deepEqual(status.details.forearms.contributors.secondary.map((row) => [row.name, row.sets, row.weighted]), [["Dumbbell curl", 1, 0.5]]);
+  assert.deepEqual(status.details.forearms.contributors.secondary.map((row) => [row.name, row.sets, row.weighted]), [["Dumbbell curl", 1, 0.25]]); // forearms 0.25 a set
   assert.deepEqual(Object.keys(status).sort(), ["above", "details", "hasHistory", "neglected", "values"]);
 });
 

@@ -2228,12 +2228,13 @@ rule("tabs: after each switch the indicator sits under the active tab (left edge
 // ---- the Body tab's diagram ----
 
 // Workouts for the Body tab rules, placed relative to the real clock (the app's logger reads it):
-//   2 days ago   leg press, 22 sets and 1 warm-up     quads 22 (above the target of 20); glutes, adductors, hamstrings 11
-//   1 day ago    dumbbell curl, 4 sets                biceps 4; forearms 2 (secondary, half)
+//   2 days ago   leg press, 22 sets and 1 warm-up     quads 22 (above the target of 20); glutes, adductors 11 (0.5 a set);
+//                                                     hamstrings 5.5 (0.25 a set, src/catalog/secondary-weights.js)
+//   1 day ago    dumbbell curl, 4 sets                biceps 4; forearms 1 (secondary, 0.25 a set)
 //   1 day ago    a stored exercise worked on the neck, 9 sets     neck 9, folded into the traps
 //   10 days ago  standing calf raise, 5 sets          calves 0 in the last 7 days, but trained within 3 weeks
 //   25 days ago  bench press, 3 sets                  too old to count: the chest was not trained in 3 weeks
-// With a target of 20 for the darkest shade: quads level 5, glutes/adductors/hamstrings/traps level 3, biceps and forearms level 1.
+// With a target of 20 for the darkest shade: quads level 5, glutes/adductors/traps level 3, hamstrings level 2, biceps and forearms level 1.
 const DAY_MS = 24 * 60 * 60 * 1000;
 async function seedBodyWorkouts(store) {
   await store.saveExercise(createExercise({ id: "neck-test", name: "Neck test", primaryMuscles: ["neck"], secondaryMuscles: [], equipmentTags: ["bodyweight"], isCustom: true }));
@@ -2530,7 +2531,7 @@ rule("body panel: it says what the data says: the sentences, the contributors, t
     ctx.assert.ok(text().includes("Trend: 22 vs 0 (+22) sets, last 7 days vs the 7 days before"), text());
     ctx.assert.ok(text().includes("Leg press: 22 sets, 22 weighted") && text().includes("Primary credit"), text());
     ctx.assert.ok(!text().includes("Secondary credit"), "quads have no secondary credit in this data");
-    ctx.assert.ok(text().includes("Balance: Quads 22 vs Hamstrings 11 weighted sets, ratio 2 : 1"), text());
+    ctx.assert.ok(text().includes("Balance: Quads 22 vs Hamstrings 5.5 weighted sets, ratio 4 : 1"), text());
     tapDiagram(root, 87.7, 237); // adductors: secondary only (replaces the quads panel)
     ctx.assert.ok(text().includes("Secondary credit") && text().includes("Leg press: 22 sets, 11 weighted") && !text().includes("Primary credit"), text());
     ctx.assert.equal(panelOf(root).querySelector('[data-region="muscle-balance"]'), null, "adductors are in no pair: no balance row");
@@ -2857,6 +2858,72 @@ rule("picker menu: Edit opens a prefilled form with the notice and the catalog-o
     click(await waitFor(() => action(root, "cancel-edit-custom"), "Cancel"));
     await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back after Cancel");
   }, { prepare: addMine });
+});
+
+// A custom press with the triceps as its one secondary muscle and 16 sets done yesterday: on the Body tab the triceps
+// get 16 x its weight (0.25: 4, level 1; 0.5: 8, level 2; 1: 16, level 4, with 20 as the darkest shade).
+const PRESS = createExercise({ id: "c-press", name: "Band Press", primaryMuscles: ["chest"], secondaryMuscles: ["triceps"], equipmentTags: ["resistance_band"], isCustom: true });
+const pressWorkout = (weights) => async (store) => {
+  await store.saveExercise(weights === undefined ? PRESS : { ...PRESS, secondaryWeights: weights });
+  const at = new Date(Date.now() - DAY_MS).toISOString();
+  const sets = Array.from({ length: 16 }, (_, order) => ({ id: `wp-s${order}`, entryId: "wp-e", order, reps: 8, weightValue: 0, weightUnit: "kg", isWarmup: false, completedAt: at }));
+  await store.saveWorkoutWithDetails({ id: "wp", startedAt: new Date(Date.now() - DAY_MS - 60000).toISOString(), endedAt: at }, [{ id: "wp-e", workoutId: "wp", exerciseId: PRESS.id, order: 0 }], sets);
+};
+const tricepsLevel = async (root) => {
+  await goToTab(root, "body");
+  await showView(root, "back");
+  return [...diagram(root).querySelector('g[data-muscle="triceps"]').classList].find((name) => name.startsWith("level-"));
+};
+const weightButtons = (root, muscle) => [...root.querySelectorAll(`[data-action="secondary-weight"][data-muscle="${muscle}"]`)];
+const pressedWeight = (root, muscle) => weightButtons(root, muscle).filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.weight);
+
+rule("picker menu: a secondary muscle's weight is four labelled 44 px buttons, an old exercise opens at 0.5, and saving a new weight changes the Body tab", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    ctx.assert.equal(await tricepsLevel(root), "level-2", "no stored weight counts 0.5: 8 of 20");
+    await goToTab(root, "log");
+    click(await openMenu(root, PRESS.id));
+    await waitFor(() => field(root, "custom-name"), "the edit form");
+    const buttons = weightButtons(root, "triceps");
+    ctx.assert.deepEqual(buttons.map((b) => b.textContent), ["Quarter", "Half", "Three quarters", "Full"]);
+    ctx.assert.deepEqual(buttons.map((b) => b.getAttribute("aria-label")), ["Triceps weight, 0.25 of a set", "Triceps weight, 0.5 of a set", "Triceps weight, 0.75 of a set", "Triceps weight, 1 of a set"]);
+    ctx.assert.equal(buttons[0].parentElement.getAttribute("role"), "group");
+    ctx.assert.equal(buttons[0].parentElement.getAttribute("aria-label"), "Triceps weight");
+    for (const b of buttons) {
+      const box = b.getBoundingClientRect();
+      ctx.assert.ok(box.height >= 44 && box.width >= 44, `${b.textContent} is ${box.width} x ${box.height}`);
+    }
+    ctx.assert.deepEqual(pressedWeight(root, "triceps"), ["0.5"]);
+    // an unticked muscle shows no weight; ticking it shows its buttons at 0.5
+    const biceps = $(root, 'input[data-group="secondary"][value="biceps"]');
+    ctx.assert.equal(weightButtons(root, "biceps")[0].parentElement.hidden, true);
+    biceps.click();
+    ctx.assert.equal(weightButtons(root, "biceps")[0].parentElement.hidden, false);
+    biceps.click();
+    click(buttons[3]);
+    ctx.assert.deepEqual(pressedWeight(root, "triceps"), ["1"]);
+    click(action(root, "save-edit-custom"));
+    await waitFor(() => noticeText(root) === 'Saved "Band Press".', "the saved notice");
+    const stored = await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", PRESS.id));
+    ctx.assert.deepEqual(stored, { ...PRESS, secondaryWeights: { triceps: 1 } }, "same id, only the weights added");
+    ctx.assert.equal(await tricepsLevel(root), "level-4", "16 of 20 at full weight");
+  }, { prepare: pressWorkout(undefined), width: 375 }); // in the frame with app.css, so the sizes are real
+});
+
+rule("picker menu: editing another field keeps the stored weights, and the edit form opens with them pressed", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    ctx.assert.equal(await tricepsLevel(root), "level-1", "0.25: 4 of 20");
+    await goToTab(root, "log");
+    click(await openMenu(root, PRESS.id));
+    const name = await waitFor(() => field(root, "custom-name"), "the edit form");
+    ctx.assert.deepEqual(pressedWeight(root, "triceps"), ["0.25"]);
+    setValue(name, "Banded Press");
+    $(root, 'input[data-group="equipment"][value="bodyweight"]').click();
+    click(action(root, "save-edit-custom"));
+    await waitFor(() => noticeText(root) === 'Saved "Banded Press".', "the saved notice");
+    const stored = await adapter.transaction(["exercises"], "readonly", (tx) => tx.get("exercises", PRESS.id));
+    ctx.assert.deepEqual(stored, { ...PRESS, name: "Banded Press", equipmentTags: ["resistance_band", "bodyweight"], secondaryWeights: { triceps: 0.25 } });
+    ctx.assert.equal(await tricepsLevel(root), "level-1", "the weight did not change");
+  }, { prepare: pressWorkout({ triceps: 0.25 }) });
 });
 
 rule("picker menu: an unused exercise is offered Delete, with Keep focused; deleting says so, focuses the search field, and the row is gone", async (ctx) => {

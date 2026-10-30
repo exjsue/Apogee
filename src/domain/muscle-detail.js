@@ -11,6 +11,7 @@
 import { foldNeckIntoTraps } from "./body-display.js";
 import { formatLabel, formatCount } from "./format.js";
 import { TARGET_RANGE, WINDOW_DAYS, NEGLECTED_WEEKS } from "./body-status.js";
+import { roundToHalf } from "./muscle-load.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOP_CONTRIBUTORS = 5;
@@ -24,7 +25,12 @@ export const BALANCE_PAIRS = Object.freeze([
 
 const fmt = (n) => String(Math.round(n * 100) / 100);
 const signed = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `-${fmt(-n)}` : "0");
-const weightedOf = (load) => Object.fromEntries(Object.entries(load.muscles).map(([id, row]) => [id, row.weighted]));
+// A muscle's total over a window, the neck folded into the traps, then rounded once to the nearest 0.5. The
+// contributor rows keep their exact weighted credit, so they may add up to a little more or less than the total.
+const totalsOf = (load) => {
+  const folded = foldNeckIntoTraps(Object.fromEntries(Object.entries(load.muscles).map(([id, row]) => [id, row.weighted])));
+  return Object.fromEntries(Object.entries(folded).map(([id, value]) => [id, roundToHalf(value)]));
+};
 
 // Elapsed time, not calendar days, so a time zone or a clock change cannot move the answer.
 function lastTrainedText(lastAt, now) {
@@ -89,8 +95,8 @@ function balanceFor(muscle, values) {
 export function buildMuscleDetails({ recent, previous, longer, exercises, now }) {
   if (recent?.breakdown === undefined || longer?.lastAt === undefined) throw new TypeError("recent and longer must be loads made with detail: true");
   const names = new Map((exercises instanceof Map ? [...exercises.values()] : exercises ?? []).map((exercise) => [exercise.id, exercise.name]));
-  const values = foldNeckIntoTraps(weightedOf(recent));
-  const before = foldNeckIntoTraps(weightedOf(previous));
+  const values = totalsOf(recent);
+  const before = totalsOf(previous);
   const details = {};
   for (const muscle of Object.keys(values)) {
     const folded = muscle === "traps";

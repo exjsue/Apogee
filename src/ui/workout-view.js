@@ -392,16 +392,45 @@ function templatesSection(ctx, templates) {
   );
 }
 
-// A group of checkboxes, `checked` ticked to begin with; selected() returns the ticked values.
-function checkboxGroup(legend, values, group, checked = []) {
+// How much of a set a secondary muscle counts for, in the words the weight buttons show.
+const WEIGHT_WORDS = [[0.25, "Quarter"], [0.5, "Half"], [0.75, "Three quarters"], [1, "Full"]];
+
+// Four buttons for how much of a working set one muscle counts for; chosen holds the pick for every muscle.
+function weightChoice(value, label, chosen) {
+  const buttons = WEIGHT_WORDS.map(([weight, words]) => button(words, {
+    class: "weight-button",
+    "data-action": "secondary-weight",
+    "data-muscle": value,
+    "data-weight": String(weight),
+    "aria-pressed": String(chosen.get(value) === weight),
+    "aria-label": `${label} weight, ${weight} of a set`,
+    onClick: () => {
+      chosen.set(value, weight);
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other.dataset.weight === String(weight)));
+    },
+  }));
+  return h("div", { class: "weight-choice", role: "group", "aria-label": `${label} weight` }, buttons);
+}
+
+// A group of checkboxes, `checked` ticked to begin with; selected() returns the ticked values. With `weights` (the
+// stored secondaryWeights, {} for none) each ticked value also shows a weight choice, starting at 0.5 where there is
+// no stored weight, and weights() returns { value: weight } for the ticked values.
+function checkboxGroup(legend, values, group, checked = [], weights = null) {
+  const chosen = new Map(values.map((value) => [value, weights?.[value] ?? 0.5]));
   const inputs = values.map((value) => h("input", { type: "checkbox", value, "data-group": group, checked: checked.includes(value) }));
-  const element = h(
-    "fieldset",
-    { class: "checks" },
-    h("legend", {}, legend),
-    values.map((value, index) => h("label", { class: "check" }, inputs[index], formatLabel(value))),
-  );
-  return { element, selected: () => inputs.filter((input) => input.checked).map((input) => input.value) };
+  const rows = values.map((value, index) => {
+    const label = h("label", { class: "check" }, inputs[index], formatLabel(value));
+    if (weights === null) return label;
+    const choice = weightChoice(value, formatLabel(value), chosen);
+    choice.hidden = !inputs[index].checked;
+    inputs[index].addEventListener("change", () => {
+      choice.hidden = !inputs[index].checked;
+    });
+    return h("div", { class: "weight-row" }, label, choice);
+  });
+  const element = h("fieldset", { class: "checks" }, h("legend", {}, legend), rows);
+  const selected = () => inputs.filter((input) => input.checked).map((input) => input.value);
+  return { element, selected, weights: () => Object.fromEntries(selected().map((value) => [value, chosen.get(value)])) };
 }
 
 // The ids the form offers, plus any the record already has that it does not offer (an id a later model adds and
@@ -426,7 +455,7 @@ function customForm(ctx, existing = null) {
   // Every id the model accepts (ALL_MUSCLES, ALL_EQUIPMENT), neck and abductors included.
   const muscles = offered(ALL_MUSCLES, [...has("primaryMuscles"), ...has("secondaryMuscles")]);
   const primary = checkboxGroup("Primary muscles (at least one)", muscles, "primary", has("primaryMuscles"));
-  const secondary = checkboxGroup("Secondary muscles", muscles, "secondary", has("secondaryMuscles"));
+  const secondary = checkboxGroup("Secondary muscles", muscles, "secondary", has("secondaryMuscles"), (editing ? existing.secondaryWeights : null) ?? {});
   const equipment = checkboxGroup("Equipment", offered(ALL_EQUIPMENT, has("equipmentTags")), "equipment", has("equipmentTags"));
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "custom-error" });
   const close = () => Object.assign(log, { addingCustom: false, editingCustom: null });
@@ -462,6 +491,8 @@ function customForm(ctx, existing = null) {
     primaryMuscles: primary.selected(),
     secondaryMuscles: secondary.selected(),
     equipmentTags: equipment.selected(),
+    // No secondary muscle, no weights: nothing to store.
+    secondaryWeights: secondary.selected().length > 0 ? secondary.weights() : undefined,
   });
   const form = h(
     "form",

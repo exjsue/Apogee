@@ -247,6 +247,27 @@ fieldset.checks legend { width: 100%; }
 
 .check { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; margin: 4px 0; }
 .check input { width: 20px; height: 20px; }
+/* Custom exercise form: the weight of a ticked secondary muscle, on its own line under the muscle. The colours are
+   the tokens, so light and dark mode follow them. */
+.weight-row { display: contents; }
+.weight-choice { display: flex; flex-wrap: wrap; flex-basis: 100%; margin: 0 0 8px; }
+.weight-button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 4px 8px;
+  border-radius: 0;
+  font-size: 0.875rem;
+}
+.weight-button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.weight-button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.weight-button + .weight-button { border-left: 0; }
+.weight-button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
 
 /* lists */
 

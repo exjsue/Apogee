@@ -478,16 +478,17 @@ export function createStore(adapter) {
     });
   }
 
-  // Replaces the name, primary and secondary muscles and equipment tags of one of the user's own exercises (all
-  // four: an absent list becomes empty); every other field stays. Read, checked and written in ONE transaction, so
+  // Replaces the name, primary and secondary muscles, equipment tags and secondary weights of one of the user's own
+  // exercises (an absent list becomes empty; absent weights are removed, so every secondary counts 0.5); every other
+  // field stays, the id included, so the exercise's history stays attached. Read, checked and written in ONE transaction, so
   // an exercise removed or hidden meanwhile is refused, never brought back. The name must not be another stored
   // exercise's (requireFreeName). Resolves the saved record.
-  async function updateCustomExercise(id, { name, primaryMuscles, secondaryMuscles, equipmentTags } = {}) {
+  async function updateCustomExercise(id, { name, primaryMuscles, secondaryMuscles, equipmentTags, secondaryWeights } = {}) {
     requireId(id);
     return adapter.transaction(["exercises"], "readwrite", async (tx) => {
       const stored = await requireCustom(tx, id);
       if (stored.retired === true) throw new Error("This exercise is hidden. Show it again before editing it.");
-      const next = createExercise({ ...stored, name, primaryMuscles, secondaryMuscles, equipmentTags });
+      const next = createExercise({ ...stored, name, primaryMuscles, secondaryMuscles, equipmentTags, secondaryWeights });
       requireFreeName(await tx.getAll("exercises"), next.name, id);
       await tx.put("exercises", next);
       return next;

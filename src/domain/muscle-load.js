@@ -8,16 +8,30 @@
 // is split by when each set was done.
 //
 // Credit: every counted set gives each primary muscle of its exercise the primary credit and each secondary
-// muscle the secondary credit. A muscle listed as both primary and secondary is credited as primary only,
-// once. An exercise is found by its id (exerciseId on the entry), never by name.
+// muscle its own weight (secondaryWeightOf). A muscle listed as both primary and secondary is credited as primary
+// only, once. An exercise is found by its id (exerciseId on the entry), never by name. weighted is the exact sum;
+// a view rounds a muscle's total once, at the end (roundToHalf), never per set.
 //
 // History is joined to muscles here, at read time, from the exercise as it is stored now. Nothing about
 // muscles is copied onto entries or sets.
 
-import { ALL_MUSCLES } from "./model.js";
+import { ALL_MUSCLES, SECONDARY_WEIGHT_STEPS } from "./model.js";
 
 // The default credit. Contested numbers, so they are a parameter of computeMuscleLoad, changed in one place.
+// secondary is the weight of a secondary muscle that has no weight of its own.
 export const DEFAULT_CREDIT = Object.freeze({ primary: 1.0, secondary: 0.5 });
+
+// A per-muscle total rounded to the nearest 0.5. Applied once to a total, never to a single set.
+export const roundToHalf = (value) => Math.round(value * 2) / 2;
+
+// The weight of one secondary muscle. A default exercise (isCustom false) takes it from the bundled catalog weights
+// (defaultWeights, by id), never from its stored copy, so new numbers reach old installs without a rewrite. A custom
+// exercise takes it from its own secondaryWeights. A missing or unusable weight is the fallback (credit.secondary).
+export function secondaryWeightOf(exercise, muscle, defaultWeights, fallback) {
+  const own = exercise.isCustom === true ? exercise.secondaryWeights : defaultWeights?.[exercise.id];
+  const weight = own !== null && typeof own === "object" && Object.hasOwn(own, muscle) ? own[muscle] : undefined;
+  return SECONDARY_WEIGHT_STEPS.includes(weight) ? weight : fallback;
+}
 
 function requireCredit(credit) {
   for (const key of ["primary", "secondary"]) {
@@ -47,6 +61,7 @@ function timeOf(completedAt) {
 // exercises: the stored exercises, an array of records or a Map by id
 // window:    { start, end } in ms; start inclusive, end exclusive
 // credit:    { primary, secondary }
+// defaultWeights: { exerciseId: { muscle: weight } } for default exercises (src/catalog/secondary-weights.js)
 //
 // Returns { muscles, skipped }:
 //   muscles  one { weighted, primarySets, secondarySets } for EVERY id in ALL_MUSCLES, zeros included.
@@ -65,7 +80,7 @@ function timeOf(completedAt) {
 //              ALL_MUSCLES (an empty list when nothing counted), one entry per exercise and role; the weighted
 //              of a muscle's entries adds up to that muscle's weighted
 //   lastAt     { muscleId: ms of the latest counted set that gave the muscle a credit above 0, or null }
-export function computeMuscleLoad({ workouts, exercises, window: range, credit = DEFAULT_CREDIT, detail = false }) {
+export function computeMuscleLoad({ workouts, exercises, window: range, credit = DEFAULT_CREDIT, defaultWeights = {}, detail = false }) {
   requireCredit(credit);
   requireWindow(range);
   if (!Array.isArray(workouts)) throw new TypeError("workouts must be an array");
@@ -126,9 +141,10 @@ export function computeMuscleLoad({ workouts, exercises, window: range, credit =
       }
       for (const muscle of secondary) {
         if (primary.has(muscle)) continue;
-        muscles[muscle].weighted += counted * credit.secondary;
+        const weight = secondaryWeightOf(exercise, muscle, defaultWeights, credit.secondary);
+        muscles[muscle].weighted += counted * weight;
         muscles[muscle].secondarySets += counted;
-        note(muscle, "secondary", credit.secondary);
+        note(muscle, "secondary", weight);
       }
     }
   }

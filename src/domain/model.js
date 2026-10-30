@@ -47,6 +47,12 @@ export function exerciseV3Defaults(record) {
   };
 }
 
+// The weights a custom exercise's secondary muscle may have: how much of a working set it is credited with. Stored
+// as the optional secondaryWeights { muscle: weight }; a secondary muscle without one counts 0.5 (DEFAULT_CREDIT in
+// muscle-load.js). Optional, so records saved before it need no migration. Default exercises never store it: theirs
+// are read from src/catalog/secondary-weights.js.
+export const SECONDARY_WEIGHT_STEPS = Object.freeze([0.25, 0.5, 0.75, 1]);
+
 // Maximum lengths, in characters (Unicode code points) after normalization.
 export const NAME_MAX_LENGTH = 80;
 export const NOTES_MAX_LENGTH = 500;
@@ -166,6 +172,18 @@ function requireOneOf(value, field, allowed, what) {
   return value;
 }
 
+// secondaryWeights (see SECONDARY_WEIGHT_STEPS): only on a custom exercise, each key one of its secondary muscles.
+// Returns a copy with the keys in secondary-muscle order.
+function requireSecondaryWeights(value, secondary, isCustom) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) fail("secondaryWeights must be an object");
+  if (!isCustom) fail("secondaryWeights is only stored on a custom exercise");
+  for (const [muscle, weight] of Object.entries(value)) {
+    if (!secondary.includes(muscle)) fail("secondaryWeights must only name secondary muscles");
+    if (!SECONDARY_WEIGHT_STEPS.includes(weight)) fail(`secondaryWeights values must be one of ${SECONDARY_WEIGHT_STEPS.join(", ")}`);
+  }
+  return Object.fromEntries(secondary.filter((muscle) => Object.hasOwn(value, muscle)).map((muscle) => [muscle, value[muscle]]));
+}
+
 // origin is "custom" exactly when the user made the exercise.
 function requireOrigin(value, isCustom) {
   if (!ORIGINS.includes(value)) fail(`origin must be one of ${ORIGINS.join(", ")}`);
@@ -212,7 +230,7 @@ function requireInput(input) {
 export function createExercise(input) {
   const {
     id, name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom = false, defaultRestSeconds,
-    baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired,
+    baseMovementId, equipment, variations, origin, upstreamId, catalogVersion, retired, secondaryWeights,
   } = requireInput(input);
   // null (or missing, as in data saved before schema version 2) means the app's
   // default rest, 3:00. A number is this exercise's own default, in seconds.
@@ -247,6 +265,8 @@ export function createExercise(input) {
     upstreamId: upstreamId === undefined || upstreamId === null ? null : requireNonEmptyString(upstreamId, "upstreamId"),
     catalogVersion: catalogVersion === undefined || catalogVersion === null ? null : requireInteger(catalogVersion, "catalogVersion", 1),
     retired: retired === undefined ? false : requireBoolean(retired, "retired"),
+    // Absent stays absent, so a record saved before weights existed keeps its exact shape.
+    ...(secondaryWeights === undefined ? {} : { secondaryWeights: requireSecondaryWeights(secondaryWeights, secondary, record.isCustom) }),
   };
 }
 

@@ -107,7 +107,7 @@ test("emit: catalog.js is a module whose entries match catalog.json field for fi
     assert.ok(info.includes(`export const CATALOG_VERSION = ${module.CATALOG_VERSION};`));
     assert.ok(info.includes(`export const CATALOG_COUNT = ${module.CATALOG.length};`));
     assert.ok(!/https?:\/\//.test(info));
-    assert.deepEqual(fs.readdirSync(emitFolder).sort(), ["NOTICE.md", "catalog-info.js", "catalog.js", "seed-grouping.js"]);
+    assert.deepEqual(fs.readdirSync(emitFolder).sort(), ["NOTICE.md", "catalog-info.js", "catalog.js", "secondary-weights.js", "seed-grouping.js"]);
   });
 });
 
@@ -261,7 +261,7 @@ test("emit: only the library service imports catalog.js and catalog-info.js, onl
   const groupingUsers = referring(/seed-grouping/);
   assert.ok(groupingUsers.length > 0 && groupingUsers.every((file) => MAY_IMPORT_SEED_GROUPING.includes(file)), `seed-grouping.js is used by: ${groupingUsers.join(", ")}`);
   assert.deepEqual(findPrecacheFiles().filter((f) => f.includes("catalog")), [
-    "src/app/catalog.js", "src/catalog/catalog-info.js", "src/catalog/catalog.js", "src/catalog/seed-grouping.js", "src/storage/catalog-store.js",
+    "src/app/catalog.js", "src/catalog/catalog-info.js", "src/catalog/catalog.js", "src/catalog/secondary-weights.js", "src/catalog/seed-grouping.js", "src/storage/catalog-store.js",
   ]);
   const manifest = fs.readFileSync(path.join(ROOT, "sw-manifest.js"), "utf8");
   for (const file of ["seed-grouping.js", "catalog.js", "catalog-info.js"]) assert.ok(manifest.includes(`"./src/catalog/${file}"`), file);

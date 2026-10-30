@@ -54,6 +54,11 @@ export const RECORD_FIELDS = {
   templates: ["id", "name", "exercises"],
 };
 
+// Fields a record may have and may leave out (schema version 4 files only). An exercise saved before secondary
+// weights existed, or never edited since, has no secondaryWeights; every secondary muscle then counts 0.5. When
+// present it is checked like any other field.
+export const OPTIONAL_RECORD_FIELDS = { exercises: ["secondaryWeights"] };
+
 // The fields schema version 3 added to exercises.
 const V3_EXERCISE_FIELDS = ["baseMovementId", "equipment", "variations", "origin", "upstreamId", "catalogVersion", "retired"];
 
@@ -130,14 +135,15 @@ function describe(label, record, index) {
 }
 
 // Validates one section. Returns the records exactly as they will be stored.
-function validateSection(section, items, fieldsOf) {
+function validateSection(section, items, fieldsOf, optionalOf) {
   const { label, create } = RECORD_TYPES[section];
   const fields = fieldsOf[section];
+  const optional = optionalOf[section] ?? [];
   const seen = new Set();
   return items.map((item, index) => {
     const where = describe(label, item, index);
     if (!isPlainObject(item)) fail(`${where}: not an object`);
-    rejectUnknownFields(item, fields, where);
+    rejectUnknownFields(item, [...fields, ...optional], where);
     for (const field of fields) {
       if (!hasOwn(item, field)) fail(`${where}: required field "${field}" is missing`);
     }
@@ -154,7 +160,7 @@ function validateSection(section, items, fieldsOf) {
     // The stored record must equal the file's record exactly. The domain
     // functions normalize (for example timestamps to UTC); anything they
     // would change is rejected rather than silently rewritten.
-    for (const field of fields) {
+    for (const field of [...fields, ...optional.filter((name) => hasOwn(item, name))]) {
       if (!sameValue(record[field], item[field])) fail(`${where}: ${field} is not in its canonical form`);
     }
     return record;
@@ -202,7 +208,8 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
   const records = { templates: [] };
   // The file is checked against the field list of the schema it says it is.
   const fieldsOf = doc.schemaVersion >= 3 ? RECORD_FIELDS : doc.schemaVersion === 2 ? RECORD_FIELDS_V2 : RECORD_FIELDS_V1;
-  for (const section of sections) records[section] = validateSection(section, doc.data[section], fieldsOf);
+  const optionalOf = doc.schemaVersion >= 4 ? OPTIONAL_RECORD_FIELDS : {};
+  for (const section of sections) records[section] = validateSection(section, doc.data[section], fieldsOf, optionalOf);
   // An older file has none of the schema 3 fields: createExercise gave them their defaults, and its seeds get
   // their grouping here, by the same function the upgrade step uses.
   if (doc.schemaVersion < 3) records.exercises = records.exercises.map((record) => withSeedGrouping(record));

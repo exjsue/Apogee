@@ -3,7 +3,7 @@
 // Catalog version 1. Entries: 830.
 // Derived from the free-exercise-db project (yuhonas/free-exercise-db), file dist/exercises.json, commit 79ca7b47d77cd5a6dd7a50440e9f0bf24da6a142,
 // released under the Unlicense, plus entries written for Apogee (origin authored). See NOTICE.md.
-// Only the fields the app stores are here; no instructions, no images. The app does not import this file yet.
+// Only the fields the app stores are here; no instructions, no images.
 
 export const CATALOG_VERSION = 1;
 export const MUSCLE_IDS = ["abductors","abs","adductors","biceps","calves","chest","forearms","front_delts","glutes","hamstrings","lats","lower_back","neck","obliques","quads","rear_delts","side_delts","traps","triceps","upper_back"];

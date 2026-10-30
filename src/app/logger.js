@@ -673,8 +673,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
 
   // Creates a custom exercise. Names must be unique, ignoring case; a taken name throws with code NAME_TAKEN, and
   // hiddenExerciseId when it is one of the user's hidden exercises (requireFreeName).
-  async function addCustomExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes }) {
-    const exercise = createExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom: true });
+  async function addCustomExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes, secondaryWeights }) {
+    const exercise = createExercise({ name, primaryMuscles, secondaryMuscles, equipmentTags, notes, isCustom: true, secondaryWeights });
     requireFreeName(await store.listExercises(), exercise.name);
     return store.saveExercise(exercise);
   }
@@ -802,7 +802,9 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       if (found !== null) details.push(found);
     }
     const exercises = await store.listExercises();
-    const load = (start, stop, detail = false) => computeMuscleLoad({ workouts: details, exercises, window: { start, end: stop }, detail });
+    // Default exercises' secondary weights come from the bundled file, by id, at view time (loaded only here).
+    const { SECONDARY_WEIGHTS: defaultWeights } = await import("../catalog/secondary-weights.js");
+    const load = (start, stop, detail = false) => computeMuscleLoad({ workouts: details, exercises, window: { start, end: stop }, defaultWeights, detail });
     const recentStart = nowAt - WINDOW_DAYS * DAY_MS;
     const recent = load(recentStart, end, true);
     const longer = load(longerStart, end, true);
