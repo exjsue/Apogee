@@ -37,3 +37,14 @@ export function button(label, props = {}) {
 export function exerciseHeading(name, markCustom) {
   return h("h3", {}, name, markCustom ? [" ", h("span", { class: "name-mark" }, "Custom")] : null);
 }
+
+// The "3." or "W." that starts a set's line in a list: the set's number among the working sets, or a light-blue W
+// for a warm-up (read aloud as "Warm-up set"). `number` is null for a warm-up (see setNumbers).
+export function setMark(number) {
+  if (number !== null) return `${number}.`;
+  return [
+    h("span", { class: "warmup-mark", "data-region": "warmup", "aria-hidden": "true" }, "W"),
+    h("span", { class: "visually-hidden" }, "Warm-up set"),
+    ".",
+  ];
+}

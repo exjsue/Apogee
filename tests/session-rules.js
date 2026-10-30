@@ -936,3 +936,93 @@ rule("rest defaults: seeding adds missing exercises with the default null and ca
   assert.deepEqual(await store.seedExercises(SEED_EXERCISES, SEED_VERSION + 1), { added: 0, skipped: true });
   assert.equal((await store.getExercise(BENCH)).defaultRestSeconds, 120);
 });
+
+// ---- warm-up sets ----
+
+rule("warm-up: the number button flips only the flag; numbering skips warm-ups; a timer already running is untouched", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  const rows = [await logger.addSet(BENCH), await logger.addSet(BENCH), await logger.addSet(BENCH)];
+  await assert.rejects(logger.setWarmup(rows[0].id, "yes"), /true or false/);
+  await assert.rejects(logger.setWarmup("no-such-set", true), /not in the current workout/);
+  await logger.setWarmup(rows[0].id, true); // a planned row
+  const numbers = async () => allRows(await logger.getSession()).map((row) => row.number);
+  assert.deepEqual(await numbers(), [null, 1, 2]);
+  await logger.checkSet(rows[0].id, FIELDS); // checking a warm-up starts no timer
+  assert.equal(await store.getRunningTimer(), null);
+  await logger.checkSet(rows[1].id, FIELDS);
+  const timer = await store.getRunningTimer();
+  assert.equal(timer.setId, rows[1].id);
+
+  // a checked working set becomes a warm-up while its timer runs: the flag changes, nothing else does
+  const before = await store.getSet(rows[1].id);
+  await logger.setWarmup(rows[1].id, true);
+  assert.deepEqual(await store.getSet(rows[1].id), { ...before, isWarmup: true });
+  assert.deepEqual(await store.getRunningTimer(), timer);
+  const session = await logger.getSession();
+  assert.deepEqual(session.timer, timer);
+  assert.deepEqual([rowOf(session, rows[1].id).number, rowOf(session, rows[1].id).hasTimer, rowOf(session, rows[1].id).phase], [null, true, "resting"]);
+  assert.deepEqual(await numbers(), [null, null, 1]);
+  await logger.setWarmup(rows[1].id, false);
+  assert.deepEqual(await store.getSet(rows[1].id), before);
+  assert.deepEqual(await numbers(), [null, 1, 2]);
+  assert.deepEqual(await store.getRunningTimer(), timer);
+});
+
+rule("warm-up: set counts leave warm-ups out (Log tab, History list and detail), the delete question counts every set", async (ctx) => {
+  const { assert } = ctx;
+  const { logger } = await setup(ctx);
+  const a = await logger.addSet(BENCH);
+  const b = await logger.addSet(BENCH);
+  await logger.setWarmup(a.id, true);
+  await logger.checkSet(a.id, FIELDS);
+  await logger.checkSet(b.id, FIELDS);
+  const session = await logger.getSession();
+  assert.deepEqual([session.loggedCount, session.workingCount], [2, 1]);
+  assert.deepEqual([session.workout.setCount, session.workout.loggedSetCount], [1, 2]);
+  await logger.finishWorkout();
+  const [summary] = await logger.getHistory();
+  assert.deepEqual([summary.setCount, summary.loggedSetCount], [1, 2]);
+  const detail = await logger.getWorkoutDetail(summary.id);
+  assert.deepEqual([detail.setCount, detail.loggedSetCount], [1, 2]);
+});
+
+rule("warm-up: a warm-up is left out of records, PR history, the ignored count and the body totals; a set with no flag is a working set", async (ctx) => {
+  const { assert } = ctx;
+  const { store, logger } = await setup(ctx);
+  await store.setPreferredUnit("kg");
+  await pastWorkout(store, "w1", daysBefore(1), BENCH, [[5, 100, "kg"], [5, 90, "kg"], [1, 300, "kg", true], [30, 0, "kg", true]]);
+  const { records, history, ignored } = await logger.getRecords();
+  assert.equal(records[BENCH].weight.value, 100);
+  assert.equal(records[BENCH].reps, undefined); // the 30-rep bodyweight warm-up does not hold the most-reps record
+  assert.ok(history.every((entry) => entry.setId !== "w1-s2" && entry.setId !== "w1-s3"));
+  assert.equal(ignored, 0);
+  const withWarmups = (await logger.getMuscleStatus()).values;
+  await pastWorkout(store, "w2", daysBefore(1), SQUAT, [[5, 100, "kg"]]);
+  assert.equal((await logger.getMuscleStatus()).values.chest, withWarmups.chest); // other exercise: chest unchanged
+  assert.equal(withWarmups.chest, 2); // two working sets, not four
+  // old data: a stored set record with no isWarmup counts as a working set where it is read
+  const legacy = await store.getSet("w1-s0");
+  delete legacy.isWarmup;
+  const { records: legacyRecords } = (await import("../src/domain/strength.js")).personalRecords(
+    [{ ...legacy, workoutId: "w1", exerciseId: BENCH }], "kg",
+  );
+  assert.equal(legacyRecords[BENCH].weight.value, 100);
+});
+
+rule("warm-up: the flag is exported and comes back on import", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  const backup = createBackup(adapter);
+  const row = await logger.addSet(BENCH);
+  await logger.setWarmup(row.id, true);
+  await logger.checkSet(row.id, FIELDS);
+  const text = await backup.exportToText();
+  assert.deepEqual(parse(text).data.sets.map((set) => set.isWarmup), [true]);
+  await backup.importFromText(text, { confirmReplace: true });
+  assert.equal((await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets")))[0].isWarmup, true);
+  // import is strict by design: a set record without the flag is refused, not guessed
+  const stripped = parse(text);
+  delete stripped.data.sets[0].isWarmup;
+  await assert.rejects(backup.importFromText(JSON.stringify(stripped), { confirmReplace: true }), /isWarmup/);
+});

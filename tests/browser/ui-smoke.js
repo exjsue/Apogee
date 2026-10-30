@@ -3049,3 +3049,73 @@ rule("tabs: selecting Body shows the Body heading and no other panel", async (ct
     ctx.assert.equal($(root, '[data-action="tab"][data-tab="body"]').getAttribute("aria-current"), "page");
   });
 });
+
+// ---- warm-up sets ----
+
+const numberButtons = (root) => [...root.querySelectorAll('li.set-row [data-action="toggle-warmup"]')];
+
+rule("ui: the set number is a button that toggles a warm-up (W) and back, numbering skips warm-ups, with labels and aria-pressed", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await pickExercise(root, "bench", BENCH);
+    click(await waitFor(() => action(root, "add-set"), "the Add set button"));
+    await waitFor(() => numberButtons(root).length === 2, "two rows");
+    const state = () => numberButtons(root).map((b) => [b.textContent, b.getAttribute("aria-pressed"), b.getAttribute("aria-label")]);
+    ctx.assert.deepEqual(state(), [
+      ["1", "false", "Set 1, tap to mark as warm-up"],
+      ["2", "false", "Set 2, tap to mark as warm-up"],
+    ]);
+    ctx.assert.ok(numberButtons(root)[0].getBoundingClientRect().width >= 44 && numberButtons(root)[0].getBoundingClientRect().height >= 44);
+    click(numberButtons(root)[0]);
+    await waitFor(() => numberButtons(root)[0].textContent === "W", "the W");
+    ctx.assert.deepEqual(state(), [
+      ["W", "true", "Warm-up set, tap to mark as working set"],
+      ["1", "false", "Set 1, tap to mark as warm-up"],
+    ]);
+    // a checked warm-up starts no timer and has no rest line; marking a checked working set keeps its timer
+    const first = plannedRows(root)[0];
+    setValue(first.querySelector('[data-field="reps"]'), "5");
+    setValue(first.querySelector('[data-field="weight"]'), "40");
+    click(first.querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => loggedRows(root).length === 1, "the warm-up checked");
+    ctx.assert.equal(loggedRows(root)[0].querySelector(".rest-line"), null);
+    ctx.assert.equal(root.querySelector('[data-phase="resting"]'), null);
+    const second = plannedRows(root)[0];
+    setValue(second.querySelector('[data-field="reps"]'), "5");
+    setValue(second.querySelector('[data-field="weight"]'), "100");
+    click(second.querySelector('[data-action="toggle-set"]'));
+    await waitFor(() => root.querySelector('[data-phase="resting"]'), "the rest timer running");
+    click(numberButtons(root)[1]); // mark the resting working set as a warm-up: the timer keeps running
+    await waitFor(() => numberButtons(root)[1].textContent === "W", "the second W");
+    ctx.assert.ok(root.querySelector('[data-phase="resting"]'), "the timer is untouched");
+    click(numberButtons(root)[0]); // back to a working set
+    await waitFor(() => numberButtons(root)[0].textContent === "1", "the number back");
+    ctx.assert.deepEqual(state().map((s) => s[1]), ["false", "true"]);
+  }, { width: 390 }); // the real stylesheet is loaded, for the 44 px target
+});
+
+rule("ui: a finished workout's detail shows W on warm-up sets, numbers the working sets 1, 2, and never gives a warm-up a PR label", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openWorkout(root, 0);
+    const lines = [...root.querySelectorAll(".card.entry li")];
+    ctx.assert.equal(lines.length, 3);
+    ctx.assert.equal(lines[0].querySelector('[data-region="warmup"]').textContent, "W");
+    ctx.assert.equal(lines[0].querySelector('[data-region="pr"]'), null);
+    ctx.assert.ok(lines[1].textContent.startsWith("1."));
+    ctx.assert.ok(lines[2].textContent.startsWith("2."));
+    ctx.assert.equal(lines[1].querySelector('[data-region="warmup"]'), null);
+    ctx.assert.equal(lines[0].dataset.warmup, "true");
+  }, {
+    prepare: async (store) => {
+      const at = new Date(Date.now() - 24 * HOUR).toISOString();
+      const sets = [[300, true], [100, false], [90, false]].map(([weightValue, isWarmup], order) => ({
+        id: `ws-${order}`, entryId: "we", order, reps: 5, weightValue, weightUnit: "kg", isWarmup, restSeconds: null, completedAt: at,
+      }));
+      await store.setPreferredUnit("kg");
+      await store.saveWorkoutWithDetails(
+        { id: "ww", startedAt: at, endedAt: at, notes: "" },
+        [{ id: "we", workoutId: "ww", exerciseId: BENCH, order: 0, supersetGroup: null, notes: "" }],
+        sets,
+      );
+    },
+  });
+});

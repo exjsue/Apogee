@@ -21,6 +21,22 @@ export async function perform(ctx, action) {
   await ctx.rerender();
 }
 
+// What the row's labels call it: "set 2" (its number among the working sets) or "warm-up set".
+const setName = (row) => (row.isWarmup ? "warm-up set" : `set ${row.number}`);
+
+// ---- the set number: a button that turns the set into a warm-up (a light-blue W) and back ----
+
+function numberButton(ctx, row) {
+  return button(row.isWarmup ? "W" : String(row.number), {
+    class: "set-num",
+    "data-action": "toggle-warmup",
+    "data-set-id": row.id,
+    "aria-pressed": String(row.isWarmup),
+    "aria-label": row.isWarmup ? "Warm-up set, tap to mark as working set" : `Set ${row.number}, tap to mark as warm-up`,
+    onClick: () => perform(ctx, () => ctx.services.logger.setWarmup(row.id, !row.isWarmup)),
+  });
+}
+
 // ---- delete: a small × in the row, and the question on a line of its own ----
 
 function deleteButton(ctx, row, exerciseName, index) {
@@ -28,7 +44,7 @@ function deleteButton(ctx, row, exerciseName, index) {
   return button("×", {
     class: "delete-button",
     "data-action": "delete-set",
-    "aria-label": `Delete set ${index + 1} of ${exerciseName}`,
+    "aria-label": `Delete ${setName(row)} of ${exerciseName}`,
     onClick: () => {
       log.confirmDeleteSetId = row.id;
       return ctx.rerender();
@@ -152,7 +168,7 @@ function restLine(ctx, row, index, exerciseName) {
     time = button(formatRest(row.seconds), {
       class: "rest-time",
       "data-action": "edit-rest",
-      "aria-label": `Rest time for set ${index + 1} of ${exerciseName}: ${formatRest(row.seconds)}. Tap to change.`,
+      "aria-label": `Rest time for ${setName(row)} of ${exerciseName}: ${formatRest(row.seconds)}. Tap to change.`,
       onClick: () => {
         ctx.state.log.editingRestId = row.id;
         return ctx.rerender();
@@ -196,14 +212,14 @@ function plannedCells(ctx, row, index, exerciseName) {
   const weight = h("input", {
     type: "text", inputmode: "decimal", enterkeyhint: "next", autocomplete: "off", "data-field": "weight",
     value: row.weight, "data-saved": row.weight, placeholder: ghostWeight === "" ? null : ghostWeight,
-    "aria-label": `Weight in ${unit}, set ${index + 1} of ${exerciseName}`
+    "aria-label": `Weight in ${unit}, ${setName(row)} of ${exerciseName}`
       + (ghostWeight === "" ? "" : `, suggested ${ghostWeight} ${ctx.unit}, not logged yet`),
     onChange: (event) => save(event.target, (sent) => ({ weight: sent, unit })),
   });
   const reps = h("input", {
     type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off", "data-field": "reps",
     value: row.reps, "data-saved": row.reps, placeholder: ghostReps === "" ? null : ghostReps,
-    "aria-label": `Reps, set ${index + 1} of ${exerciseName}` + (ghostReps === "" ? "" : `, suggested ${ghostReps} reps, not logged yet`),
+    "aria-label": `Reps, ${setName(row)} of ${exerciseName}` + (ghostReps === "" ? "" : `, suggested ${ghostReps} reps, not logged yet`),
     onChange: (event) => save(event.target, (sent) => ({ reps: sent })),
   });
   return {
@@ -223,7 +239,7 @@ function loggedCells(ctx, row, index, exerciseName) {
   const edit = (label, ...content) => button(content, {
     class: "cell-edit",
     "data-action": "edit-set",
-    "aria-label": `Edit set ${index + 1} of ${exerciseName}: ${label}`,
+    "aria-label": `Edit ${setName(row)} of ${exerciseName}: ${label}`,
     onClick: () => {
       ctx.state.log.editingSetId = row.id;
       return ctx.rerender();
@@ -254,11 +270,11 @@ function setEditor(ctx, row, index, exerciseName) {
   const repsText = String(row.reps);
   const weight = h("input", {
     type: "text", inputmode: "decimal", enterkeyhint: "next", autocomplete: "off", "data-field": "edit-weight",
-    value: weightText, "data-saved": weightText, "aria-label": `Weight in ${row.unit}, set ${index + 1} of ${exerciseName}`,
+    value: weightText, "data-saved": weightText, "aria-label": `Weight in ${row.unit}, ${setName(row)} of ${exerciseName}`,
   });
   const reps = h("input", {
     type: "text", inputmode: "numeric", enterkeyhint: "done", autocomplete: "off", "data-field": "edit-reps",
-    value: repsText, "data-saved": repsText, "aria-label": `Reps, set ${index + 1} of ${exerciseName}`,
+    value: repsText, "data-saved": repsText, "aria-label": `Reps, ${setName(row)} of ${exerciseName}`,
   });
   const error = h("p", { class: "error", role: "alert", hidden: true, "data-region": "edit-set-error" });
   return h(
@@ -324,7 +340,7 @@ function moveLine(ctx, rows, index, exerciseName) {
     class: "move-button",
     "data-action": `move-set-${name}`,
     "data-set-id": row.id,
-    "aria-label": `Move set ${index + 1} of ${exerciseName} ${name}`,
+    "aria-label": `Move ${setName(row)} of ${exerciseName} ${name}`,
     disabled: to < 0 || to >= rows.length,
     onClick: () => {
       ctx.state.focus = moveFocus((d) => forId(`move-set-${d}`, "data-set-id", row.id), name, to, rows.length - 1);
@@ -351,7 +367,7 @@ function setRow(ctx, row, index, exerciseName, rows, reordering) {
     "data-action": "toggle-set",
     "data-set-id": row.id,
     "aria-pressed": String(logged),
-    "aria-label": `${logged ? "Uncheck" : "Check"} set ${index + 1} of ${exerciseName}`,
+    "aria-label": `${logged ? "Uncheck" : "Check"} ${setName(row)} of ${exerciseName}`,
     "data-anim": toggled ? (logged ? "check" : "uncheck") : null,
     onClick: () => perform(ctx, async () => {
       if (logged) await logger.uncheckSet(row.id);
@@ -369,7 +385,7 @@ function setRow(ctx, row, index, exerciseName, rows, reordering) {
     h(
       "div",
       { class: "set-main set-grid" },
-      h("span", { class: "set-num" }, String(index + 1)),
+      numberButton(ctx, row),
       cells.weightCell,
       cells.repsCell,
       toggle,

@@ -1,7 +1,8 @@
 // The History tab: finished workouts, newest first, with a detail that can be deleted.
 
-import { h, button, exerciseHeading } from "./dom.js";
+import { h, button, exerciseHeading, setMark } from "./dom.js";
 import { formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
+import { isWarmupSet, setNumbers } from "../domain/workout-plan.js";
 
 export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, notice: null, error: null });
 
@@ -84,7 +85,7 @@ function deleteSection(ctx, workout) {
     h(
       "p",
       {},
-      `Delete this workout and its ${formatCount(workout.setCount, "set")}? This cannot be undone. `
+      `Delete this workout and its ${formatCount(workout.loggedSetCount, "set")}? This cannot be undone. `
       + "If you are not sure, export your data first (Settings, Backup).",
     ),
     button("Delete workout", {
@@ -156,6 +157,7 @@ async function detail(ctx, id) {
     workout.endedAt ? h("p", { class: "muted" }, `Finished ${formatDateTime(workout.endedAt)}`) : null,
   );
   for (const entry of workout.entries) {
+    const numbers = setNumbers(entry.sets);
     const mine = rec?.records[entry.exerciseId] ?? {};
     const parts = [["weight", "Heaviest"], ["e1rm", "Est. 1RM"], ["reps", "Most reps"]]
       .filter(([type]) => mine[type])
@@ -170,13 +172,14 @@ async function detail(ctx, id) {
         { class: "sets" },
         entry.sets.map((set, index) => h(
           "li",
-          {},
+          { "data-warmup": isWarmupSet(set) ? "true" : null },
           h(
             "span",
             { class: "set-text" },
-            `${index + 1}. ${formatCount(set.reps, "rep")} · ${weightText(set, ctx.unit)}`,
+            setMark(numbers[index]),
+            ` ${formatCount(set.reps, "rep")} · ${weightText(set, ctx.unit)}`,
           ),
-          prSets.has(set.id)
+          !isWarmupSet(set) && prSets.has(set.id)
             ? h("span", { class: "pr-label", "data-region": "pr" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
             : null,
         )),

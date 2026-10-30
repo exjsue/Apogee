@@ -91,6 +91,7 @@ export function updateRow(plan, id, patch) {
       next.unit = patch.unit;
     }
     if ("restSeconds" in patch) next.restSeconds = patch.restSeconds;
+    if ("isWarmup" in patch) next.isWarmup = patch.isWarmup === true;
     return next;
   });
   return { ...plan, rows };
@@ -141,6 +142,19 @@ function loggedRow(set, fallback) {
   };
 }
 
+// A set (or row) without the flag is a working set: only isWarmup === true makes a warm-up.
+export const isWarmupSet = (set) => set != null && set.isWarmup === true;
+
+// How many of the sets are working sets (warm-ups never count in a set count).
+export const workingSetCount = (sets) => sets.filter((set) => !isWarmupSet(set)).length;
+
+// Each set's number among the working sets, in the order given: 1, 2, 3 ..., and null for a warm-up,
+// which never takes a number (W, 1, 2, 3).
+export function setNumbers(sets) {
+  let next = 1;
+  return sets.map((set) => (isWarmupSet(set) ? null : next++));
+}
+
 // The heaviest set of a list (one exercise in one workout), as ghost text { reps, weight, unit },
 // or null if it has none. Warm-ups never count. Weights are compared in kg, so 100 kg beats
 // 220 lb; equal weights go to more reps, then to the earlier set (lower order). The weight
@@ -149,7 +163,7 @@ export function heaviestSet(sets) {
   let best = null;
   let bestKg = 0;
   for (const set of sets) {
-    if (set.isWarmup) continue;
+    if (isWarmupSet(set)) continue;
     const kg = convertWeight(set.weightValue, set.weightUnit, "kg");
     const better = best === null || kg > bestKg
       || (kg === bestKg && (set.reps > best.reps || (set.reps === best.reps && set.order < best.order)));
@@ -184,7 +198,10 @@ function filledIn(row, ghost) {
 export function ghostFor(rows, index, lastBest = null) {
   const row = rows[index];
   if (row === undefined || row.kind === "logged") return null;
-  const source = index === 0 ? lastBest : filledIn(rows[index - 1], ghostFor(rows, index - 1, lastBest));
+  // A working row copies the nearest working row above it, never a warm-up; a warm-up copies the row above.
+  let above = index - 1;
+  if (!isWarmupSet(row)) while (above >= 0 && isWarmupSet(rows[above])) above -= 1;
+  const source = above < 0 ? lastBest : filledIn(rows[above], ghostFor(rows, above, lastBest));
   if (source === null) return null;
   const reps = isBlank(row.reps) ? source.reps : "";
   const weight = isBlank(row.weight) ? source.weight : "";
@@ -256,10 +273,12 @@ export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, 
     const planned = plan.rows.filter((row) => row.exerciseId === exerciseId).map((row) => plannedRow(row, fallback));
     const ordered = [...logged, ...planned]
       .sort((a, b) => a.order - b.order || (a.kind === b.kind ? 0 : a.kind === "logged" ? -1 : 1));
+    const numbers = setNumbers(ordered);
     const rows = ordered
       .map((row, index) => {
         const phase = setPhase({ logged: row.kind === "logged", setId: row.id, timer, nowMs });
-        const hasTimer = !row.isWarmup;
+        // A warm-up has no timer line, unless a timer is running on it (a set marked as a warm-up after it was checked).
+        const hasTimer = !row.isWarmup || phase === "resting";
         let seconds = 0;
         let fraction = 0;
         if (phase === "template") {
@@ -270,7 +289,7 @@ export function buildExerciseBlocks({ entries, sets, plan, names, timer, nowMs, 
           fraction = fractionRemaining(timer, nowMs);
         }
         const ghost = ghostFor(ordered, index, lastBest.get(exerciseId) ?? null);
-        return { ...row, phase, hasTimer, seconds, fraction, ghost };
+        return { ...row, number: numbers[index], phase, hasTimer, seconds, fraction, ghost };
       });
     return {
       exerciseId,

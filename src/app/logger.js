@@ -13,6 +13,7 @@ import {
 import {
   normalizePlan, addRow, updateRow, removeRow, bumpPlan, pruneOrphans, nextOrder as nextRowOrder, buildExerciseBlocks,
   heaviestSet, sameGhost, displayedExerciseIds, orderEntriesLike, swapped, reorderedRowOrders, applyRowOrders,
+  isWarmupSet, workingSetCount,
 } from "../domain/workout-plan.js";
 import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
 import { computeMuscleLoad } from "../domain/muscle-load.js";
@@ -67,7 +68,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const marked = ambiguousCustomIds(exercises);
     return {
       ...details,
-      setCount: details.entries.reduce((total, entry) => total + entry.sets.length, 0),
+      setCount: details.entries.reduce((total, entry) => total + workingSetCount(entry.sets), 0), // working sets only
+      loggedSetCount: details.entries.reduce((total, entry) => total + entry.sets.length, 0), // every set, for "delete N sets"
       entries: details.entries.map((entry) => ({
         ...entry,
         exerciseName: names.get(entry.exerciseId) ?? UNKNOWN_EXERCISE,
@@ -117,7 +119,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const { setId, startedAt, endsAt } = value;
     if (typeof setId !== "string" || !Number.isFinite(startedAt) || !Number.isFinite(endsAt) || endsAt < startedAt) return null;
     const set = sets.find((candidate) => candidate.id === setId);
-    return set === undefined || set.isWarmup ? null : { setId, startedAt, endsAt };
+    // A set marked as a warm-up after it was checked keeps the timer it started; a warm-up never starts one.
+    return set === undefined ? null : { setId, startedAt, endsAt };
   }
 
   // Everything the session functions need, read once. Planned rows whose exercise
@@ -150,7 +153,9 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const ids = [];
     for (const exerciseId of new Set(session.plan.rows.map((row) => row.exerciseId))) {
       const firstPlanned = Math.min(...session.plan.rows.filter((row) => row.exerciseId === exerciseId).map((row) => row.order));
-      const loggedOrders = session.sets.filter((set) => set.entryId === entryOf.get(exerciseId)).map((set) => set.order);
+      // Warm-ups never give a working row its ghost, so only working sets decide whether history is needed.
+      const loggedOrders = session.sets
+        .filter((set) => set.entryId === entryOf.get(exerciseId) && !isWarmupSet(set)).map((set) => set.order);
       if (loggedOrders.length === 0 || firstPlanned < Math.min(...loggedOrders)) ids.push(exerciseId);
     }
     return ids;
@@ -216,7 +221,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       timer: session.timer,
       nowMs: at,
       plannedCount: session.plan.rows.length,
-      loggedCount: session.sets.length,
+      loggedCount: session.sets.length, // every checked set: Finish and Discard care about all of them
+      workingCount: workingSetCount(session.sets), // what the "N sets" line shows
     };
   }
 
@@ -264,6 +270,27 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       const { meta, expectRev } = commit(session, plan);
       await store.setWorkoutMeta(meta, { expectRev });
       return plan.rows.find((row) => row.id === rowId);
+    });
+  }
+
+  // Marks a set, checked or not, as a warm-up (true) or a working set (false): only the flag changes. A
+  // checked set keeps its id, order, reps, weight, rest and completedAt, and the running timer is not
+  // touched (even when it belongs to this set). Planned rows live in the plan, checked sets in the workout.
+  async function setWarmup(setId, isWarmup) {
+    if (typeof isWarmup !== "boolean") throw new Error("isWarmup must be true or false");
+    return retryOnConflict(async () => {
+      const session = await readSession();
+      if (session.plan.rows.some((row) => row.id === setId)) {
+        const { meta, expectRev } = commit(session, updateRow(session.plan, setId, { isWarmup }));
+        await store.setWorkoutMeta(meta, { expectRev });
+        return isWarmup;
+      }
+      const set = session.sets.find((candidate) => candidate.id === setId);
+      if (session.status.kind === "none" || set === undefined) throw new Error("That set is not in the current workout");
+      requireNotStale(session.status);
+      const sets = session.sets.map((candidate) => (candidate.id === setId ? createWorkSet({ ...set, isWarmup }) : candidate));
+      await store.saveWorkoutWithDetails(session.workout, session.entries, sets, commit(session, session.plan)); // timer undefined: untouched
+      return isWarmup;
     });
   }
 
@@ -638,7 +665,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const { entries, sets } = splitDetails(await store.getWorkoutWithDetails(status.workout.id));
     const entry = entries.find((candidate) => candidate.exerciseId === exerciseId);
     if (entry === undefined) return null;
-    const own = sets.filter((set) => set.entryId === entry.id);
+    const own = sets.filter((set) => set.entryId === entry.id && !isWarmupSet(set));
     if (own.length === 0) return null;
     const last = own.reduce((best, set) => (set.order > best.order ? set : best));
     return { reps: last.reps, weightValue: last.weightValue, weightUnit: last.weightUnit };
@@ -802,6 +829,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     addSet,
     updatePlannedSet,
     checkSet,
+    setWarmup,
     uncheckSet,
     editSet,
     moveSet,

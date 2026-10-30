@@ -15,6 +15,8 @@
   --warn-bg: #fff4d6;
   --warn-line: #d8b45a;
   --focus: #2b6fd6;
+  --warmup-bg: #d6eaff; /* the warm-up W: light blue; text on it 7.24:1 */
+  --warmup-text: #0a4a8a;
   --figure-head-fill: #3a3a36; /* the Body diagram's head: dark in both modes, grey outline */
   --figure-head-line: #8a8980;
   --figure-pelvis-fill: #ffffff; /* the front view's pelvis: quiet, an outline only a little darker than the page, not a muscle */
@@ -38,6 +40,8 @@
     --warn-bg: #2b2413;
     --warn-line: #7a6320;
     --focus: #7ab0ff;
+    --warmup-bg: #123352; /* text on it 8.34:1 */
+    --warmup-text: #a8d4ff;
     --figure-head-fill: #0d0d0b;
     --figure-head-line: #8a8980;
     --figure-pelvis-fill: #1d1d1a;
@@ -506,14 +510,32 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 
 .set-grid {
   display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1.4fr) minmax(0, 1fr) 44px 44px;
+  grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1fr) 44px 44px;
   column-gap: 6px;
   align-items: center;
 }
 .set-head { margin-top: 2px; padding-bottom: 2px; font-size: 0.75rem; color: var(--muted); }
 .set-head > span { text-align: center; white-space: nowrap; }
 .sets li.set-row { display: block; padding: 6px 0; }
-.set-num { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The set number is a button: a 44 px target around a 28 px chip (the transparent border is the margin). Marked as a
+   warm-up it shows a light-blue W instead of the number. No transition or press animation. */
+button.set-num {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 8px solid transparent;
+  border-radius: 16px;
+  background: none;
+  background-clip: padding-box;
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: none;
+}
+button.set-num[aria-pressed="true"] { background-color: var(--warmup-bg); color: var(--warmup-text); }
+button.set-num:not(:disabled):active { transform: none; }
+.warmup-mark { padding: 0 4px; border-radius: 4px; background: var(--warmup-bg); color: var(--warmup-text); font-weight: 600; }
 
 /* The weight and reps cells: a field at least 44 px high with text of at least 16 px
    (a smaller size makes iOS zoom the page when the field is focused). */

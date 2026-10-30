@@ -2,7 +2,8 @@
 // and the workout actions. Only builds elements and passes input to the logger.
 // Parsing, validation and every decision happen in src/app and src/domain.
 
-import { h, button, exerciseHeading } from "./dom.js";
+import { h, button, exerciseHeading, setMark } from "./dom.js";
+import { setNumbers } from "../domain/workout-plan.js";
 import { ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { NAME_TAKEN } from "../domain/exercise-names.js";
@@ -53,24 +54,28 @@ function loggedList(ctx, entries) {
   return h(
     "div",
     { class: "entries" },
-    entries.map((entry) => h(
-      "div",
-      { class: "entry" },
-      exerciseHeading(entry.exerciseName, entry.markCustom),
-      h(
-        "ol",
-        { class: "sets" },
-        entry.sets.map((set, index) => h(
-          "li",
-          { "data-set-id": set.id },
-          h(
-            "span",
-            { class: "set-text" },
-            `${index + 1}. ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, ctx.unit)}`,
-          ),
-        )),
-      ),
-    )),
+    entries.map((entry) => {
+      const numbers = setNumbers(entry.sets);
+      return h(
+        "div",
+        { class: "entry" },
+        exerciseHeading(entry.exerciseName, entry.markCustom),
+        h(
+          "ol",
+          { class: "sets" },
+          entry.sets.map((set, index) => h(
+            "li",
+            { "data-set-id": set.id },
+            h(
+              "span",
+              { class: "set-text" },
+              setMark(numbers[index]),
+              ` ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, ctx.unit)}`,
+            ),
+          )),
+        ),
+      );
+    }),
   );
 }
 
@@ -134,7 +139,7 @@ function staleCard(ctx, session) {
     h(
       "p",
       {},
-      `It has ${formatCount(setCount, "set")} logged. Choose what to do with it before logging anything new.`,
+      `It has ${formatCount(workout.setCount, "set")} logged. Choose what to do with it before logging anything new.`,
     ),
     loggedList(ctx, workout.entries),
   );
@@ -194,7 +199,7 @@ function currentCard(ctx, session) {
       { class: "muted started-line", "data-region": "started" },
       h("span", {}, `Started ${formatDateTime(session.workout.startedAt)}`),
       " ",
-      h("span", { class: "started-count" }, `· ${formatCount(session.loggedCount, "set")}`),
+      h("span", { class: "started-count" }, `· ${formatCount(session.workingCount, "set")}`),
     ));
     card.elapsed = elapsed;
     if (session.loggedCount === 0 && session.plannedCount === 0) card.append(h("p", { class: "muted" }, "No sets yet."));

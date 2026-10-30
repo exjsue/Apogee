@@ -349,16 +349,19 @@ export function createStore(adapter) {
     );
     const workoutOfEntry = new Map(entries.map((entry) => [entry.id, entry.workoutId]));
     const entryCounts = new Map();
-    const setCounts = new Map();
+    const setCounts = new Map(); // working sets only: a warm-up is never counted
+    const loggedCounts = new Map(); // every set
     for (const entry of entries) entryCounts.set(entry.workoutId, (entryCounts.get(entry.workoutId) ?? 0) + 1);
     for (const set of sets) {
       const workoutId = workoutOfEntry.get(set.entryId);
-      setCounts.set(workoutId, (setCounts.get(workoutId) ?? 0) + 1);
+      loggedCounts.set(workoutId, (loggedCounts.get(workoutId) ?? 0) + 1);
+      if (set.isWarmup !== true) setCounts.set(workoutId, (setCounts.get(workoutId) ?? 0) + 1);
     }
     return workouts.sort(newestFirst).map((workout) => ({
       ...workout,
       entryCount: entryCounts.get(workout.id) ?? 0,
       setCount: setCounts.get(workout.id) ?? 0,
+      loggedSetCount: loggedCounts.get(workout.id) ?? 0,
     }));
   }
 

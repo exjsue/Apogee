@@ -119,3 +119,17 @@ test("plan: pruneOrphans drops rows and exercises that no longer exist, keeps lo
   const clean = addRow(emptyPlan(), row("a", "bench"));
   assert.equal(pruneOrphans(clean, new Set(["bench"])), clean);
 });
+
+test("setNumbers: warm-ups take no number; a set with no flag is a working set", async () => {
+  const { setNumbers, workingSetCount, ghostFor } = await import("../src/domain/workout-plan.js");
+  const sets = [{ isWarmup: true }, {}, { isWarmup: false }, { isWarmup: true }, { isWarmup: undefined }];
+  assert.deepEqual(setNumbers(sets), [null, 1, 2, null, 3]);
+  assert.equal(workingSetCount(sets), 3);
+  // a working row copies the nearest working row above, never a warm-up
+  const rows = [
+    { kind: "logged", reps: 5, weight: 100, unit: "kg", isWarmup: false },
+    { kind: "logged", reps: 5, weight: 40, unit: "kg", isWarmup: true },
+    { kind: "planned", reps: "", weight: "", unit: "kg", isWarmup: false },
+  ];
+  assert.deepEqual(ghostFor(rows, 2, null), { reps: "5", weight: "100", unit: "kg" });
+});
