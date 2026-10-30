@@ -177,3 +177,4 @@
 - [ ] Workout with only warm-ups can be finished and shows 0 sets (added 2026-10-30).
 - [ ] Edit with no weights argument resets secondaries to 0.5; make updateExercise preserve stored weights (store.updateCustomExercise; the form always sends weights, added 2026-10-30).
 - [ ] Upstream bench press (powerlifting) has triceps as primary; check catalog classification (Bench_Press_-_Powerlifting, added 2026-10-30).
+- [ ] core.autocrlf=true makes the working copy of src/catalog/*.js CRLF; the fresh-run catalog test (needs EXERCISE_CATALOG_INPUT) then fails locally; consider .gitattributes, John to decide (added 2026-10-30).
