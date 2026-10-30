@@ -1,5 +1,5 @@
 // Estimated one-rep max (e1RM) and personal records. Pure JavaScript: no DOM, no storage, no network, no clock.
-// Not used by the app yet (nothing imports this file).
+// Used by src/app/logger.js (getRecords); not shown in the UI yet.
 //
 // Input: a flat list of set records, one per stored set, with the entry's ids joined on by the caller (a stored
 // set has no exerciseId or workoutId of its own; they live on its workout entry):

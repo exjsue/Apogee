@@ -275,3 +275,105 @@ rule("listWorkoutSummaries returns entry and set counts, newest first", async (c
   ]);
   assert.equal(summaries[0].startedAt, "2026-06-01T10:00:00.000Z");
 });
+
+// ---- finished set records (the input of src/domain/strength.js) ----
+
+const ENDED = "2026-10-22T11:00:00.000Z";
+const finishedDetails = (id, entryCount, setsPerEntry) => {
+  const d = makeDetails(id, entryCount, setsPerEntry);
+  return { ...d, workout: { ...d.workout, endedAt: ENDED } };
+};
+// What listFinishedSetRecords should return for one stored set.
+const recordOf = (set, workoutId, exerciseId) => ({
+  id: set.id, workoutId, exerciseId, order: set.order, reps: set.reps, weightValue: set.weightValue,
+  weightUnit: set.weightUnit, isWarmup: set.isWarmup, completedAt: set.completedAt,
+});
+const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const rawEverything = (adapter) =>
+  adapter.transaction(["workouts", "entries", "sets", "exercises", "templates", "meta"], "readonly", async (tx) => ({
+    workouts: await tx.getAll("workouts"),
+    entries: await tx.getAll("entries"),
+    sets: await tx.getAll("sets"),
+    exercises: await tx.getAll("exercises"),
+    templates: await tx.getAll("templates"),
+    meta: await tx.getAll("meta"),
+  }));
+
+rule("listFinishedSetRecords returns only the sets of finished workouts; an unfinished workout's sets are left out", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await openSeeded(ctx);
+  assert.deepEqual(await store.listFinishedSetRecords(), []);
+  const done = finishedDetails("done", 1, 2);
+  await saveDetails(store, done);
+  await saveDetails(store, makeDetails("open", 1, 3));
+  const records = (await store.listFinishedSetRecords()).sort(byId);
+  assert.deepEqual(records.map((r) => r.id), ["done-e0-s0", "done-e0-s1"]);
+  assert.deepEqual(records, done.sets.map((s) => recordOf(s, "done", EXERCISE.id)));
+});
+
+rule("listFinishedSetRecords joins workoutId and exerciseId from each set's entry, across workouts and exercises", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await openSeeded(ctx);
+  await store.saveExercise(createExercise({ id: "ex-bench", name: "Bench", primaryMuscles: ["chest"] }));
+  const one = finishedDetails("w1", 2, 2);
+  one.entries[1] = { ...one.entries[1], exerciseId: "ex-bench" };
+  const two = finishedDetails("w2", 1, 1);
+  two.entries[0] = { ...two.entries[0], exerciseId: "ex-bench" };
+  await saveDetails(store, one);
+  await saveDetails(store, two);
+  const records = (await store.listFinishedSetRecords()).sort(byId);
+  assert.deepEqual(records.map((r) => [r.id, r.workoutId, r.exerciseId]), [
+    ["w1-e0-s0", "w1", EXERCISE.id],
+    ["w1-e0-s1", "w1", EXERCISE.id],
+    ["w1-e1-s0", "w1", "ex-bench"],
+    ["w1-e1-s1", "w1", "ex-bench"],
+    ["w2-e0-s0", "w2", "ex-bench"],
+  ]);
+  assert.deepEqual(records[2], recordOf(one.sets[2], "w1", "ex-bench"));
+});
+
+rule("listFinishedSetRecords still returns a set whose exercise is a hidden (retired) custom exercise", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await openSeeded(ctx);
+  await store.saveExercise(createExercise({ id: "c-mine", name: "My Fly", primaryMuscles: ["chest"], isCustom: true, retired: true }));
+  const d = finishedDetails("w", 1, 1);
+  d.entries[0] = { ...d.entries[0], exerciseId: "c-mine" };
+  await saveDetails(store, d);
+  assert.deepEqual(await store.listFinishedSetRecords(), [recordOf(d.sets[0], "w", "c-mine")]);
+});
+
+rule("listFinishedSetRecords skips a set whose entry is missing and a set whose entry's workout is missing", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store } = await openSeeded(ctx);
+  const d = finishedDetails("w", 1, 1);
+  await saveDetails(store, d);
+  const loose = { order: 0, reps: 5, weightValue: 100, weightUnit: "kg", isWarmup: false, restSeconds: null, completedAt: ENDED };
+  await adapter.transaction(["entries", "sets"], "readwrite", async (tx) => {
+    await tx.put("sets", { ...loose, id: "no-entry-set", entryId: "no-such-entry" });
+    await tx.put("entries", { id: "orphan-entry", workoutId: "no-such-workout", exerciseId: EXERCISE.id, order: 0 });
+    await tx.put("sets", { ...loose, id: "no-workout-set", entryId: "orphan-entry" });
+  });
+  assert.deepEqual(await store.listFinishedSetRecords(), [recordOf(d.sets[0], "w", EXERCISE.id)]);
+});
+
+rule("listFinishedSetRecords gives the same result when called again", async (ctx) => {
+  const { assert } = ctx;
+  const { store } = await openSeeded(ctx);
+  await saveDetails(store, finishedDetails("a", 2, 2));
+  await saveDetails(store, finishedDetails("b", 1, 3));
+  const first = await store.listFinishedSetRecords();
+  assert.equal(first.length, 7);
+  assert.deepEqual(await store.listFinishedSetRecords(), first);
+});
+
+rule("listFinishedSetRecords writes nothing: every store is identical before and after", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store } = await openSeeded(ctx);
+  await saveDetails(store, finishedDetails("done", 2, 2));
+  await saveDetails(store, makeDetails("open", 1, 1));
+  await store.setPreferredUnit("kg");
+  const before = await rawEverything(adapter);
+  const records = await store.listFinishedSetRecords();
+  records[0].weightValue = 999; // changing a returned record must not reach the store
+  assert.deepEqual(await rawEverything(adapter), before);
+});

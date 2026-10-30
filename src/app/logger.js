@@ -18,6 +18,7 @@ import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
 import { computeMuscleLoad } from "../domain/muscle-load.js";
 import { buildMuscleDetails } from "../domain/muscle-detail.js";
 import { computeBodyStatus, WINDOW_DAYS, NEGLECTED_WEEKS } from "../domain/body-status.js";
+import { prHistory, personalRecords } from "../domain/strength.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
 
 export const DEFAULT_STALE_AFTER_HOURS = 12;
@@ -784,6 +785,16 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return { ...computeBodyStatus({ recent, longer }), details: buildMuscleDetails({ recent, previous, longer, exercises, now: nowAt }) };
   }
 
+  // Personal records from the sets of finished workouts, in the preferred unit (src/domain/strength.js). Read only:
+  // weights are converted for comparing, never written back. Two reads, not one transaction.
+  async function getRecords() {
+    const sets = await store.listFinishedSetRecords();
+    const unit = await store.getPreferredUnit();
+    const { history, ignored } = prHistory(sets, unit);
+    const { records } = personalRecords(sets, unit);
+    return { unit, records, history, ignored };
+  }
+
   return {
     getStatus,
     getCurrent,
@@ -815,6 +826,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     findRecentExercises,
     getHistory,
     getMuscleStatus,
+    getRecords,
     deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
     saveWorkoutAsTemplate,

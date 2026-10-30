@@ -499,3 +499,40 @@ rule("logger: preferred unit passes through to the store", async (ctx) => {
   assert.equal(await logger.getPreferredUnit(), "kg");
   await assert.rejects(logger.setPreferredUnit("stone"), /unit must be/);
 });
+
+// ---- records (src/domain/strength.js) ----
+
+const rawSets = (adapter) => adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
+
+rule("logger: getRecords uses the preferred unit; changing it changes the converted values, never the stored ones", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  await logger.logSet(bench("5", "100", "kg"));
+  await logger.finishWorkout();
+  const stored = await rawSets(adapter);
+  const inLb = await logger.getRecords();
+  assert.equal(inLb.unit, "lb");
+  assert.equal(inLb.records[BENCH].weight.value, 220.5);
+  assert.equal(inLb.ignored, 0);
+  await logger.setPreferredUnit("kg");
+  const inKg = await logger.getRecords();
+  assert.equal(inKg.unit, "kg");
+  assert.equal(inKg.records[BENCH].weight.value, 100);
+  assert.equal(inKg.records[BENCH].e1rm.value, 116.7);
+  assert.deepEqual(inKg.history.map((entry) => entry.type), ["weight", "e1rm", "volume"]);
+  assert.deepEqual(await rawSets(adapter), stored);
+  assert.equal(stored[0].weightValue, 100);
+  assert.equal(stored[0].weightUnit, "kg");
+});
+
+rule("logger: getRecords passes the ignored count through", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  const logged = await logger.logSet(bench("5", "100", "kg"));
+  await logger.finishWorkout();
+  // A set in a unit the record maths does not know, written past the store's validation.
+  await adapter.transaction(["sets"], "readwrite", (tx) => tx.put("sets", { ...logged, id: "odd-unit", order: 1, weightUnit: "st" }));
+  const result = await logger.getRecords();
+  assert.equal(result.ignored, 1);
+  assert.equal(result.records[BENCH].weight.value, 220.5);
+});

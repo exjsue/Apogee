@@ -362,6 +362,33 @@ export function createStore(adapter) {
     }));
   }
 
+  // Every set of every FINISHED workout (endedAt set), flat, with workoutId and exerciseId joined on from its
+  // entry, read in one transaction (the input of src/domain/strength.js). A set whose entry or workout is missing is
+  // skipped. Read only: each record is a new object, never a stored one.
+  async function listFinishedSetRecords() {
+    const { workouts, entries, sets } = await adapter.transaction(
+      ["workouts", "entries", "sets"],
+      "readonly",
+      async (tx) => ({
+        workouts: await tx.getAll("workouts"),
+        entries: await tx.getAll("entries"),
+        sets: await tx.getAll("sets"),
+      }),
+    );
+    const finished = new Set(workouts
+      .filter((workout) => workout.endedAt !== null && workout.endedAt !== undefined)
+      .map((workout) => workout.id));
+    const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+    const records = [];
+    for (const set of sets) {
+      const entry = entryById.get(set.entryId);
+      if (entry === undefined || !finished.has(entry.workoutId)) continue;
+      const { id, order, reps, weightValue, weightUnit, isWarmup, completedAt } = set;
+      records.push({ id, workoutId: entry.workoutId, exerciseId: entry.exerciseId, order, reps, weightValue, weightUnit, isWarmup, completedAt });
+    }
+    return records;
+  }
+
   // All exercises, alphabetical by name.
   async function listExercises() {
     const exercises = await adapter.transaction(["exercises"], "readonly", (tx) => tx.getAll("exercises"));
@@ -559,6 +586,7 @@ export function createStore(adapter) {
     saveWorkoutWithDetails,
     listWorkouts,
     listWorkoutSummaries,
+    listFinishedSetRecords,
     getWorkoutWithDetails,
     deleteWorkout,
     discardWorkout,
