@@ -2095,6 +2095,94 @@ rule("motion: a new set row slides in over the shared motion length once, and a 
   }, { width: 375 });
 });
 
+// ---- motion, stage 3: every animated element has a duration above 0 when motion is allowed and exactly 0 when it is
+// reduced, and nothing waits for it. The suite is run once in each mode (Chrome's prefers-reduced-motion emulation). ----
+
+// The longest animation or transition length of an element, in seconds.
+const motionSeconds = (win, element, pseudo) => {
+  const style = win.getComputedStyle(element, pseudo);
+  return Math.max(0, ...[style.animationDuration, style.transitionDuration].flatMap((value) => value.split(",").map(parseFloat)));
+};
+
+// Polls for an element and measures it the moment it is found (a mark such as data-anim is only on the first drawing).
+const motionCatch = (win, find, what) => waitFor(() => {
+  const element = find();
+  return element ? { element, seconds: motionSeconds(win, element), running: element.getAnimations().some((a) => a.playState === "running") } : null;
+}, what);
+
+// The mark (data-anim) is only on the first drawing of an element and a redraw can come at any moment, so for the
+// panels the test checks that the code gave the element its data-enter key, then sets the mark itself and measures
+// what the stylesheet does with it.
+function motionProbe(win, element, what) {
+  if (!element || !element.dataset.enter) throw new Error(`${what} has no data-enter key, so the code would never mark it`);
+  element.dataset.anim = "in";
+  return { element, seconds: motionSeconds(win, element) };
+}
+
+function expectMotion(win, caught, what, wanted = caught.seconds) {
+  const allowed = win.matchMedia("(prefers-reduced-motion: no-preference)").matches;
+  if (allowed ? !(wanted > 0 && wanted <= 0.25) : wanted !== 0) throw new Error(`${what}: duration ${wanted}s, but motion is ${allowed ? "allowed (want 0 to 0.25 s)" : "reduced (want exactly 0)"}`);
+  if (!allowed && caught.element.getAnimations().length !== 0) throw new Error(`${what}: an animation runs under reduced motion`);
+}
+
+rule("motion (stage 3): the warm-up swap and the set check are animated when motion is allowed, 0 when reduced, and the new state is on screen while the animation still runs", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    const win = frame.contentWindow;
+    await pickExercise(root, "bench", BENCH);
+    click($(root, '[data-action="toggle-warmup"]'));
+    const on = await motionCatch(win, () => $(root, '[data-action="toggle-warmup"][aria-pressed="true"][data-anim="warmup"]'), "the W (aria-pressed true) with its mark");
+    ctx.assert.equal(on.element.textContent, "W");
+    expectMotion(win, on, "warm-up on");
+    click(on.element);
+    const off = await motionCatch(win, () => $(root, '[data-action="toggle-warmup"][aria-pressed="false"][data-anim="warmup"]'), "the number back (aria-pressed false) with its mark");
+    ctx.assert.equal(off.element.textContent, "1");
+    expectMotion(win, off, "warm-up off");
+    if (win.matchMedia("(prefers-reduced-motion: no-preference)").matches) ctx.assert.ok(on.running && off.running); // seen while the swap was still playing: nothing waited for it
+    await submitSet(root, "8", "100", "kg");
+    const check = await motionCatch(win, () => $(root, 'li.set-row[data-kind="logged"] .check-toggle[aria-pressed="true"][data-anim="check"]'), "the checked set's check with its mark");
+    expectMotion(win, check, "check button");
+    expectMotion(win, check, "check disc", motionSeconds(win, check.element, "::after"));
+  }, { width: 375 });
+});
+
+rule("motion (stage 3): the picker menu, the exercise form, the weight buttons and the Body diagram are animated when motion is allowed, 0 when reduced; weights change at once and focus still lands in the name field", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    const win = frame.contentWindow;
+    await goToTab(root, "body");
+    expectMotion(win, await motionCatch(win, () => diagram(root)?.querySelector("g.muscle .shape"), "a muscle shape"), "body diagram fill");
+    await goToTab(root, "log");
+    await openMenu(root, PRESS.id);
+    expectMotion(win, motionProbe(win, $(root, ".pick-list .menu"), "the picker menu"), "picker menu");
+    click($(root, '[data-action="edit-custom"]'));
+    const form = await waitFor(() => $(root, ".custom-form"), "the edit form");
+    expectMotion(win, motionProbe(win, form, "the edit form"), "edit form");
+    await waitFor(() => root.ownerDocument.activeElement === field(root, "custom-name"), "focus in the name field");
+    const buttons = weightButtons(root, "triceps");
+    expectMotion(win, { element: buttons[3], seconds: motionSeconds(win, buttons[3]) }, "weight button");
+    click(buttons[3]);
+    ctx.assert.deepEqual(pressedWeight(root, "triceps"), ["1"]); // read at once, no waiting
+    ctx.assert.equal(buttons[3].getAttribute("aria-pressed"), "true");
+    ctx.assert.equal(buttons[1].getAttribute("aria-pressed"), "false");
+    const transitions = buttons[3].getAnimations().filter((a) => a.constructor.name === "CSSTransition").length;
+    ctx.assert.equal(transitions > 0, win.matchMedia("(prefers-reduced-motion: no-preference)").matches); // the colour change eases, or is instant
+    click(action(root, "cancel-edit-custom"));
+    // Closing the form draws the picker again, and the picker reads its list on its own (not tracked by app.idle).
+    // Wait for the rows so that read is finished before the app is torn down and the next test deletes the database.
+    await waitFor(() => !$(root, ".custom-form") && pickRows(root).length > 0, "the form to close and the picker rows to come back");
+  }, { prepare: pressWorkout(undefined), width: 375 });
+});
+
+rule("motion (stage 3): the History detail, its Records line and a PR label fade in when motion is allowed, 0 when reduced", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    const win = frame.contentWindow;
+    await openWorkout(root, 1); // 5 x 100 kg, a record
+    expectMotion(win, motionProbe(win, $(root, ".entry"), "an exercise card"), "history detail");
+    expectMotion(win, motionProbe(win, region(root, "records"), "the Records line"), "records line");
+    expectMotion(win, motionProbe(win, region(root, "pr"), "the PR label"), "PR label");
+    ctx.assert.ok(region(root, "pr").textContent.includes("personal record")); // in the DOM at once
+  }, { prepare: async (store) => { await store.setPreferredUnit("kg"); await finishedWorkouts([[["5", "100"]], [["5", "90"]]])(store); }, width: 375 });
+});
+
 // ---- the Backup section inside Settings (step 1a: the Backup tab still exists) ----
 
 rule("settings: the Backup section sits below the Weight unit card; there is no Backup tab", async (ctx) => {

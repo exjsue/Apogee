@@ -498,7 +498,7 @@ function customForm(ctx, existing = null) {
     "form",
     {
       class: "custom-form",
-      "data-enter": editing ? `edit-custom:${existing.id}` : undefined,
+      "data-enter": editing ? `edit-custom:${existing.id}` : "add-custom",
       onSubmit: async (event) => {
         event.preventDefault();
         try {

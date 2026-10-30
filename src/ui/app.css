@@ -25,6 +25,12 @@
   --gutter: 16px;
   --motion: 200ms; /* the length of the Phase 1 motion below (panels, forms, notices, banners, button press) */
   --motion-tab: 250ms; /* the tab fade is longer than the other Phase 1 motion because John wanted it slower */
+  /* Stage 3 motion: the lengths and the one easing the rules in the motion block use (the Phase 1 rules keep their own ease-out) */
+  --motion-quick: 120ms; /* the secondary-weight buttons' colours and press */
+  --motion-soft: 150ms; /* the warm-up swap, the records line and the History detail */
+  --motion-form: 180ms; /* the exercise form and the picker menu */
+  --motion-shade: 250ms; /* a muscle's shade on the Body diagram */
+  --ease-motion: ease-out;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -438,6 +444,35 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button.delete-button:not(:disabled):active { transform: scale(0.9); }
   button.check-toggle { transition: transform var(--motion) ease-out; }
   button.check-toggle:not(:disabled):active { transform: scale(0.9); }
+
+  /* Stage 3. Everything here is opacity, transform or a colour, so nothing moves the layout, and none of it is waited
+     for: the DOM and the focus change at the same moment as before. */
+  @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes pop-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+  @keyframes warm-on { from { opacity: 0.4; transform: scale(0.85); background-color: transparent; } }
+  @keyframes warm-off { from { opacity: 0.4; transform: scale(0.85); background-color: var(--warmup-bg); } }
+  @keyframes shade-in { from { opacity: 0.35; } to { opacity: 1; } }
+
+  /* the set number and its W swap places (the button is made again by the redraw, so the mark is set by the code) */
+  button.set-num[data-anim="warmup"][aria-pressed="true"] { animation: warm-on var(--motion-soft) var(--ease-motion); }
+  button.set-num[data-anim="warmup"][aria-pressed="false"] { animation: warm-off var(--motion-soft) var(--ease-motion); }
+
+  /* a PR label appearing in the History detail */
+  .pr-label[data-anim="in"] { animation: pop-in var(--motion) var(--ease-motion); }
+
+  /* the weight buttons are changed in place, so a real transition runs; the press dip is the general button rule */
+  button.weight-button { transition: transform var(--motion-quick) var(--ease-motion), background-color var(--motion-quick) var(--ease-motion), border-color var(--motion-quick) var(--ease-motion), color var(--motion-quick) var(--ease-motion); }
+
+  /* the exercise form and the picker menu rise as they open; closing has no animation, so nothing waits to be removed */
+  .custom-form[data-anim="in"], .menu[data-anim="in"] { animation: rise-in var(--motion-form) var(--ease-motion); }
+
+  /* the History detail's exercises (the Records line is inside) and the Records line itself */
+  .entry[data-anim="in"], [data-region="records"][data-anim="in"] { animation: fade-in var(--motion-soft) var(--ease-motion); }
+
+  /* a muscle's shade fades up when the diagram is drawn (it is made again on every drawing; the fill itself is never
+     animated from the neutral colour, so the colour a script reads is always the final one), and the fill eases in
+     place if a class ever changes on a diagram that stays */
+  .body-diagram .muscle .shape { transition: fill var(--motion-shade) var(--ease-motion); animation: shade-in var(--motion-shade) var(--ease-motion); }
 }
 
 /* reduced motion: a pressed button changes colour at once, with no transition, transform or animation;

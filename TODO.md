@@ -30,6 +30,8 @@
 - [ ] **Verify on iPhone (Settings, Hidden exercises, 2026-10-26):** with VoiceOver, the section heading, each hidden exercise with Show again and (only when nothing uses it) Delete for good, the Delete for good question (alert dialog, Keep exercise focused), the notice after each action, and focus landing on the Hidden exercises heading afterwards. Also how long Settings takes to open with several hidden exercises and a long history (each hidden exercise reads every entry once to decide whether Delete for good is offered).
 - [ ] **Verify on iPhone (longer custom exercise form, 2026-10-26):** the form now lists 20 primary, 20 secondary and 16 equipment checkboxes. Check with VoiceOver that each group is read with its legend and that Neck and Abductors are reachable, and that the form's length is workable at 320 and 390 px (scrolling to Save exercise, nothing cut off).
 - [ ] Keyboard: Escape closes the picker's three-dot menu, but not the Log tab's exercise menu (it never did); make the two the same.
+- [ ] Animation timings tuned by feel on a real device (Stage 3: warm-up swap 150 ms, PR label 200 ms, weight buttons 120 ms, form and menu 180 ms, Body shades 250 ms, History detail 150 ms; the tokens are in :root of src/ui/app.css).
+- [ ] VoiceOver and reduced-motion on a real device for Stage 3: turn Reduce Motion on in iOS Settings and check that none of the new animations play, and with VoiceOver that the warm-up toggle, weight buttons, form and menu focus and announcements are the same as before.
 
 ## Done
 - [x] Data model, storage layer, export/import, minimal logging screen (in that order)

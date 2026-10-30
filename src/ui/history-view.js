@@ -164,9 +164,9 @@ async function detail(ctx, id) {
       .map(([type, label]) => (type === "reps" ? `${label} ${mine.reps.value}` : `${label} ${mine[type].value} ${rec.unit}`));
     view.append(h(
       "div",
-      { class: "card entry" },
+      { class: "card entry", "data-enter": `detail:${workout.id}:${entry.exerciseId}` },
       exerciseHeading(entry.exerciseName, entry.markCustom),
-      parts.length ? h("p", { class: "muted", "data-region": "records" }, `Records: ${parts.join(" · ")}`) : null,
+      parts.length ? h("p", { class: "muted", "data-region": "records", "data-enter": `records:${workout.id}:${entry.exerciseId}` },`Records: ${parts.join(" · ")}`) : null,
       h(
         "ol",
         { class: "sets" },
@@ -180,7 +180,7 @@ async function detail(ctx, id) {
             ` ${formatCount(set.reps, "rep")} · ${weightText(set, ctx.unit)}`,
           ),
           !isWarmupSet(set) && prSets.has(set.id)
-            ? h("span", { class: "pr-label", "data-region": "pr" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
+            ? h("span", { class: "pr-label", "data-region": "pr", "data-enter": `pr:${set.id}` }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
             : null,
         )),
       ),

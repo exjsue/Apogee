@@ -78,6 +78,15 @@ The app is a PWA served from GitHub Pages and used as a Home Screen app. Current
 - Browser tests (IndexedDB adapter, storage, backup, logger and UI smoke tests): with the server running, open http://127.0.0.1:8080/tests/browser/index.html
 - Live site: https://exjsue.github.io/Apogee/ and, for the browser tests, https://exjsue.github.io/Apogee/tests/browser/index.html. It is served at a subpath, so every URL and import path must stay relative. Data on the live site is separate from data on 127.0.0.1:8080 (different origin); move it with Export and Import.
 
+## Browser test method
+How the browser suite is run without touching the owner's Chrome or phone (used since Stage 2; the driver script is not in the repo):
+1. Start the server on a spare port, not 8080: `node tools/serve.js 8098`, as its own process, and keep its PID (Start-Process -PassThru).
+2. A driver script (Node 22+, no packages) starts a new headless Chrome with a fresh profile folder from `fs.mkdtempSync` in the temp directory: `chrome.exe --user-data-dir=<that folder> --headless=new --remote-debugging-port=0 --no-first-run --no-default-browser-check --disable-extensions --window-size=800,900 about:blank`, keeping Chrome's own PID.
+3. It reads `DevToolsActivePort` from the profile folder, opens a WebSocket to the browser endpoint (Node's built-in `WebSocket`), makes a target with `Target.createTarget`, attaches with `Target.attachToTarget` (`flatten: true`), and sets the motion mode with `Emulation.setEmulatedMedia` and `features: [{ name: "prefers-reduced-motion", value: "no-preference" or "reduce" }]` before `Page.navigate` to `http://127.0.0.1:8098/tests/browser/index.html`.
+4. It polls with `Runtime.evaluate` (once a second, up to 8 minutes) until `#rerun` is enabled and `#summary` is not "Running…", then reads `#summary` and `#report` (the PASS/FAIL lines) and `matchMedia("(prefers-reduced-motion: reduce)").matches` to confirm the mode took effect.
+5. It sends `Browser.close`, then kills only its own Chrome by that PID and deletes its profile folder. The fresh profile gives an empty origin, so no database from an earlier run exists; the suite itself uses only throwaway database names.
+6. Run it in both modes (`no-preference`, `reduce`), at least twice each for a change that touches motion. Afterwards stop the server by its PID. Never `taskkill /IM chrome.exe` or any kill by image name.
+
 ## Gotchas
 - Update on the phone by fully closing and reopening the Home Screen app, possibly twice.
 - Exports and backups never go in the repo.

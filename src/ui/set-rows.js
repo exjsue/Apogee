@@ -26,9 +26,10 @@ const setName = (row) => (row.isWarmup ? "warm-up set" : `set ${row.number}`);
 
 // ---- the set number: a button that turns the set into a warm-up (a light-blue W) and back ----
 
-function numberButton(ctx, row) {
+function numberButton(ctx, row, swapped) {
   return button(row.isWarmup ? "W" : String(row.number), {
     class: "set-num",
+    "data-anim": swapped ? "warmup" : null,
     "data-action": "toggle-warmup",
     "data-set-id": row.id,
     "aria-pressed": String(row.isWarmup),
@@ -385,7 +386,7 @@ function setRow(ctx, row, index, exerciseName, rows, reordering) {
     h(
       "div",
       { class: "set-main set-grid" },
-      numberButton(ctx, row),
+      numberButton(ctx, row, was !== undefined && was.isWarmup !== row.isWarmup),
       cells.weightCell,
       cells.repsCell,
       toggle,
@@ -568,7 +569,7 @@ export function exerciseBlocks(ctx, blocks) {
     )),
   );
   // Remembered for the next drawing, which animates only what differs from this one.
-  ctx.state.log.seen = new Map(blocks.flatMap((block) => block.rows.map((row) => [row.id, { kind: row.kind, phase: row.phase }])));
+  ctx.state.log.seen = new Map(blocks.flatMap((block) => block.rows.map((row) => [row.id, { kind: row.kind, phase: row.phase, isWarmup: row.isWarmup }])));
   return element;
 }
 
