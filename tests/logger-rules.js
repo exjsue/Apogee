@@ -536,3 +536,21 @@ rule("logger: getRecords passes the ignored count through", async (ctx) => {
   assert.equal(result.ignored, 1);
   assert.equal(result.records[BENCH].weight.value, 220.5);
 });
+
+rule("logger: in the current workout a set edit and a warm-up toggle keep the stored set's rpe and setType, and the workout's name", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger } = await setup(ctx);
+  const logged = await logger.logSet(bench("8", "100", "kg"));
+  const { workout } = await logger.getCurrent();
+  // The schema 5 fields, written as an import would store them.
+  await adapter.transaction(["workouts", "sets"], "readwrite", async (tx) => {
+    await tx.put("workouts", { ...(await tx.get("workouts", workout.id)), name: "Push ☝🏽" });
+    await tx.put("sets", { ...logged, rpe: 8.5, setType: "failure" });
+  });
+  const rawSet = () => adapter.transaction(["sets"], "readonly", (tx) => tx.get("sets", logged.id));
+  await logger.editSet(logged.id, { reps: "6" });
+  assert.deepEqual(await rawSet(), { ...logged, reps: 6, rpe: 8.5, setType: "failure" });
+  await logger.setWarmup(logged.id, true);
+  assert.deepEqual(await rawSet(), { ...logged, reps: 6, isWarmup: true, rpe: 8.5, setType: "failure" });
+  assert.equal((await store.getWorkout(workout.id)).name, "Push ☝🏽");
+});

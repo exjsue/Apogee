@@ -574,3 +574,24 @@ rule("upgrade 4 to 5: if the upgrade throws after step 5 ran, the database is st
     assert.equal((await fullSnapshot(adapter)).meta.find((m) => m.key === "schemaVersion").value, 5);
   });
 });
+
+rule("upgrade: a version 5 database opened by a version 4 build is refused with a clear message, and nothing in it changes", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    await makeVersion4(name, track);
+    const current = track(createIdbAdapter({ name }));
+    await createStore(current).open(); // now version 5
+    await current.transaction(["workouts", "sets"], "readwrite", async (tx) => { // schema 5 fields, as an import stores them
+      await tx.put("workouts", { ...(await tx.get("workouts", "w1")), name: "Push ☝🏽" });
+      await tx.put("sets", { ...(await tx.get("sets", "s2")), rpe: 9, setType: "drop" });
+    });
+    const before = await fullSnapshot(current);
+    current.close();
+    const oldBuild = track(createIdbAdapter({ name, version: 4 })); // what a version 4 build asks for
+    await assert.rejects(oldBuild.open(), /saved by a newer version of Apogee than this code \(schema 4\)/);
+    assert.equal(await rawVersion(name), 5);
+    const again = track(createIdbAdapter({ name }));
+    await again.open();
+    assert.deepEqual(await fullSnapshot(again), before);
+  });
+});
