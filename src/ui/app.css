@@ -183,6 +183,15 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   border-color: var(--warn-line);
 }
 
+/* Settings: the Strong import adds data, so it is marked with the accent, never Backup's warning look. */
+.card.strong-import { border-left: 4px solid var(--accent); }
+.strong-names { list-style: none; margin: 8px 0 0; padding: 0; }
+.strong-names > li { border-top: 1px solid var(--line); padding: 10px 0; overflow-wrap: anywhere; }
+.strong-name { margin: 0 0 2px; }
+.strong-choices { border: 0; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.strong-muscles { align-items: center; margin-top: 6px; }
+.strong-report ul { padding-left: 20px; }
+
 .notice, .error, .warning-text {
   padding: 10px 12px;
   border-radius: var(--radius);

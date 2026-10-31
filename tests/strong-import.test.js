@@ -468,6 +468,13 @@ test("strong aliases: shown first and only suggested, muscles from the target's 
   }
 });
 
+test("strong aliases: a name that also matches a stored exercise by rule a is auto-matched to it; the alias is not used", () => {
+  const mine = ex("mine", "Palloff Press", ["obliques"], { isCustom: true });
+  const [r] = matchStrongNames(names("Palloff Press"), [...BUILT_IN, mine]);
+  assert.deepEqual([r.status, r.rule, r.target.id], ["auto", "a", "mine"]);
+  assert.deepEqual(r.suggestions, []);
+});
+
 test("strong apply: a seed or a catalog exercise can be the target; both records are left exactly as stored", async () => {
   const { adapter, store } = await freshStore();
   await store.seedExercises(SEED_EXERCISES, SEED_VERSION);

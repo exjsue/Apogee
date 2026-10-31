@@ -1,10 +1,12 @@
 // The Settings tab: the kg/lb display unit, which is a stored preference (meta key
 // preferredUnit, via the logger; choosing one changes only how weights are shown,
-// never what is stored), the user's hidden exercises, then the Backup section (backup-view.js).
+// never what is stored), the user's hidden exercises, the Strong import (strong-view.js), then the Backup section
+// (backup-view.js).
 
 import { h, button } from "./dom.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
 import { renderBackupView } from "./backup-view.js";
+import { renderStrongImport } from "./strong-view.js";
 
 const HEADING = '[data-region="hidden-exercises-heading"]';
 
@@ -131,6 +133,13 @@ export async function renderSettingsView(ctx) {
   } catch (error) {
     hiddenSection = h("p", { class: "error", role: "alert" }, `The hidden exercises could not be shown: ${error.message}`);
   }
+  // Nor may a failure in the Strong import (an add-only import, kept apart from Backup's replace-everything one).
+  let strongSection;
+  try {
+    strongSection = renderStrongImport(ctx);
+  } catch (error) {
+    strongSection = h("p", { class: "error", role: "alert" }, `The Strong import could not be shown: ${error.message}`);
+  }
   return h(
     "section",
     { class: "view", "aria-label": "Settings" },
@@ -142,6 +151,7 @@ export async function renderSettingsView(ctx) {
       h("div", { class: "units", role: "group", "aria-label": "Display unit" }, unitButtons),
     ),
     hiddenSection,
+    strongSection,
     h("h2", { tabindex: "-1", "data-region": "backup-heading", class: "section-divider" }, "Backup"),
     backupSection,
   );

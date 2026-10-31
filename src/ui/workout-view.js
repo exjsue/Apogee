@@ -437,6 +437,10 @@ function checkboxGroup(legend, values, group, checked = [], weights = null) {
 // an older form does not list, say), so a save never drops one.
 const offered = (base, has) => [...base, ...has.filter((id) => !base.includes(id))];
 
+// The custom form's primary-muscle checkboxes, for the Strong import (src/ui/strong-view.js), so the muscle list is
+// offered from one place. `group` is the data-group of its boxes.
+export const primaryMusclePicker = (group, checked = []) => checkboxGroup("Primary muscles (at least one)", offered(ALL_MUSCLES, checked), group, checked);
+
 // The selector of a picker row's three-dot button.
 const menuButtonFor = (id) => `[data-action="pick-menu"][data-exercise-id="${id}"]`;
 
