@@ -1,9 +1,9 @@
-// Domain data model, schema version 4 (version 2 added defaultRestSeconds to exercises; version 3 added
+// Domain data model, schema version 5 (version 2 added defaultRestSeconds to exercises; version 3 added
 // baseMovementId, equipment, variations, origin, upstreamId, catalogVersion and retired; version 4 added
-// templates, a record type of their own).
+// templates, a record type of their own; version 5 added the optional workout name and set rpe and setType).
 // Pure JavaScript: no DOM, no storage, no network.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const WEIGHT_UNITS = ["kg", "lb"];
 
@@ -78,6 +78,14 @@ export const MAX_WEIGHT_KG = 2500;
 // The longest rest, in seconds: 60:00. Used for an exercise's default rest and by
 // the rest timer.
 export const MAX_REST_SECONDS = 3600;
+
+// A set's optional RPE (schema 5): 1 to 10 in steps of 0.5. The model accepts the whole scale so an imported
+// value is never refused; a picker may offer less.
+export const RPE_MIN = 1;
+export const RPE_MAX = 10;
+
+// A set's optional kind beyond warm-up (schema 5). Absent means a normal set.
+export const SET_TYPES = Object.freeze(["failure", "drop"]);
 
 // Exact definition of the avoirdupois pound.
 const KG_PER_LB = 0.45359237;
@@ -271,8 +279,10 @@ export function createExercise(input) {
 }
 
 // `now` is the default for startedAt, so tests can be deterministic.
+// name (schema 5) is optional: absent means no name, and absent stays absent so a record saved before it keeps
+// its exact shape. When given it follows the exercise name rule (1 to NAME_MAX_LENGTH code points).
 export function createWorkout(input = {}) {
-  const { id, now = new Date(), startedAt, endedAt, notes } = requireInput(input);
+  const { id, now = new Date(), startedAt, endedAt, notes, name } = requireInput(input);
   const started = toUtcIso(startedAt === undefined ? now : startedAt, "startedAt");
   const ended = optionalTimestamp(endedAt, "endedAt");
   if (ended !== null && new Date(ended) < new Date(started)) {
@@ -283,6 +293,7 @@ export function createWorkout(input = {}) {
     startedAt: started,
     endedAt: ended,
     notes: optionalNotes(notes, "notes"),
+    ...(name === undefined ? {} : { name: requireName(name, "name") }),
   };
 }
 
@@ -343,11 +354,20 @@ function requireWeight(value, unit) {
   return value;
 }
 
+// RPE: a number from RPE_MIN to RPE_MAX in steps of 0.5.
+function requireRpe(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) fail("rpe must be a number");
+  if (value < RPE_MIN || value > RPE_MAX) fail(`rpe must be from ${RPE_MIN} to ${RPE_MAX}`);
+  if (!Number.isInteger(value * 2)) fail("rpe must be in steps of 0.5");
+  return value;
+}
+
 // Weight is stored exactly as entered: value plus unit, never converted.
+// rpe and setType (schema 5) are optional: absent means none, and absent stays absent.
 export function createWorkSet(input) {
   const {
     id, entryId, order, reps, weightValue, weightUnit,
-    isWarmup = false, restSeconds, completedAt,
+    isWarmup = false, restSeconds, completedAt, rpe, setType,
   } = requireInput(input);
   const unit = requireWeightUnit(weightUnit, "weightUnit");
   const weight = requireWeight(weightValue, unit);
@@ -364,6 +384,8 @@ export function createWorkSet(input) {
     isWarmup: requireBoolean(isWarmup, "isWarmup"),
     restSeconds: rest,
     completedAt: optionalTimestamp(completedAt, "completedAt"),
+    ...(rpe === undefined ? {} : { rpe: requireRpe(rpe) }),
+    ...(setType === undefined ? {} : { setType: requireOneOf(setType, "setType", SET_TYPES, "set type") }),
   };
 }
 

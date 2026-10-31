@@ -54,10 +54,15 @@ export const RECORD_FIELDS = {
   templates: ["id", "name", "exercises"],
 };
 
-// Fields a record may have and may leave out (schema version 4 files only). An exercise saved before secondary
-// weights existed, or never edited since, has no secondaryWeights; every secondary muscle then counts 0.5. When
-// present it is checked like any other field.
-export const OPTIONAL_RECORD_FIELDS = { exercises: ["secondaryWeights"] };
+// Fields a record may have and may leave out (schema version 5 files). An exercise saved before secondary
+// weights existed, or never edited since, has no secondaryWeights; every secondary muscle then counts 0.5. A
+// workout without a name, or a set without rpe or setType, has none. When present each is checked like any
+// other field.
+export const OPTIONAL_RECORD_FIELDS = { exercises: ["secondaryWeights"], workouts: ["name"], sets: ["rpe", "setType"] };
+
+// What a schema version 4 file may leave out: secondaryWeights only. A version 4 file must not contain the
+// schema 5 fields (name, rpe, setType); it is refused if it does, as a version 2 file with schema 3 fields is.
+export const OPTIONAL_RECORD_FIELDS_V4 = { exercises: ["secondaryWeights"] };
 
 // The fields schema version 3 added to exercises.
 const V3_EXERCISE_FIELDS = ["baseMovementId", "equipment", "variations", "origin", "upstreamId", "catalogVersion", "retired"];
@@ -208,7 +213,7 @@ function parseBackup(text, { maxBytes = MAX_IMPORT_BYTES } = {}) {
   const records = { templates: [] };
   // The file is checked against the field list of the schema it says it is.
   const fieldsOf = doc.schemaVersion >= 3 ? RECORD_FIELDS : doc.schemaVersion === 2 ? RECORD_FIELDS_V2 : RECORD_FIELDS_V1;
-  const optionalOf = doc.schemaVersion >= 4 ? OPTIONAL_RECORD_FIELDS : {};
+  const optionalOf = doc.schemaVersion >= 5 ? OPTIONAL_RECORD_FIELDS : doc.schemaVersion === 4 ? OPTIONAL_RECORD_FIELDS_V4 : {};
   for (const section of sections) records[section] = validateSection(section, doc.data[section], fieldsOf, optionalOf);
   // An older file has none of the schema 3 fields: createExercise gave them their defaults, and its seeds get
   // their grouping here, by the same function the upgrade step uses.

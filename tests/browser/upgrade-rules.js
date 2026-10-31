@@ -5,6 +5,7 @@
 import { createIdbAdapter, deleteDatabase } from "../../src/storage/idb-adapter.js";
 import { createStore } from "../../src/storage/store.js";
 import { createBackup } from "../../src/backup/backup.js";
+import { upgradeData } from "../../src/storage/migrations.js";
 import {
   SCHEMA_VERSION, createWorkout, createWorkoutEntry, createWorkSet,
 } from "../../src/domain/model.js";
@@ -466,14 +467,14 @@ for (const version of [1, 2, 3]) {
       const adapter = track(createIdbAdapter({ name }));
       const store = createStore(adapter);
       await store.open();
-      assert.equal(await rawVersion(name), 4);
+      assert.equal(await rawVersion(name), 5);
       assert.deepEqual(await storeNamesOf(name), ["entries", "exercises", "meta", "sets", "templates", "workouts"]);
       const after = await snapshot(adapter);
       assert.equal(JSON.stringify(after.workouts), JSON.stringify(OLD_HISTORY.workouts));
       assert.equal(JSON.stringify(after.entries), JSON.stringify(OLD_HISTORY.entries));
       assert.equal(JSON.stringify(after.sets), JSON.stringify(OLD_HISTORY.sets));
       assert.deepEqual(after.exercises, [V3_CUSTOM]);
-      assert.deepEqual(after.meta.map((m) => [m.key, m.value]), [["preferredUnit", "kg"], ["schemaVersion", 4]]);
+      assert.deepEqual(after.meta.map((m) => [m.key, m.value]), [["preferredUnit", "kg"], ["schemaVersion", 5]]);
       assert.deepEqual(await store.listTemplates(), []);
       await store.saveTemplate({ id: "t", name: "Mine", exercises: [{ exerciseId: "ex-1", setCount: 1 }] });
       assert.equal((await store.listTemplates()).length, 1);
@@ -492,9 +493,84 @@ rule("upgrade: a version 4 database opened by a version 3 build is refused with 
     current.close();
     const oldBuild = track(createIdbAdapter({ name, version: 3 })); // what a version 3 build asks for
     await assert.rejects(oldBuild.open(), /saved by a newer version of Apogee than this code \(schema 3\)/);
-    assert.equal(await rawVersion(name), 4);
+    assert.equal(await rawVersion(name), 5);
     const again = track(createIdbAdapter({ name }));
     await again.open();
     assert.deepEqual(await again.transaction(["templates"], "readonly", (tx) => tx.getAll("templates")), [{ id: "t", name: "Mine", exercises: [{ exerciseId: "ex-1", setCount: 2 }] }]);
+  });
+});
+
+// ---- schema version 5: optional workout name, set rpe and setType ----
+
+const V5_STORES = [...STORES, "templates"];
+const fullSnapshot = (adapter) => adapter.transaction(V5_STORES, "readonly", async (tx) => {
+  const out = {};
+  for (const storeName of V5_STORES) {
+    out[storeName] = (await tx.getAll(storeName)).sort((a, b) => String(a.id ?? a.key).localeCompare(String(b.id ?? b.key)));
+  }
+  return out;
+});
+
+// A real version 4 database: written with version 4 explicitly (the adapter creates every store, templates
+// included), with the history, a template and session meta as raw records.
+async function makeVersion4(name, track) {
+  const adapter = track(createIdbAdapter({ name, version: 4 }));
+  await adapter.open();
+  const records = {
+    exercises: [{ ...V3_CUSTOM, secondaryMuscles: ["triceps"], secondaryWeights: { triceps: 0.75 } }],
+    ...OLD_HISTORY,
+    templates: [{ id: "t", name: "Mine", exercises: [{ exerciseId: "ex-1", setCount: 2 }] }],
+    meta: [{ key: "schemaVersion", value: 4 }, { key: "preferredUnit", value: "lb" }, { key: "workoutPlan", value: { exercises: ["ex-1"], rows: [], rev: 3 } }],
+  };
+  await adapter.transaction(V5_STORES, "readwrite", async (tx) => {
+    for (const [storeName, list] of Object.entries(records)) for (const record of list) await tx.put(storeName, record);
+  });
+  const before = await fullSnapshot(adapter);
+  adapter.close();
+  return before;
+}
+
+const DATA_V5 = ["exercises", "workouts", "entries", "sets", "templates"];
+
+rule("upgrade 4 to 5: a real version 4 database opened by this code becomes version 5 with every record byte for byte unchanged and no default name", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    const before = await makeVersion4(name, track);
+    assert.equal(await rawVersion(name), 4);
+    const adapter = track(createIdbAdapter({ name }));
+    await createStore(adapter).open();
+    assert.equal(await rawVersion(name), 5);
+    const after = await fullSnapshot(adapter);
+    for (const storeName of DATA_V5) assert.equal(JSON.stringify(after[storeName]), JSON.stringify(before[storeName]));
+    assert.equal(after.workouts.some((workout) => "name" in workout), false);
+    assert.deepEqual(after.meta.map((m) => [m.key, m.value]), [["preferredUnit", "lb"], ["schemaVersion", 5], ["workoutPlan", { exercises: ["ex-1"], rows: [], rev: 3 }]]);
+    // opening again changes nothing
+    adapter.close();
+    const again = track(createIdbAdapter({ name }));
+    await createStore(again).open();
+    assert.deepEqual(await fullSnapshot(again), after);
+  });
+});
+
+rule("upgrade 4 to 5: if the upgrade throws after step 5 ran, the database is still version 4 with every record as it was, and the real upgrade works afterwards", async (ctx) => {
+  const { assert } = ctx;
+  await withDatabase(async ({ name, track }) => {
+    const before = await makeVersion4(name, track);
+    const upgrade = async (args) => {
+      await upgradeData(args); // step 5 writes schemaVersion 5 ...
+      throw new Error("boom after step 5"); // ... and then the upgrade fails
+    };
+    const failing = track(createIdbAdapter({ name, upgrade }));
+    await assert.rejects(failing.open(), /storage upgrade failed and was undone/);
+    failing.close();
+    assert.equal(await rawVersion(name), 4);
+    const reader = track(createIdbAdapter({ name, version: 4 }));
+    await reader.open();
+    assert.deepEqual(await fullSnapshot(reader), before);
+    reader.close();
+    const adapter = track(createIdbAdapter({ name }));
+    await createStore(adapter).open();
+    assert.equal(await rawVersion(name), 5);
+    assert.equal((await fullSnapshot(adapter)).meta.find((m) => m.key === "schemaVersion").value, 5);
   });
 });

@@ -117,7 +117,7 @@ rule("templates: backup round trip: templates are exported sorted by id with sor
   await store.saveTemplate(LEGS);
   const first = await backup.exportToText({ now: NOW });
   const doc = JSON.parse(first);
-  assert.equal(doc.schemaVersion, 4);
+  assert.equal(doc.schemaVersion, 5);
   assert.deepEqual(Object.keys(doc.data), ["exercises", "workouts", "entries", "sets", "templates"]);
   assert.deepEqual(doc.data.templates, [
     { exercises: [{ exerciseId: "ex-squat", setCount: 5 }], id: "t-legs", name: "Legs" },
@@ -160,7 +160,7 @@ rule("templates: each schema is strict about the section: an old file must not h
   const without = fileOf({}, { data: { exercises: [], workouts: [], entries: [], sets: [] } });
   await assert.rejects(backup.importFromText(without, { confirmReplace: true }), /data\.templates must be a list/);
   assert.deepEqual(await rawTemplates(adapter), [LEGS]); // nothing was replaced
-  assert.equal(SCHEMA_VERSION, 4);
+  assert.equal(SCHEMA_VERSION, 5);
 });
 
 // What each hostile template does: [description, change to the good template, message the import must give].

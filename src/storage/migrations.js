@@ -60,7 +60,14 @@ const stepTo4 = {
   async run() {},
 };
 
-export const STEPS = [stepTo2, stepTo3(), stepTo4];
+// Schema 5: the optional workout name and set rpe and setType. Absent means no value, so no record needs them
+// and none is read or written (no default name is added): the step exists so the stored schema version becomes 5.
+const stepTo5 = {
+  to: 5,
+  async run() {},
+};
+
+export const STEPS = [stepTo2, stepTo3(), stepTo4, stepTo5];
 
 // Brings data saved at `oldVersion` up to the newest step. A new database
 // (oldVersion 0) has nothing to upgrade: store.open() writes its schema version.

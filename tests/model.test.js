@@ -11,8 +11,8 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-test("SCHEMA_VERSION is 4 (version 3 added the catalog fields to exercises; version 4 added templates)", () => {
-  assert.equal(SCHEMA_VERSION, 4);
+test("SCHEMA_VERSION is 5 (version 3 added the catalog fields to exercises; version 4 added templates; version 5 added workout name, set rpe and setType)", () => {
+  assert.equal(SCHEMA_VERSION, 5);
 });
 
 test("createExercise: defaultRestSeconds is null unless given, accepts 0 to 3600, and refuses anything else", () => {

@@ -188,3 +188,25 @@ rule("edit: a set marked as a warm-up leaves set counts, records and the Body ta
   assert.equal(await records(), 120);
   assert.equal(await chest(), chestBefore);
 });
+
+rule("edit: a schema 5 workout keeps its name and every set's rpe and setType; every field the edit does not set is identical", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger, id } = await setup(ctx);
+  // Give the stored records the schema 5 fields, as an import would.
+  const { entries: withSets, ...workout } = await store.getWorkoutWithDetails(id);
+  const extras = [{ rpe: 7.5, setType: "failure" }, { rpe: 10 }, { setType: "drop" }];
+  await adapter.transaction(["workouts", "sets"], "readwrite", async (tx) => {
+    await tx.put("workouts", { ...workout, name: "Push ☝🏽" });
+    for (const [i, set] of withSets[0].sets.entries()) await tx.put("sets", { ...set, ...extras[i] });
+  });
+  const before = await store.getWorkoutWithDetails(id);
+  assert.equal(before.name, "Push ☝🏽");
+  const detail = await logger.getWorkoutDetail(id);
+  const draft = draftFromWorkout(detail);
+  draft.entries[0].sets[0].reps = "9"; // the only change: the 8 x 100, which has rpe and setType
+  await logger.saveWorkoutEdit(detail, draft);
+  const after = await store.getWorkoutWithDetails(id);
+  const [first, ...rest] = before.entries[0].sets;
+  assert.deepEqual(after, { ...before, entries: [{ ...before.entries[0], sets: [{ ...first, reps: 9 }, ...rest] }] });
+  assert.deepEqual(after.entries[0].sets.map((set) => [set.rpe, set.setType]), [[7.5, "failure"], [10, undefined], [undefined, "drop"]]);
+});

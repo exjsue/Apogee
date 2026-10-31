@@ -21,7 +21,7 @@ const ROOT = path.resolve(here, "..");
 // ---- vocabularies ----
 
 test("schema 3 helpers: the existing lists are unchanged and the extra ones have exactly the expected contents", () => {
-  assert.equal(SCHEMA_VERSION, 4); // schema 4 (templates) left these lists alone
+  assert.equal(SCHEMA_VERSION, 5); // schemas 4 and 5 left these lists alone
   assert.deepEqual([...MUSCLES], [
     "chest", "front_delts", "side_delts", "rear_delts", "biceps", "triceps", "forearms", "traps", "lats", "upper_back",
     "lower_back", "abs", "obliques", "glutes", "quads", "hamstrings", "calves", "adductors",

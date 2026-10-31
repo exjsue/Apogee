@@ -151,8 +151,8 @@ const dump = (adapter) => adapter.transaction(ALL, "readonly", async (tx) => {
 });
 const upgrade = (adapter, oldVersion) => adapter.transaction(ALL, "readwrite", (tx) => upgradeData({ oldVersion, tx }));
 
-for (const [version, ran] of [[1, [2, 3, 4]], [2, [3, 4]], [3, [4]]]) {
-  test(`schema 4 upgrade: from version ${version}, the steps ${ran.join(", ")} run, the schema version becomes 4, there are no templates, and workouts, entries and sets are byte for byte what they were`, async () => {
+for (const [version, ran] of [[1, [2, 3, 4, 5]], [2, [3, 4, 5]], [3, [4, 5]]]) {
+  test(`schema 4 upgrade: from version ${version}, the steps ${ran.join(", ")} run, the schema version becomes 5, there are no templates, and workouts, entries and sets are byte for byte what they were`, async () => {
     const adapter = await populatedAt(version);
     const before = await dump(adapter);
     assert.deepEqual(await upgrade(adapter, version), ran);
@@ -164,17 +164,17 @@ for (const [version, ran] of [[1, [2, 3, 4]], [2, [3, 4]], [3, [4]]]) {
     assert.deepEqual(after.templates, []);
     assert.deepEqual(after.meta, [
       { key: "preferredUnit", value: "kg" },
-      { key: "schemaVersion", value: 4 },
+      { key: "schemaVersion", value: 5 },
       { key: "workoutPlan", value: { exercises: ["ex-1"], rows: [], rev: 4 } },
     ]);
-    assert.deepEqual(await upgrade(adapter, 4), []); // already version 4: no step runs
+    assert.deepEqual(await upgrade(adapter, 5), []); // already version 5: no step runs
     assert.deepEqual(await dump(adapter), after);
   });
 }
 
 test("schema 4 upgrade: the 3-to-4 step reads and writes nothing but the schema version, and a new database has nothing to upgrade", async () => {
-  assert.equal(SCHEMA_VERSION, 4);
-  assert.deepEqual(STEPS.map((step) => step.to), [2, 3, 4]);
+  assert.equal(SCHEMA_VERSION, 5);
+  assert.deepEqual(STEPS.map((step) => step.to), [2, 3, 4, 5]);
   const calls = [];
   const spy = new Proxy({}, { get: (_target, method) => async (...args) => { calls.push([method, ...args.slice(0, 1)]); } });
   await STEPS.find((step) => step.to === 4).run(spy);

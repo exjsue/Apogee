@@ -66,7 +66,7 @@ rule("custom exercises: a custom exercise with retired: true is valid and surviv
   await store.saveTemplate({ id: "t1", name: "Chest", exercises: [{ exerciseId: MINE.id, setCount: 3 }] });
   const text = await backup.exportToText({ now: NOW });
   const doc = JSON.parse(text);
-  assert.equal(doc.schemaVersion, 4);
+  assert.equal(doc.schemaVersion, 5);
   assert.deepEqual(doc.data.exercises.find((exercise) => exercise.id === MINE.id).retired, true);
   await backup.importFromText(text, { confirmReplace: true });
   assert.deepEqual(await rawExercise(adapter, MINE.id), hidden);

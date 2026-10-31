@@ -230,7 +230,7 @@ test("schema 3 upgrade: from version 1, step 2 and step 3 run in one go, giving 
     SQUAT_V3,
   ]);
   assert.equal(after.meta.find((m) => m.key === "schemaVersion").value, 3);
-  assert.deepEqual(STEPS.map((s) => s.to), [2, 3, 4]);
+  assert.deepEqual(STEPS.map((s) => s.to), [2, 3, 4, 5]);
 });
 
 test("schema 3 upgrade: the step uses the grouping it is given, and only seeds (not customs) are grouped", async () => {
@@ -308,7 +308,7 @@ test("schema 3 export: a file written by this app (now version 4) imports and ex
   );
   const first = await backup.exportToText({ now: NOW });
   const doc = JSON.parse(first);
-  assert.equal(doc.schemaVersion, 4);
+  assert.equal(doc.schemaVersion, 5);
   assert.deepEqual(Object.keys(doc.data.exercises[0]), [
     "baseMovementId", "catalogVersion", "defaultRestSeconds", "equipment", "equipmentTags", "id", "isCustom", "name", "notes", "origin",
     "primaryMuscles", "retired", "secondaryMuscles", "upstreamId", "variations",
