@@ -87,6 +87,10 @@ export const RPE_MAX = 10;
 // A set's optional kind beyond warm-up (schema 5). Absent means a normal set.
 export const SET_TYPES = Object.freeze(["failure", "drop"]);
 
+// A set's optional duration (schema 5), in whole seconds: 1 to one day. A set with a duration may leave out reps
+// (a timed set, such as a plank).
+export const MAX_DURATION_SECONDS = 86400;
+
 // Exact definition of the avoirdupois pound.
 const KG_PER_LB = 0.45359237;
 
@@ -362,23 +366,31 @@ function requireRpe(value) {
   return value;
 }
 
+function requireDuration(value) {
+  requireInteger(value, "durationSeconds", 1);
+  if (value > MAX_DURATION_SECONDS) fail(`durationSeconds must be at most ${MAX_DURATION_SECONDS}`);
+  return value;
+}
+
 // Weight is stored exactly as entered: value plus unit, never converted.
-// rpe and setType (schema 5) are optional: absent means none, and absent stays absent.
+// rpe, setType and durationSeconds (schema 5) are optional: absent means none, and absent stays absent. reps may
+// be absent (never null) only when durationSeconds is given; otherwise requireReps applies as it always has.
 export function createWorkSet(input) {
   const {
     id, entryId, order, reps, weightValue, weightUnit,
-    isWarmup = false, restSeconds, completedAt, rpe, setType,
+    isWarmup = false, restSeconds, completedAt, rpe, setType, durationSeconds,
   } = requireInput(input);
   const unit = requireWeightUnit(weightUnit, "weightUnit");
   const weight = requireWeight(weightValue, unit);
   const rest = restSeconds === undefined || restSeconds === null
     ? null
     : requireInteger(restSeconds, "restSeconds", 0);
+  const duration = durationSeconds === undefined ? undefined : requireDuration(durationSeconds);
   return {
     id: resolveId(id),
     entryId: requireNonEmptyString(entryId, "entryId"),
     order: requireInteger(order, "order", 0),
-    reps: requireReps(reps),
+    ...(reps === undefined && duration !== undefined ? {} : { reps: requireReps(reps) }),
     weightValue: weight,
     weightUnit: unit,
     isWarmup: requireBoolean(isWarmup, "isWarmup"),
@@ -386,6 +398,7 @@ export function createWorkSet(input) {
     completedAt: optionalTimestamp(completedAt, "completedAt"),
     ...(rpe === undefined ? {} : { rpe: requireRpe(rpe) }),
     ...(setType === undefined ? {} : { setType: requireOneOf(setType, "setType", SET_TYPES, "set type") }),
+    ...(duration === undefined ? {} : { durationSeconds: duration }),
   };
 }
 

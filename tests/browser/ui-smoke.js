@@ -3494,3 +3494,49 @@ rule("ui: a finished workout's detail shows W on warm-up sets, numbers the worki
     },
   });
 });
+
+// A workout with one normal set and two timed sets (no reps): 45 s at weight 0, and 1:15 at 10 kg. `ago` is how
+// long ago it started; endedAt is set when `finished`.
+const timedWorkout = (ago, finished) => async (store) => {
+  const at = new Date(Date.now() - ago).toISOString();
+  await store.setPreferredUnit("kg");
+  await store.saveWorkoutWithDetails(
+    { id: "tw", startedAt: at, endedAt: finished ? at : null, notes: "" },
+    [{ id: "te", workoutId: "tw", exerciseId: BENCH, order: 0, supersetGroup: null, notes: "" }],
+    [
+      { id: "t0", entryId: "te", order: 0, reps: 8, weightValue: 100, weightUnit: "kg", isWarmup: false, restSeconds: null, completedAt: at },
+      { id: "t1", entryId: "te", order: 1, weightValue: 0, weightUnit: "kg", isWarmup: false, restSeconds: null, completedAt: at, durationSeconds: 45 },
+      { id: "t2", entryId: "te", order: 2, weightValue: 10, weightUnit: "kg", isWarmup: false, restSeconds: null, completedAt: at, durationSeconds: 75 },
+    ],
+  );
+};
+
+rule("ui: a timed set shows its time where reps go, no 0 kg at weight 0, and no edit button on the Log tab; History and the unfinished-workout list show the time too", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await waitFor(() => loggedRows(root).length === 3, "the three logged rows");
+    const [normal, plank, timed] = loggedRows(root);
+    ctx.assert.equal(normal.querySelector('[data-cell="reps"]').textContent, "8");
+    ctx.assert.ok(normal.querySelector('[data-action="edit-set"]'));
+    ctx.assert.equal(plank.querySelector('[data-cell="reps"]').textContent, "45 s");
+    ctx.assert.equal(plank.querySelector('[data-cell="weight"]').textContent, "");
+    ctx.assert.equal(timed.querySelector('[data-cell="reps"]').textContent, "1:15");
+    ctx.assert.equal(timed.querySelector('[data-cell="weight"]').textContent, "10 kg");
+    ctx.assert.equal(plank.querySelector('[data-action="edit-set"]'), null);
+    ctx.assert.equal(timed.querySelector('[data-action="edit-set"]'), null);
+    ctx.assert.ok(!root.textContent.includes("undefined"));
+  }, { prepare: timedWorkout(10 * 60 * 1000, false) });
+
+  await withApp(ctx, async ({ root }) => {
+    await openWorkout(root, 0);
+    const lines = [...root.querySelectorAll(".card.entry li")].map((line) => line.querySelector(".set-text").textContent);
+    ctx.assert.deepEqual(lines.map((text) => text.replace(/^\S+\s/, "")), ["8 reps · 100 kg", "45 s", "1:15 · 10 kg"]);
+    ctx.assert.ok(!root.textContent.includes("undefined"));
+  }, { prepare: timedWorkout(24 * HOUR, true) });
+
+  await withApp(ctx, async ({ root }) => {
+    const card = await waitFor(() => region(root, "stale-workout"), "the unfinished workout notice");
+    const lines = [...card.querySelectorAll(".set-text")].map((line) => line.textContent.replace(/^\S+\s/, ""));
+    ctx.assert.deepEqual(lines, ["8 reps · 100 kg", "45 s", "1:15 · 10 kg"]);
+    ctx.assert.ok(!root.textContent.includes("undefined"));
+  }, { prepare: timedWorkout(14 * HOUR, false) });
+});

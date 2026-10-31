@@ -29,7 +29,7 @@ export function draftFromWorkout(detail) {
       exerciseName: entry.exerciseName,
       markCustom: entry.markCustom,
       sets: entry.sets.map((set) => ({
-        id: set.id, reps: String(set.reps), weight: String(set.weightValue), unit: set.weightUnit, isWarmup: set.isWarmup === true,
+        id: set.id, reps: set.reps === undefined ? "" : String(set.reps), weight: String(set.weightValue), unit: set.weightUnit, isWarmup: set.isWarmup === true,
       })),
     })),
   };
@@ -76,8 +76,10 @@ export function applyWorkoutEdit(original, draft, { now }) {
         throw new Error(`${label}: that set is not in this exercise`);
       }
       try {
+        // A stored set with a duration has no reps when its reps are left blank (a timed set); any other set needs them.
+        const noReps = stored?.durationSeconds !== undefined && String(draftSet.reps ?? "").trim() === "";
         const fields = {
-          reps: parseWholeNumber(draftSet.reps, "reps"),
+          reps: noReps ? undefined : parseWholeNumber(draftSet.reps, "reps"),
           weightValue: parseDecimal(draftSet.weight, "weight"),
           weightUnit: draftSet.unit,
           isWarmup: draftSet.isWarmup === true,

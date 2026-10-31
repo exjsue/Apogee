@@ -1,7 +1,7 @@
 // The History tab: finished workouts, newest first, with a detail that can be deleted.
 
 import { h, button, exerciseHeading, setMark } from "./dom.js";
-import { formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
+import { formatSetWeight, formatDateTime, formatCount, formatSetLine } from "../domain/format.js";
 import { isWarmupSet, setNumbers } from "../domain/workout-plan.js";
 import { draftFromWorkout, localDate } from "../domain/workout-edit.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
@@ -316,7 +316,7 @@ async function detail(ctx, id) {
             "span",
             { class: "set-text" },
             setMark(numbers[index]),
-            ` ${formatCount(set.reps, "rep")} · ${weightText(set, ctx.unit)}`,
+            ` ${formatSetLine(set, weightText(set, ctx.unit))}`,
           ),
           !isWarmupSet(set) && prSets.has(set.id)
             ? h("span", { class: "pr-label", "data-region": "pr", "data-enter": `pr:${set.id}` }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))

@@ -383,6 +383,10 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       const set = session.sets.find((candidate) => candidate.id === setId);
       if (session.status.kind === "none" || set === undefined) throw new Error("That set is not in the current workout");
       requireNotStale(session.status);
+      // A planned row cannot hold a time, an RPE or a set type, so unchecking would lose them: refused, nothing changes.
+      if (set.durationSeconds !== undefined || set.rpe !== undefined || set.setType !== undefined) {
+        throw new Error("This set has a time, RPE or set type that unchecking would lose. Delete it, or change it in History instead.");
+      }
       const entry = session.entries.find((candidate) => candidate.id === set.entryId);
       const plan = addRow(session.plan, {
         id: set.id,
@@ -404,7 +408,8 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   // running timer is not touched. The values are read as strictly as checkSet reads them
   // (blank reps or weight is refused: "reps is required", "weight is required"; 0 reps,
   // negatives, fractions of a rep and anything over the limits are refused by createWorkSet),
-  // so an edit can never make a set with no reps. A refused edit changes nothing. The
+  // so an edit can never make a set with no reps, except that blank reps on a set with a duration leave it a
+  // timed set with none. A refused edit changes nothing. The
   // weight keeps the unit it was entered in (fields.unit is ignored). It never goes
   // through uncheckSet or deleteSet: the whole workout is written back with the same
   // entries and sets, so saveWorkoutWithDetails deletes nothing.
@@ -414,9 +419,11 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
       const set = session.sets.find((candidate) => candidate.id === setId);
       if (session.status.kind === "none" || set === undefined) throw new Error("That set is not in the current workout");
       requireNotStale(session.status);
+      // A set with a duration has no reps when the reps are given blank (a timed set); any other set needs them.
+      const noReps = "reps" in fields && set.durationSeconds !== undefined && String(fields.reps ?? "").trim() === "";
       const edited = createWorkSet({
         ...set,
-        reps: "reps" in fields ? parseWholeNumber(fields.reps, "reps") : set.reps,
+        reps: noReps ? undefined : "reps" in fields ? parseWholeNumber(fields.reps, "reps") : set.reps,
         weightValue: "weight" in fields ? parseDecimal(fields.weight, "weight") : set.weightValue,
       });
       const sets = session.sets.map((candidate) => (candidate.id === setId ? edited : candidate));
@@ -667,7 +674,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     const { entries, sets } = splitDetails(await store.getWorkoutWithDetails(status.workout.id));
     const entry = entries.find((candidate) => candidate.exerciseId === exerciseId);
     if (entry === undefined) return null;
-    const own = sets.filter((set) => set.entryId === entry.id && !isWarmupSet(set));
+    const own = sets.filter((set) => set.entryId === entry.id && !isWarmupSet(set) && set.reps !== undefined); // a timed set suggests no reps
     if (own.length === 0) return null;
     const last = own.reduce((best, set) => (set.order > best.order ? set : best));
     return { reps: last.reps, weightValue: last.weightValue, weightUnit: last.weightUnit };

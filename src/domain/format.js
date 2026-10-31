@@ -94,6 +94,18 @@ export function formatDateTime(isoTimestamp, { locale, timeZone } = {}) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone }).format(date);
 }
 
+// A timed set's duration: "45 s" under a minute, else m:ss ("1:15") or h:mm:ss.
+export const formatSetDuration = (seconds) => (seconds < 60 ? `${seconds} s` : formatElapsed(0, seconds * 1000));
+
+// A timed set (a duration and no reps).
+export const isTimedSet = (set) => set.reps === undefined && set.durationSeconds !== undefined;
+
+// What a set did, for a line of text: "8 reps", or a timed set's time. A timed set with weight 0 shows no weight;
+// `weightText` is the set's weight as the screen writes it.
+export const formatSetLine = (set, weightText) => (isTimedSet(set)
+  ? (set.weightValue === 0 ? formatSetDuration(set.durationSeconds) : `${formatSetDuration(set.durationSeconds)} · ${weightText}`)
+  : `${formatCount(set.reps, "rep")} · ${weightText}`);
+
 // Time since a start, as m:ss, or h:mm:ss from one hour on (hours are not capped, there is no day format).
 // A start after "now" (the clock was set back) reads 0:00. Both arguments are milliseconds.
 export function formatElapsed(startMs, nowMs) {

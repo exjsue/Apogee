@@ -1026,3 +1026,95 @@ rule("warm-up: the flag is exported and comes back on import", async (ctx) => {
   delete stripped.data.sets[0].isWarmup;
   await assert.rejects(backup.importFromText(JSON.stringify(stripped), { confirmReplace: true }), /isWarmup/);
 });
+
+// ---- schema 5: timed sets, rpe and setType in the current workout ----
+
+const rawSet = (adapter, id) => adapter.transaction(["sets"], "readonly", (tx) => tx.get("sets", id));
+const putRaw = (adapter, record) => adapter.transaction(["sets"], "readwrite", (tx) => tx.put("sets", record));
+
+rule("session: rest change, set edit, warm-up toggle, move and delete keep a stored set's durationSeconds, rpe and setType; a timed set stays without reps", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, logger } = await setup(ctx);
+  const a = await logger.addSet(BENCH);
+  await logger.checkSet(a.id, FIELDS);
+  const b = await logger.addSet(BENCH);
+  await logger.checkSet(b.id, FIELDS); // b owns the running timer
+  // As an import would store them: a gets rpe and setType; b becomes a timed set (no reps) with all three.
+  let expectA = { ...(await rawSet(adapter, a.id)), rpe: 8, setType: "failure" };
+  const { reps: _reps, ...bWithoutReps } = await rawSet(adapter, b.id);
+  let expectB = { ...bWithoutReps, weightValue: 0, durationSeconds: 45, rpe: 7, setType: "drop" };
+  await putRaw(adapter, expectA);
+  await putRaw(adapter, expectB);
+
+  await logger.setRest(b.id, 120);
+  expectB = { ...expectB, restSeconds: 120 };
+  assert.deepEqual(await rawSet(adapter, b.id), expectB);
+
+  await logger.editSet(b.id, { weight: "10", reps: "" }); // blank reps on a timed set: it stays a timed set
+  expectB = { ...expectB, weightValue: 10 };
+  assert.deepEqual(await rawSet(adapter, b.id), expectB);
+  await logger.editSet(b.id, { weight: "10" });
+  assert.deepEqual(await rawSet(adapter, b.id), expectB);
+
+  await logger.editSet(a.id, { reps: "9" });
+  expectA = { ...expectA, reps: 9 };
+  assert.deepEqual(await rawSet(adapter, a.id), expectA);
+  await assert.rejects(logger.editSet(a.id, { reps: "" }), /reps is required/); // a set without a duration still needs reps
+
+  // the last working set is the timed one: the suggestion skips it
+  assert.deepEqual(await logger.suggestNextSet(BENCH), { reps: 9, weightValue: 100, weightUnit: "kg" });
+
+  await logger.setWarmup(b.id, true);
+  expectB = { ...expectB, isWarmup: true };
+  assert.deepEqual(await rawSet(adapter, b.id), expectB);
+
+  await logger.moveSet(b.id, "up", a.id);
+  expectA = { ...expectA, order: 1 };
+  expectB = { ...expectB, order: 0 };
+  assert.deepEqual([await rawSet(adapter, a.id), await rawSet(adapter, b.id)], [expectA, expectB]);
+
+  await logger.deleteSet(a.id);
+  assert.equal(await rawSet(adapter, a.id), undefined);
+  assert.deepEqual(await rawSet(adapter, b.id), expectB);
+});
+
+rule("session: unchecking a set with a time, RPE or set type is refused and nothing changes; a set without them still unchecks as before", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger } = await setup(ctx);
+  const rows = [];
+  for (let i = 0; i < 4; i += 1) {
+    const row = await logger.addSet(BENCH);
+    await logger.checkSet(row.id, FIELDS);
+    rows.push(row);
+  }
+  const { reps: _reps, ...timed } = await rawSet(adapter, rows[0].id);
+  await putRaw(adapter, { ...timed, durationSeconds: 45 });
+  await putRaw(adapter, { ...(await rawSet(adapter, rows[1].id)), rpe: 9 });
+  await putRaw(adapter, { ...(await rawSet(adapter, rows[2].id)), setType: "drop" });
+  const before = await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets"));
+  const planBefore = await store.getWorkoutPlan();
+  for (const row of rows.slice(0, 3)) {
+    await assert.rejects(logger.uncheckSet(row.id), /unchecking would lose\. Delete it, or change it in History instead/);
+  }
+  assert.deepEqual(await adapter.transaction(["sets"], "readonly", (tx) => tx.getAll("sets")), before);
+  assert.deepEqual(await store.getWorkoutPlan(), planBefore);
+  assert.equal((await logger.getSession()).plannedCount, 0);
+  // the plain set unchecks as before: the set is gone and its row is planned again with its values
+  await logger.uncheckSet(rows[3].id);
+  assert.equal(await rawSet(adapter, rows[3].id), undefined);
+  const planned = rowOf(await logger.getSession(), rows[3].id);
+  assert.deepEqual([planned.kind, planned.reps, planned.weight, planned.unit], ["planned", "8", "100", "kg"]);
+});
+
+rule("session: the last session's suggestion skips a heavier timed set and comes from a set with reps", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, clock, logger } = await setup(ctx);
+  const first = await logger.addSet(BENCH);
+  await logger.checkSet(first.id, FIELDS); // 8 x 100 kg
+  const { reps: _reps, ...timed } = await rawSet(adapter, first.id);
+  await putRaw(adapter, { ...timed, id: "timed-heavy", order: 1, weightValue: 200, durationSeconds: 30 });
+  await logger.finishWorkout();
+  clock.time += 24 * 60 * 60 * SECOND;
+  const row = await logger.addSet(BENCH);
+  assert.deepEqual(rowOf(await logger.getSession(), row.id).ghost, { reps: "8", weight: "100", unit: "kg" });
+});

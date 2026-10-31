@@ -139,6 +139,7 @@ function loggedRow(set, fallback) {
     unit: set.weightUnit,
     isWarmup: set.isWarmup,
     restSeconds: set.restSeconds ?? fallback,
+    ...(set.durationSeconds === undefined ? {} : { durationSeconds: set.durationSeconds }), // a timed set shows its time
   };
 }
 
@@ -158,12 +159,13 @@ export function setNumbers(sets) {
 // The heaviest set of a list (one exercise in one workout), as ghost text { reps, weight, unit },
 // or null if it has none. Warm-ups never count. Weights are compared in kg, so 100 kg beats
 // 220 lb; equal weights go to more reps, then to the earlier set (lower order). The weight
-// stays in the number and unit it was entered in: it is never converted here.
+// stays in the number and unit it was entered in: it is never converted here. A set without reps (a timed set)
+// is skipped, so it never suggests a rep count.
 export function heaviestSet(sets) {
   let best = null;
   let bestKg = 0;
   for (const set of sets) {
-    if (isWarmupSet(set)) continue;
+    if (isWarmupSet(set) || set.reps === undefined) continue;
     const kg = convertWeight(set.weightValue, set.weightUnit, "kg");
     const better = best === null || kg > bestKg
       || (kg === bestKg && (set.reps > best.reps || (set.reps === best.reps && set.order < best.order)));
@@ -180,7 +182,8 @@ const isBlank = (text) => text.trim() === "";
 // What a row stands for, as text: a logged set's numbers; for an unchecked row, what
 // is typed in each field, else that field's ghost, else blank.
 function filledIn(row, ghost) {
-  if (row.kind === "logged") return { reps: String(row.reps), weight: String(row.weight), unit: row.unit };
+  // A checked set without reps (a timed set) gives its weight only, like a row with a weight but no reps.
+  if (row.kind === "logged") return { reps: row.reps === undefined ? "" : String(row.reps), weight: String(row.weight), unit: row.unit };
   return {
     reps: isBlank(row.reps) ? (ghost === null ? "" : ghost.reps) : row.reps.trim(),
     weight: isBlank(row.weight) ? (ghost === null ? "" : ghost.weight) : row.weight.trim(),

@@ -5,7 +5,7 @@
 import { h, button, exerciseHeading, setMark } from "./dom.js";
 import { setNumbers } from "../domain/workout-plan.js";
 import { ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
-import { formatLabel, formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
+import { formatLabel, formatSetWeight, formatDateTime, formatCount, formatSetLine } from "../domain/format.js";
 import { NAME_TAKEN } from "../domain/exercise-names.js";
 import { isRunning } from "../domain/rest-timer.js";
 import { exerciseBlocks, startTicker, stopTicker, perform } from "./set-rows.js";
@@ -70,7 +70,7 @@ function loggedList(ctx, entries) {
               "span",
               { class: "set-text" },
               setMark(numbers[index]),
-              ` ${formatCount(set.reps, "rep")} · ${formatSetWeight(set.weightValue, set.weightUnit, ctx.unit)}`,
+              ` ${formatSetLine(set, formatSetWeight(set.weightValue, set.weightUnit, ctx.unit))}`,
             ),
           )),
         ),

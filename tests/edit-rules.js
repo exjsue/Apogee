@@ -210,3 +210,27 @@ rule("edit: a schema 5 workout keeps its name and every set's rpe and setType; e
   assert.deepEqual(after, { ...before, entries: [{ ...before.entries[0], sets: [{ ...first, reps: 9 }, ...rest] }] });
   assert.deepEqual(after.entries[0].sets.map((set) => [set.rpe, set.setType]), [[7.5, "failure"], [10, undefined], [undefined, "drop"]]);
 });
+
+rule("edit: a workout with a timed set (no reps) can be edited; the timed set keeps no reps, its duration, rpe and setType", async (ctx) => {
+  const { assert } = ctx;
+  const { adapter, store, logger, id } = await setup(ctx);
+  const { entries: withSets } = await store.getWorkoutWithDetails(id);
+  const { reps: _reps, ...middle } = withSets[0].sets[1]; // the 5 x 110 becomes a 1:15 plank-style set at weight 0
+  await adapter.transaction(["sets"], "readwrite", (tx) => tx.put("sets", { ...middle, weightValue: 0, durationSeconds: 75, rpe: 9, setType: "failure" }));
+  const before = await store.getWorkoutWithDetails(id);
+  const detail = await logger.getWorkoutDetail(id);
+  const draft = draftFromWorkout(detail);
+  assert.deepEqual(draft.entries[0].sets.map((set) => set.reps), ["8", "", "3"]);
+  draft.entries[0].sets[0].reps = "7"; // another set changes; the timed set is left as shown (blank reps)
+  await logger.saveWorkoutEdit(detail, draft);
+  const after = await store.getWorkoutWithDetails(id);
+  const [first, timed, last] = before.entries[0].sets;
+  assert.deepEqual(after, { ...before, entries: [{ ...before.entries[0], sets: [{ ...first, reps: 7 }, timed, last] }] });
+  assert.equal("reps" in after.entries[0].sets[1], false);
+  // and the timed set's weight can be changed with its reps left blank
+  const again = await logger.getWorkoutDetail(id);
+  const second = draftFromWorkout(again);
+  second.entries[0].sets[1].weight = "5";
+  await logger.saveWorkoutEdit(again, second);
+  assert.deepEqual((await store.getWorkoutWithDetails(id)).entries[0].sets[1], { ...timed, weightValue: 5 });
+});

@@ -5,7 +5,7 @@
 // behaves) lives in src/app and src/domain.
 
 import { h, button, exerciseHeading } from "./dom.js";
-import { formatSetWeightParts, formatWeight, parseDecimal } from "../domain/format.js";
+import { formatSetWeightParts, formatWeight, parseDecimal, formatSetDuration, isTimedSet } from "../domain/format.js";
 import {
   formatRest, parseRestEntry, previewRestEntry, restToDigits, pieGeometry, isRunning, remainingSeconds, fractionRemaining,
 } from "../domain/rest-timer.js";
@@ -237,6 +237,14 @@ function plannedCells(ctx, row, index, exerciseName) {
 // value is a button that opens the edit form for the set (setEditor).
 function loggedCells(ctx, row, index, exerciseName) {
   const parts = formatSetWeightParts(row.weight, row.unit, ctx.unit);
+  if (isTimedSet(row)) {
+    // A timed set shows its time where reps go, and no "0 kg" at weight 0. It has no edit button: there is no
+    // timed input yet, and History's Edit still changes it.
+    return {
+      weightCell: h("span", { class: "cell cell-weight cell-text", "data-cell": "weight" }, row.weight === 0 ? null : h("span", { class: "cell-value" }, parts.text)),
+      repsCell: h("span", { class: "cell cell-reps cell-text", "data-cell": "reps" }, formatSetDuration(row.durationSeconds)),
+    };
+  }
   const edit = (label, ...content) => button(content, {
     class: "cell-edit",
     "data-action": "edit-set",

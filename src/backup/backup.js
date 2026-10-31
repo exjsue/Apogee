@@ -56,12 +56,17 @@ export const RECORD_FIELDS = {
 
 // Fields a record may have and may leave out (schema version 5 files). An exercise saved before secondary
 // weights existed, or never edited since, has no secondaryWeights; every secondary muscle then counts 0.5. A
-// workout without a name, or a set without rpe or setType, has none. When present each is checked like any
-// other field.
-export const OPTIONAL_RECORD_FIELDS = { exercises: ["secondaryWeights"], workouts: ["name"], sets: ["rpe", "setType"] };
+// workout without a name, or a set without rpe, setType or durationSeconds, has none. When present each is checked
+// like any other field.
+export const OPTIONAL_RECORD_FIELDS = { exercises: ["secondaryWeights"], workouts: ["name"], sets: ["rpe", "setType", "durationSeconds"] };
+
+// A required field a record may still leave out when it has another one: in a schema 5 file, a set with
+// durationSeconds (a timed set) may have no reps. createWorkSet checks the pair. An older file's sets always need reps.
+const ABSENT_IF_PRESENT = { sets: { reps: "durationSeconds" } };
 
 // What a schema version 4 file may leave out: secondaryWeights only. A version 4 file must not contain the
-// schema 5 fields (name, rpe, setType); it is refused if it does, as a version 2 file with schema 3 fields is.
+// schema 5 fields (name, rpe, setType, durationSeconds); it is refused if it does, as a version 2 file with
+// schema 3 fields is.
 export const OPTIONAL_RECORD_FIELDS_V4 = { exercises: ["secondaryWeights"] };
 
 // The fields schema version 3 added to exercises.
@@ -150,7 +155,9 @@ function validateSection(section, items, fieldsOf, optionalOf) {
     if (!isPlainObject(item)) fail(`${where}: not an object`);
     rejectUnknownFields(item, [...fields, ...optional], where);
     for (const field of fields) {
-      if (!hasOwn(item, field)) fail(`${where}: required field "${field}" is missing`);
+      const unlessField = ABSENT_IF_PRESENT[section]?.[field];
+      const excused = unlessField !== undefined && optional.includes(unlessField) && hasOwn(item, unlessField);
+      if (!hasOwn(item, field) && !excused) fail(`${where}: required field "${field}" is missing`);
     }
     if (typeof item.id !== "string" || item.id === "") fail(`${where}: id must be a non-empty string`);
     if (seen.has(item.id)) fail(`${where}: duplicate id`);
