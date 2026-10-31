@@ -243,3 +243,14 @@ test("the panel's weekly value and delta: the rounded total with the guide, the 
   const none = of("chest");
   assert.deepEqual([none.weeklyText, none.deltaText, none.trend], ["0 (guide 10-20)", null, null]);
 });
+
+test("the weekly row's number, its short suffix only when the week before had at least 1 weighted set and the delta is not 0, and the guide", () => {
+  const fresh = of("biceps", entry("curl", ...day(1, 6)));
+  assert.deepEqual([fresh.weeklyValueText, fresh.weekDeltaText], ["6", null], "the week before had 0");
+  const down = of("front_delts", entry("bench", ...day(1, 3)), entry("log", ...day(9, 6)));
+  assert.deepEqual([down.weeklyValueText, down.weekDeltaText], ["1.5", "-4.5 vs last wk"]);
+  assert.equal(of("biceps", entry("curl", ...day(1, 3), ...day(9, 1))).weekDeltaText, "+2 vs last wk", "exactly 1 the week before");
+  assert.equal(of("triceps", entry("bench", ...day(9, 1)), entry("bench", ...day(1, 2))).weekDeltaText, null, "0.5 the week before is below 1");
+  assert.equal(of("biceps", entry("curl", ...day(1, 2), ...day(9, 2))).weekDeltaText, null, "a delta of 0");
+  assert.equal(of("chest").guideText, "Guide: 10-20 weighted sets per 7 days");
+});

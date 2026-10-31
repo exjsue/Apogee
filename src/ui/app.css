@@ -546,7 +546,10 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 /* the Weekly row: a short line, then a bar of the value against the top of the target range, the range itself marked
    in a neutral tone behind it (no warning colour) */
 .muscle-panel .weekly { margin-bottom: 8px; }
-.muscle-panel .weekly-line { margin: 0 0 4px; }
+/* one line high: a part that does not fit wraps onto a second line that is clipped, so the suffix is hidden, never
+   wrapped (the label and the number come first and are short enough for any phone) */
+.muscle-panel .weekly-line { display: flex; flex-wrap: wrap; column-gap: 0.4em; line-height: 1.5; height: 1.5em; overflow: hidden; margin: 0 0 4px; }
+.muscle-panel .weekly-line > span { white-space: nowrap; }
 .muscle-panel .weekly-label { font-weight: 600; }
 .muscle-panel .weekly-bar { display: block; width: 100%; height: 8px; }
 .muscle-panel .weekly-bar .track { fill: var(--line); }

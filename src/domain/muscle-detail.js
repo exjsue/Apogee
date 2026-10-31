@@ -90,6 +90,11 @@ function balanceFor(muscle, values) {
 //   targetText, positionText, weightedText
 //   weeklyText             the panel's short weekly value, "22 (guide 10-20)"
 //   deltaText              the trend's signed delta, "+9 vs prior 7 days", or null when there is no trend
+//                          (weeklyText and deltaText are no longer shown; the panel uses the three below)
+//   weeklyValueText        the weekly row's number alone, "11"
+//   weekDeltaText          "+3 vs last wk" / "-3 vs last wk", the trend's own delta, only when the 7 days before had at
+//                          least 1 weighted set and the delta is not 0, else null
+//   guideText              "Guide: 10-20 weighted sets per 7 days", the first line inside Details
 //   daysSince, lastTrainedText   whole elapsed days since the latest counted set in the longer window (null when none)
 //   trend                  null when both windows are empty, else { current, previous, delta, text }
 //   contributors           { primary, secondary }, each up to 5 of { exerciseId, name, sets, weighted, text }, biggest first
@@ -117,6 +122,9 @@ export function buildMuscleDetails({ recent, previous, longer, exercises, now })
       position,
       weeklyText: `${fmt(weighted)} (guide ${TARGET_RANGE.min}-${TARGET_RANGE.max})`,
       deltaText: weighted === 0 && before[muscle] === 0 ? null : `${signed(delta)} vs prior ${WINDOW_DAYS} days`,
+      weeklyValueText: fmt(weighted),
+      weekDeltaText: before[muscle] >= 1 && delta !== 0 ? `${signed(delta)} vs last wk` : null,
+      guideText: `Guide: ${TARGET_RANGE.min}-${TARGET_RANGE.max} weighted sets per ${WINDOW_DAYS} days`,
       weightedText: hasSets ? `${fmt(weighted)} weighted sets in the last ${WINDOW_DAYS} days` : `No sets in the last ${WINDOW_DAYS} days`,
       targetText: `Default target: ${TARGET_RANGE.min} to ${TARGET_RANGE.max} weighted sets in ${WINDOW_DAYS} days`,
       positionText: position === null ? null : `${position === "below" ? "Below" : position === "above" ? "Above" : "Within"} the default target`,

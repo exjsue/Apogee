@@ -72,7 +72,8 @@ function weeklyBar(value) {
 }
 
 // The short weekly line is for the eye; the three full sentences (the total, where it is against the default target,
-// and the target itself) stay in the row, visually hidden, so a screen reader loses nothing.
+// and the target itself) stay in the row, visually hidden, so a screen reader loses nothing. The line is one line
+// high and wraps into its hidden second line (app.css), so a suffix that does not fit is hidden, never wrapped.
 function weeklyRow(detail) {
   return h(
     "div",
@@ -82,8 +83,8 @@ function weeklyRow(detail) {
       { class: "weekly-line", "aria-hidden": "true" },
       h("span", { class: "weekly-label" }, "Weekly sets"),
       " ",
-      h("span", { class: "weekly-value", "data-region": "muscle-weekly-value" }, detail.weeklyText),
-      detail.deltaText === null ? null : [" ", h("span", { class: "muted weekly-delta", "data-region": "muscle-weekly-delta" }, detail.deltaText)],
+      h("span", { class: "weekly-value", "data-region": "muscle-weekly-value" }, detail.weeklyValueText),
+      detail.weekDeltaText === null ? null : [" ", h("span", { class: "muted weekly-delta", "data-region": "muscle-weekly-delta" }, detail.weekDeltaText)],
     ),
     weeklyBar(detail.weighted),
     h("p", { class: "visually-hidden", "data-region": "muscle-weighted" }, detail.weightedText),
@@ -104,12 +105,13 @@ function topSetRows(topSet) {
   ];
 }
 
-// Trend, the credit lists and Balance, unchanged and in this order, behind one Details button, closed when the
-// panel opens. They come after every visible row, so opening them moves nothing above.
+// The guide, then Trend, the credit lists and Balance, unchanged and in this order, behind one Details button, closed
+// when the panel opens. They come after every visible row, so opening them moves nothing above.
 function detailsRows(detail) {
   const inner = h(
     "div",
     { class: "panel-details", id: "muscle-details", "data-region": "muscle-details", hidden: true },
+    h("p", { class: "muted", "data-region": "muscle-guide" }, detail.guideText),
     detail.trend === null ? null : h("p", { "data-region": "muscle-trend" }, `Trend: ${detail.trend.text}`),
     contributorGroup("Primary credit", detail.contributors.primary),
     contributorGroup("Secondary credit", detail.contributors.secondary),

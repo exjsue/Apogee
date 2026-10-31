@@ -3027,16 +3027,20 @@ rule("body panel: the Weekly row's text and bar, Details closed by default and o
     await waitFor(() => diagram(root), "the diagram");
     const inPanel = (name) => region(panelOf(root), name);
     tapDiagram(root, ...QUADS);
-    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 22 (guide 10-20) +22 vs prior 7 days");
+    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 22", "no guide, and no suffix: the 7 days before had no sets");
+    ctx.assert.equal(inPanel("muscle-weekly-delta"), null);
     ctx.assert.equal(inPanel("muscle-weekly-fill").getAttribute("width"), "20", "the bar is full at 20 and above");
     ctx.assert.ok(inPanel("muscle-weighted").classList.contains("visually-hidden") && inPanel("muscle-position").textContent === "Above the default target", "the range state is kept for screen readers");
-    // Details: closed by default, with the four rows inside in their order
+    // Details: closed by default, the guide first (muted), then the rows inside in their order
     const toggle = action(panelOf(root), "muscle-details");
     const box = inPanel("muscle-details");
     ctx.assert.equal(toggle.getAttribute("aria-expanded"), "false");
     ctx.assert.equal(toggle.getAttribute("aria-controls"), box.id);
     ctx.assert.ok(box.hidden && box.getBoundingClientRect().height === 0, "closed by default");
-    ctx.assert.deepEqual([...box.children].map((el) => el.dataset.region ?? el.querySelector("h4").textContent), ["muscle-trend", "Primary credit", "muscle-balance"]);
+    ctx.assert.deepEqual([...box.children].map((el) => el.dataset.region ?? el.querySelector("h4").textContent), ["muscle-guide", "muscle-trend", "Primary credit", "muscle-balance"]);
+    const guide = inPanel("muscle-guide");
+    ctx.assert.equal(guide.textContent, "Guide: 10-20 weighted sets per 7 days");
+    ctx.assert.ok(guide.classList.contains("muted"), "greyed with the existing muted colour");
     panelOf(root).getAnimations({ subtree: true }).forEach((a) => a.finish()); // the final state, so positions are settled
     const tops = () => ["muscle-weekly", "muscle-last", "muscle-top-set"].map((name) => inPanel(name).getBoundingClientRect().top);
     const before = tops();
@@ -3051,10 +3055,10 @@ rule("body panel: the Weekly row's text and bar, Details closed by default and o
     ctx.assert.ok(box.hidden, "closed again");
     // no sets this week and no trend: the value is 0, there is no delta
     tapDiagram(root, 84, 99);
-    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 0 (guide 10-20)");
+    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 0");
     ctx.assert.equal(inPanel("muscle-weekly-fill").getAttribute("width"), "0");
     tapDiagram(root, 78, 336);
-    ctx.assert.equal(inPanel("muscle-weekly-delta").textContent, "-5 vs prior 7 days");
+    ctx.assert.equal(inPanel("muscle-weekly-delta").textContent, "-5 vs last wk", "calves: 0 now, 5 the week before");
     // biceps: 2 curl sessions, no sparkline; triceps: 3 pushdown sessions, a sparkline; the slot keeps its width
     click($(root, '[data-action="muscle-open"][data-muscle="biceps"]'));
     ctx.assert.equal(inPanel("muscle-spark"), null, "2 sessions: hidden");
@@ -3064,6 +3068,20 @@ rule("body panel: the Weekly row's text and bar, Details closed by default and o
     click($(root, '[data-action="muscle-open"][data-muscle="triceps"]'));
     ctx.assert.ok(inPanel("muscle-spark") !== null, "3 sessions: shown");
     ctx.assert.equal(inPanel("muscle-top-set").querySelector(".spark-slot").getBoundingClientRect().width, emptySlot, "the slot is the same width either way");
+    // triceps: 2 sets now, 1 the week before: the suffix with its sign, on the number's line at 390 px
+    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 2 +1 vs last wk");
+    panelOf(root).getAnimations({ subtree: true }).forEach((a) => a.finish());
+    const [value, delta] = [inPanel("muscle-weekly-value").getBoundingClientRect(), inPanel("muscle-weekly-delta").getBoundingClientRect()];
+    ctx.assert.ok(delta.width > 0 && delta.top === value.top, `the suffix is on the same line (${delta.top} vs ${value.top})`);
+    const line = inPanel("muscle-weekly").querySelector(".weekly-line");
+    ctx.assert.ok(delta.right <= line.getBoundingClientRect().right, "and inside the line");
+    // too narrow for the suffix (forced here, in the test only): it is clipped, not wrapped, and the line stays one line
+    const oneLine = line.getBoundingClientRect().height;
+    line.style.width = "9em";
+    const narrow = line.getBoundingClientRect();
+    ctx.assert.equal(narrow.height, oneLine, "still one line high");
+    ctx.assert.ok(inPanel("muscle-weekly-delta").getBoundingClientRect().top >= narrow.bottom, "the suffix is on the clipped line, out of sight");
+    line.style.removeProperty("width");
   }, {
     width: 390,
     prepare: async (store) => {
