@@ -25,7 +25,7 @@ const UNITS = Object.freeze(["kg", "lb"]);
 const round1 = (n) => Math.round(n * 10) / 10;
 
 // The set's weight in the target unit, rounded to 0.1 (a set already in that unit is only rounded).
-function weightIn(set, unit) {
+export function weightIn(set, unit) {
   const w = set.weightValue;
   if (typeof w !== "number" || !Number.isFinite(w)) return null;
   if (set.weightUnit === unit) return round1(w);

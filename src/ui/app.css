@@ -477,6 +477,10 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
      animated from the neutral colour, so the colour a script reads is always the final one), and the fill eases in
      place if a class ever changes on a diagram that stays */
   .body-diagram .muscle .shape { transition: fill var(--motion-shade) var(--ease-motion); animation: shade-in var(--motion-shade) var(--ease-motion); }
+
+  /* the Body panel's rows rise in one after another, by their --i (set with the panel's own rules); backwards keeps a
+     row hidden only during its own short delay, and the text is in the DOM from the start */
+  .muscle-panel > * { animation: rise-in var(--motion-soft) var(--ease-motion) backwards; animation-delay: calc(var(--i, 0) * 30ms); }
 }
 
 /* reduced motion: a pressed button changes colour at once, with no transition, transform or animation;
@@ -539,6 +543,24 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .muscle-panel h4 { margin: 8px 0 4px; font-size: 0.9375rem; }
 .muscle-panel li { padding: 2px 0; }
 .muscle-panel .contributors { margin-bottom: 8px; }
+/* the Top set row: the sentence takes the room left, the sparkline keeps its own 60 px beside it, so they never overlap */
+.muscle-panel .top-set { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.muscle-panel .top-set p { flex: 1 1 auto; min-width: 0; margin: 0; }
+.muscle-panel .sparkline { flex: 0 0 60px; width: 60px; height: 20px; }
+.muscle-panel .sparkline polyline { fill: none; stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+/* the stall line is the panel's only use of the accent */
+.muscle-panel .stall { color: var(--accent); font-weight: 600; }
+/* each row's place, for the staggered fade-in (the animation itself is in the no-preference block) */
+.muscle-panel > :nth-child(2) { --i: 1; }
+.muscle-panel > :nth-child(3) { --i: 2; }
+.muscle-panel > :nth-child(4) { --i: 3; }
+.muscle-panel > :nth-child(5) { --i: 4; }
+.muscle-panel > :nth-child(6) { --i: 5; }
+.muscle-panel > :nth-child(7) { --i: 6; }
+.muscle-panel > :nth-child(8) { --i: 7; }
+.muscle-panel > :nth-child(9) { --i: 8; }
+.muscle-panel > :nth-child(10) { --i: 9; }
+.muscle-panel > :nth-child(n + 11) { --i: 10; }
 .pr-label { margin-left: 8px; padding: 0 4px; font-size: 0.75rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); }
 /* Text for screen readers only: out of sight but still in the accessibility tree (not display: none). */
 .visually-hidden {

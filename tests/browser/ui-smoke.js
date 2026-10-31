@@ -2977,6 +2977,50 @@ rule("body panel: at 320 px an open panel fits the width, with a long exercise n
 });
 const LONG_NAME = "Supercalifragilisticexpialidocious_with_no_spaces_to_break_the_line_at_all";
 
+rule("body panel: the Top set row, its sparkline beside the text and not over it, the stall line in the accent, and the rows' staggered fade (none when reduced)", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    const win = frame.contentWindow;
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    click($(root, '[data-action="muscle-open"][data-muscle="biceps"]'));
+    const top = region(panelOf(root), "muscle-top-set");
+    ctx.assert.equal(top.querySelector("p").textContent, "Top set: Dumbbell curl, 5 reps · 50 kg");
+    const [text, spark] = [top.querySelector("p").getBoundingClientRect(), region(top, "muscle-spark").getBoundingClientRect()];
+    ctx.assert.ok(spark.width > 0 && spark.left >= text.right, "the sparkline is beside the text, not over it");
+    const panelBox = panelOf(root).getBoundingClientRect();
+    ctx.assert.ok(spark.right <= panelBox.right, "the sparkline is inside the panel");
+    const stall = region(panelOf(root), "muscle-stall");
+    ctx.assert.equal(stall.textContent, "Stalled: Dumbbell curl has not progressed in 4 sessions.");
+    const rows = [...panelOf(root).children];
+    const colours = rows.map((row) => win.getComputedStyle(row).color);
+    ctx.assert.equal(colours.filter((c) => c === win.getComputedStyle(stall).color).length, 1, "only the stall line has its colour");
+    ctx.assert.ok(region(panelOf(root), "muscle-weighted").textContent.length > 0, "the rows above are still there");
+    const indexes = rows.map((row) => Number(win.getComputedStyle(row).getPropertyValue("--i") || 0));
+    ctx.assert.ok(indexes.every((i, k) => k === 0 || i > indexes[k - 1]), `each row has a later index: ${indexes}`);
+    for (const row of rows) expectMotion(win, { element: row, seconds: motionSeconds(win, row) }, `panel row ${row.dataset.region ?? row.className}`);
+    click(action(root, "muscle-close"));
+    click($(root, '[data-action="muscle-open"][data-muscle="chest"]'));
+    ctx.assert.equal(region(panelOf(root), "muscle-top-set").textContent, "Top set: Barbell bench press, 5 reps · 50 kg", "one session: text only");
+    ctx.assert.equal(region(panelOf(root), "muscle-spark"), null, "one session: no sparkline");
+    ctx.assert.equal(region(panelOf(root), "muscle-stall"), null);
+    click(action(root, "muscle-close"));
+    await showView(root, "back");
+    click($(root, '[data-action="muscle-open"][data-muscle="lats"]'));
+    ctx.assert.equal(region(panelOf(root), "muscle-top-set").textContent, "Top set: no sets in the last 28 days");
+  }, {
+    width: 320,
+    prepare: async (store) => {
+      await seedBodyWorkouts(store);
+      // three more curl sessions of 50 kg x 5 before the one a day ago: 4 sessions, no gain
+      for (const days of [16, 12, 8]) {
+        const id = `bw-curl-${days}`;
+        const at = (d) => new Date(Date.now() - d * DAY_MS).toISOString();
+        await store.saveWorkoutWithDetails({ id, startedAt: at(days + 0.02), endedAt: at(days) }, [{ id: `${id}-e`, workoutId: id, exerciseId: "seed-dumbbell-curl", order: 0 }], [{ id: `${id}-s0`, entryId: `${id}-e`, order: 0, reps: 5, weightValue: 50, weightUnit: "kg", isWarmup: false, completedAt: at(days + 0.01) }]);
+      }
+    },
+  });
+});
+
 // ---- the picker's menu for the user's own exercises: edit, remove (delete or hide), show again ----
 
 const FLY = createExercise({ id: "c-fly", name: "Cable Fly", primaryMuscles: ["chest", "neck"], secondaryMuscles: [], equipmentTags: ["cable", "trap_bar"], isCustom: true });

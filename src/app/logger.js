@@ -19,6 +19,7 @@ import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
 import { applyWorkoutEdit } from "../domain/workout-edit.js";
 import { computeMuscleLoad } from "../domain/muscle-load.js";
 import { buildMuscleDetails } from "../domain/muscle-detail.js";
+import { buildTopSets, TOP_SET_DAYS } from "../domain/top-set.js";
 import { computeBodyStatus, WINDOW_DAYS, NEGLECTED_WEEKS } from "../domain/body-status.js";
 import { prHistory, personalRecords } from "../domain/strength.js";
 import { SESSION_CONFLICT } from "../storage/schema.js";
@@ -799,15 +800,18 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
   // unreadable. A finish sets endedAt at or after every set in the workout. The window ends 1 ms after now, so a set
   // logged this instant counts. Several reads, not one transaction: a set logged between them may show in one
   // window and not the other, which a redraw puts right. It also returns `details`, a MuscleDetail per displayed
-  // muscle for the tap-to-inspect panel (src/domain/muscle-detail.js), made from the same reads.
+  // muscle for the tap-to-inspect panel (src/domain/muscle-detail.js), made from the same reads, each with a `topSet` for
+  // its Top set row (src/domain/top-set.js): workouts are loaded back to the longer of the 3 weeks and TOP_SET_DAYS.
   async function getMuscleStatus() {
     const nowAt = nowDate().getTime();
     const end = nowAt + 1;
     const longerStart = nowAt - NEGLECTED_WEEKS * 7 * DAY_MS;
+    const monthStart = nowAt - TOP_SET_DAYS * DAY_MS;
+    const loadStart = Math.min(longerStart, monthStart);
     const details = [];
     for (const workout of await store.listWorkouts()) {
       const endedMs = workout.endedAt === null || workout.endedAt === undefined ? null : Date.parse(workout.endedAt);
-      if (endedMs !== null && endedMs < longerStart) continue; // a NaN (unreadable) endedAt fails this test, so it is loaded
+      if (endedMs !== null && endedMs < loadStart) continue; // a NaN (unreadable) endedAt fails this test, so it is loaded
       const found = await store.getWorkoutWithDetails(workout.id);
       if (found !== null) details.push(found);
     }
@@ -821,7 +825,11 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     // The window before the recent one, [now - 14 days, now - 7 days): it ends where the recent one starts, so no set counts twice.
     const previous = load(nowAt - 2 * WINDOW_DAYS * DAY_MS, recentStart);
     // The detail panel's numbers come from the same reads: no read per tap.
-    return { ...computeBodyStatus({ recent, longer }), details: buildMuscleDetails({ recent, previous, longer, exercises, now: nowAt }) };
+    const muscleDetails = buildMuscleDetails({ recent, previous, longer, exercises, now: nowAt });
+    // Each detail's topSet (the Top set row): the month load picks the exercise, the finished sets give its sessions (any age).
+    const topSets = buildTopSets({ month: load(monthStart, end, true), sets: await store.listFinishedSetRecords(), exercises, unit: await store.getPreferredUnit() });
+    for (const [id, detail] of Object.entries(muscleDetails)) detail.topSet = topSets[id];
+    return { ...computeBodyStatus({ recent, longer }), details: muscleDetails };
   }
 
   // Personal records from the sets of finished workouts, in the preferred unit (src/domain/strength.js). Read only:

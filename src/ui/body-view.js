@@ -38,6 +38,29 @@ function contributorGroup(title, rows) {
   return h("div", { class: "contributors" }, h("h4", {}, title), h("ul", {}, rows.map((row) => h("li", {}, row.text))));
 }
 
+// Best e1RM per session as a small line, scaled to its own lowest and highest value. The numbers are in its label.
+// The SVG namespace is read from the diagram's template (as body-diagram.js does), so no URL is written in src/.
+function sparkline(values, label) {
+  const ns = document.getElementById("body-diagram-template")?.content.firstElementChild?.namespaceURI;
+  if (ns === undefined) return null;
+  const [low, high] = [Math.min(...values), Math.max(...values)];
+  const y = (v) => (high === low ? 10 : 18 - ((v - low) / (high - low)) * 16);
+  const svg = document.createElementNS(ns, "svg");
+  for (const [name, value] of [["class", "sparkline"], ["viewBox", "0 0 60 20"], ["preserveAspectRatio", "none"], ["role", "img"], ["aria-label", label], ["data-region", "muscle-spark"]]) svg.setAttribute(name, value);
+  const line = document.createElementNS(ns, "polyline");
+  line.setAttribute("points", values.map((v, i) => `${(i * 58) / (values.length - 1) + 1},${y(v)}`).join(" "));
+  svg.append(line);
+  return svg;
+}
+
+function topSetRows(topSet) {
+  if (topSet === undefined) return null;
+  return [
+    h("div", { class: "top-set", "data-region": "muscle-top-set" }, h("p", {}, topSet.text), topSet.spark === null ? null : sparkline(topSet.spark, topSet.sparkText)),
+    topSet.stallText === null ? null : h("p", { class: "stall", "data-region": "muscle-stall" }, topSet.stallText),
+  ];
+}
+
 function panelFor(detail, onClose) {
   return h(
     "section",
@@ -56,6 +79,7 @@ function panelFor(detail, onClose) {
     contributorGroup("Primary credit", detail.contributors.primary),
     contributorGroup("Secondary credit", detail.contributors.secondary),
     detail.balance === null ? null : h("p", { "data-region": "muscle-balance" }, `Balance: ${detail.balance.text}`),
+    topSetRows(detail.topSet),
   );
 }
 

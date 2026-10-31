@@ -42,7 +42,7 @@ function lastTrainedText(lastAt, now) {
 }
 
 // One entry per exercise (see the top of the file); rows may list the same exercise for two muscles.
-function mergeByExercise(rows) {
+export function mergeByExercise(rows) {
   const merged = new Map();
   for (const row of rows) {
     const found = merged.get(row.exerciseId);
