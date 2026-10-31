@@ -199,7 +199,32 @@ export async function sha256Hex(text) {
 }
 
 export const strongWorkoutId = (dateText, nameText) => sha256Hex(`strong|${dateText}|${nameText}`);
-const strongExerciseId = async (key) => `strong-exercise-${await sha256Hex(`strong-exercise|${key}`)}`;
+export const strongExerciseId = async (key) => `strong-exercise-${await sha256Hex(`strong-exercise|${key}`)}`;
+
+// The records the importer writes, built in one place so the undo (strong-undo.js) compares against exactly the same.
+// Each goes through the model's create function and throws as it does.
+export function strongWorkoutRecord(id, workout) {
+  const name = normalizeName(workout.nameText);
+  return createWorkout({
+    id, startedAt: workout.startedAt, endedAt: new Date(workout.startedAt.getTime() + workout.durationSeconds * 1000),
+    ...(name === "" ? {} : { name }),
+  });
+}
+
+export const strongEntryRecord = (workoutId, position, exerciseId) => createWorkoutEntry({
+  id: `${workoutId}-e${position}`, workoutId, exerciseId, order: position, supersetGroup: null,
+});
+
+// `order` is the set's place in its entry; completedAt is the workout's start (ISO).
+export function strongSetRecord(row, entryId, order, unit, completedAt) {
+  return createWorkSet({
+    id: `${entryId}-s${order}`, entryId, order,
+    ...(row.seconds > 0 ? { durationSeconds: row.seconds } : { reps: row.reps }),
+    weightValue: row.weight, weightUnit: unit, isWarmup: row.marker === "W", completedAt,
+    ...(row.rpe === null ? {} : { rpe: row.rpe }),
+    ...(row.marker === "F" ? { setType: SET_TYPES[0] } : row.marker === "D" ? { setType: SET_TYPES[1] } : {}),
+  });
+}
 
 // `mapping` is a Map from nameKey(normalized Strong name) to one of
 //   { kind: "existing", exerciseId }
@@ -302,7 +327,7 @@ export async function buildStrongPlan({ parsed, unit, mapping, existing }) {
         const position = entries.length;
         try {
           entry = {
-            record: createWorkoutEntry({ id: `${id}-e${position}`, workoutId: id, exerciseId: resolved.exerciseId, order: position, supersetGroup: null }),
+            record: strongEntryRecord(id, position, resolved.exerciseId),
             blocks: 1, reasons: [], lastNumber: null, name: row.exercise, sets: 0,
           };
         } catch (e) { errors.push({ line: row.line, message: e.message }); continue; }
@@ -320,23 +345,13 @@ export async function buildStrongPlan({ parsed, unit, mapping, existing }) {
       if (number !== null) entry.lastNumber = number;
       previous = resolved.exerciseId;
       try {
-        sets.push(createWorkSet({
-          id: `${entry.record.id}-s${entry.sets}`, entryId: entry.record.id, order: entry.sets,
-          ...(row.seconds > 0 ? { durationSeconds: row.seconds } : { reps: row.reps }),
-          weightValue: row.weight, weightUnit: unit, isWarmup: row.marker === "W", completedAt: startedIso,
-          ...(row.rpe === null ? {} : { rpe: row.rpe }),
-          ...(row.marker === "F" ? { setType: SET_TYPES[0] } : row.marker === "D" ? { setType: SET_TYPES[1] } : {}),
-        }));
+        sets.push(strongSetRecord(row, entry.record.id, entry.sets, unit, startedIso));
         entry.sets += 1;
       } catch (e) { errors.push({ line: row.line, message: e.message }); }
     }
     let workoutRecord = null;
     try {
-      const name = normalizeName(workout.nameText);
-      workoutRecord = createWorkout({
-        id, startedAt: workout.startedAt, endedAt: new Date(workout.startedAt.getTime() + workout.durationSeconds * 1000),
-        ...(name === "" ? {} : { name }),
-      });
+      workoutRecord = strongWorkoutRecord(id, workout);
     } catch (e) { errors.push({ line: workout.rows[0].line, message: e.message }); }
     if (errors.length > before || workoutRecord === null) { report.workouts.withErrors += 1; continue; }
     report.dropped.skippedSets += skipped;

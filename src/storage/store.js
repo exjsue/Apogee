@@ -146,15 +146,25 @@ async function applyWorkoutMeta(tx, meta = {}) {
 // Runs inside a transaction: every place that can refer to an exercise by id (the list is in DECISIONS.md,
 // 2026-10-26): entries of any workout (finished, open or stale), templates, the session's plan in meta (its
 // exercises and its rows; normalizePlan lists every row's exercise in exercises) and the conflicts of the catalog
-// flag in meta. The running timer refers to a set, whose entry is counted here. Reads only.
-async function readExerciseUsage(tx, id) {
-  const workoutIds = new Set((await tx.getAll("entries")).filter((entry) => entry.exerciseId === id).map((entry) => entry.workoutId));
+// flag in meta. The running timer refers to a set, whose entry is counted here. Reads only. Entries of the workouts
+// in `ignoredWorkoutIds` are not counted (the Strong undo asks about workouts it is about to delete).
+export async function readExerciseUsage(tx, id, ignoredWorkoutIds = new Set()) {
+  const workoutIds = new Set((await tx.getAll("entries"))
+    .filter((entry) => entry.exerciseId === id && !ignoredWorkoutIds.has(entry.workoutId)).map((entry) => entry.workoutId));
   const templates = (await tx.getAll("templates")).filter((template) => template.exercises.some((item) => item.exerciseId === id)).length;
   const planned = normalizePlan((await tx.get("meta", WORKOUT_META_KEYS.plan))?.value).exercises.includes(id);
   const flag = (await tx.get("meta", CATALOG_VERSION_META_KEY))?.value;
   const catalogConflict = flag !== null && typeof flag === "object" && Array.isArray(flag.conflicts) && flag.conflicts.includes(id);
   const used = workoutIds.size > 0 || templates > 0 || planned || catalogConflict;
   return { workouts: workoutIds.size, templates, planned, catalogConflict, used };
+}
+
+// Runs inside a transaction: raises the session plan's revision (an empty plan when there is none), so a session
+// write prepared before an exercise was deleted is refused (checkRevision) and reads again.
+export async function raisePlanRevision(tx) {
+  const stored = (await tx.get("meta", WORKOUT_META_KEYS.plan))?.value;
+  const plan = stored !== null && typeof stored === "object" && !Array.isArray(stored) ? stored : emptyPlan();
+  await tx.put("meta", { key: WORKOUT_META_KEYS.plan, value: { ...plan, rev: normalizePlan(stored).rev + 1 } });
 }
 
 // Runs inside a transaction: the stored custom exercise with this id, or an error.
@@ -496,10 +506,8 @@ export function createStore(adapter) {
         if (exercise.retired !== true) await tx.put("exercises", { ...exercise, retired: true });
         return "hidden";
       }
-      const stored = (await tx.get("meta", WORKOUT_META_KEYS.plan))?.value;
-      const plan = stored !== null && typeof stored === "object" && !Array.isArray(stored) ? stored : emptyPlan();
       await tx.delete("exercises", id);
-      await tx.put("meta", { key: WORKOUT_META_KEYS.plan, value: { ...plan, rev: normalizePlan(stored).rev + 1 } });
+      await raisePlanRevision(tx);
       return "deleted";
     });
   }
