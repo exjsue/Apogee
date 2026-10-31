@@ -1,6 +1,7 @@
 // The "Import from Strong" section of the Settings tab. It ADDS workouts from a Strong CSV export and is kept apart
 // from the Backup import, which replaces everything. Nothing is written before Confirm, and Confirm writes only a plan
-// that, built again from the stored data, equals the dry run shown (samePlan in strong-apply.js).
+// that, built again from the stored data, equals the dry run shown (samePlan in strong-apply.js). Below it, the
+// separate "Undo a Strong import" block deletes, from the same file, only what is still exactly as imported.
 // Parsing, matching and the plan live in src/importers; this file builds elements and keeps the user's choices in
 // ctx.state.strong, so a redraw never loses one. Nothing is chosen for the user: every name starts on "Create
 // custom" (a name a stored exercise already has starts with no choice), and there is no accept-all.
@@ -100,6 +101,145 @@ function reportView(plan) {
 const writtenText = (w) => `Added ${formatCount(w.workouts, "workout")}, ${formatCount(w.entries, "exercise entry", "exercise entries")}, `
   + `${formatCount(w.sets, "set")} and ${formatCount(w.exercises, "custom exercise")}. Re-importing the same file adds nothing.`;
 
+// ---- Undo a Strong import: its own block, state (ctx.state.strongUndo) and names (strong-undo-*).
+
+const UNDO_HEADING = '[data-region="strong-undo-heading"]';
+const freshUndo = () => ({ fileName: null, prepared: null, report: null, ticked: false, busy: false, done: null, error: null });
+// strong-undo.js's reason when a workout's own record differs: its start, length, name or notes.
+const DATE_REASON = "its date, length, name or notes differ from the file";
+
+const labelText = (w) => `${w.date}, ${w.name.trim() === "" ? "(no name)" : w.name}`;
+
+function usageText(u) {
+  return [
+    u.workouts > 0 ? formatCount(u.workouts, "other workout") : null,
+    u.templates > 0 ? formatCount(u.templates, "template") : null,
+    u.planned ? "the planned session" : null,
+    u.catalogConflict ? "the exercise library's name check" : null,
+  ].filter((part) => part !== null).join(", ");
+}
+
+function undoReportView(r) {
+  const w = r.workouts;
+  const x = r.exercises;
+  const list = (region, items) => (items.length === 0 ? null : h("ul", { "data-region": region }, items.map((item) => h("li", {}, item))));
+  const timeZone = w.toDelete.length === 0 && w.notFound.length === 0 && w.unverified.length === 0 && w.edited.length > 0
+    && w.edited.every((item) => item.reason === DATE_REASON);
+  return h(
+    "div",
+    { class: "strong-report", "data-region": "strong-undo-report", "data-enter": "strong-undo-report" },
+    h("h3", { tabindex: "-1", "data-region": "strong-undo-report-heading" }, "What would be removed"),
+    h("p", { class: "notice", role: "status" }, "Nothing has been deleted."),
+    h("p", {}, `Workouts to delete: ${w.toDelete.length} (${formatCount(r.totals.entries, "exercise entry", "exercise entries")}, ${formatCount(r.totals.sets, "set")}).`),
+    list("strong-undo-delete", w.toDelete.map((item) => `${labelText(item)}: ${formatCount(item.entries, "exercise entry", "exercise entries")}, ${formatCount(item.sets, "set")}, in ${item.unit}; names with no stored sets: ${item.skippedNames}`)),
+    h("p", {}, `Edited since the import, kept: ${w.edited.length}.`),
+    list("strong-undo-edited", w.edited.map((item) => `${labelText(item)}: ${item.reason}`)),
+    timeZone ? h("p", { class: "warning-text", "data-region": "strong-undo-time-zone" }, "Every workout differs in its date or time. The likely cause is a change of this device's time zone since the import; nothing will be deleted.") : null,
+    h("p", {}, `Not found on this device: ${w.notFound.length}. Not checked (rows with errors in the file): ${w.notChecked.length}. Could not verify, kept: ${w.unverified.length}.`),
+    list("strong-undo-not-checked", w.notChecked.map(labelText)),
+    list("strong-undo-unverified", w.unverified.map(labelText)),
+    h("p", {}, `Custom exercises to delete: ${x.toDelete.length}.`),
+    list("strong-undo-exercises", x.toDelete.map((e) => e.name)),
+    h("p", {}, `Custom exercises kept, in use: ${x.inUse.length}. Kept, renamed: ${x.renamed.length}.`),
+    list("strong-undo-in-use", x.inUse.map((e) => `${e.name} (used by ${usageText(e.usage)})`)),
+    list("strong-undo-renamed", x.renamed.map((e) => `${e.name} (was "${e.fileName}")`)),
+    x.notCustom.length === 0 ? null : h("p", {}, `Kept, not a custom exercise: ${x.notCustom.map((e) => e.name).join(", ")}.`),
+    h("p", { class: "muted" }, "Templates, settings and every other workout and exercise are not touched."),
+  );
+}
+
+function renderStrongUndo(ctx) {
+  const { services } = ctx;
+  const u = (ctx.state.strongUndo ??= freshUndo());
+  const act = (run, focus = UNDO_HEADING) => async () => {
+    try {
+      await run();
+      u.error = null;
+    } catch (error) {
+      u.error = error.message;
+    }
+    ctx.state.focus = focus;
+    await ctx.rerender();
+  };
+  const fileInput = h("input", {
+    type: "file",
+    accept: ".csv,text/csv,text/plain",
+    "data-field": "strong-undo-file",
+    onChange: (event) => {
+      const chosen = event.target.files?.[0];
+      if (!chosen) return undefined;
+      return act(async () => {
+        Object.assign(u, freshUndo(), { fileName: chosen.name });
+        const prepared = await services.strongImport.prepare(await services.readFileAsText(chosen));
+        if (prepared.fatal) throw new Error(`The file cannot be used: ${prepared.fatal}`);
+        u.prepared = prepared;
+      }, '[data-field="strong-undo-file"]')();
+    },
+  });
+  const r = u.report;
+  const deleting = r === null ? 0 : r.totals.workouts + r.totals.exercises;
+  return h(
+    "div",
+    { class: "confirm strong-undo", "data-region": "strong-undo" },
+    h("h3", { tabindex: "-1", "data-region": "strong-undo-heading" }, "Undo a Strong import"),
+    h("p", {}, "Choose the same Strong file again. Only workouts and custom exercises that are still exactly as that file imported them are deleted; anything changed since is kept."),
+    h("label", { class: "field" }, h("span", {}, "Choose the Strong file to undo"), fileInput),
+    u.fileName === null ? null : h("p", { class: "muted", "data-region": "strong-undo-file-name" }, `File: ${u.fileName}`),
+    u.error === null ? null : h("p", { class: "error", role: "alert", "data-region": "strong-undo-error" }, u.error),
+    u.done === null ? null : h("p", { class: "notice", role: "status", "data-region": "strong-undo-done" },
+      `Deleted ${formatCount(u.done.totals.workouts, "workout")}, ${formatCount(u.done.totals.exercises, "custom exercise")}. `
+      + `Kept: ${u.done.workouts.edited.length} edited, ${u.done.exercises.inUse.length} in use, ${u.done.exercises.renamed.length} renamed.`),
+    u.prepared === null ? null : h("div", { class: "actions" }, button("Check what would be removed", {
+      "data-action": "strong-undo-check",
+      onClick: act(async () => {
+        Object.assign(u, { report: null, ticked: false, done: null });
+        u.report = await services.strongImport.undoCheck(u.prepared);
+      }, '[data-region="strong-undo-report-heading"]'),
+    })),
+    r === null ? null : undoReportView(r),
+    deleting === 0 ? null : h(
+      "div",
+      { "data-region": "strong-undo-confirm" },
+      h(
+        "p",
+        { class: "warning-text", "data-region": "strong-undo-backup-first" },
+        "Export a Backup first. ",
+        button("Go to Backup", { class: "small", "data-action": "strong-undo-to-backup", onClick: act(async () => {}, '[data-region="backup-heading"]') }),
+      ),
+      h(
+        "label",
+        { class: "check" },
+        h("input", {
+          type: "checkbox", checked: u.ticked, "data-field": "strong-undo-confirm-check",
+          onChange: (event) => act(async () => { u.ticked = event.target.checked; }, '[data-field="strong-undo-confirm-check"]')(),
+        }),
+        `I understand ${formatCount(r.totals.workouts, "workout")} and ${formatCount(r.totals.exercises, "custom exercise")} will be deleted for good`,
+      ),
+      h("div", { class: "actions" }, button("Confirm", {
+        class: "danger",
+        "data-action": "strong-undo-confirm",
+        disabled: !u.ticked || u.busy,
+        onClick: (event) => {
+          if (u.busy) return undefined; // no double submit
+          u.busy = true;
+          event.currentTarget.disabled = true;
+          return act(async () => {
+            const shown = u.report;
+            Object.assign(u, { report: null, ticked: false });
+            try {
+              u.done = await services.strongImport.undoApply(u.prepared, shown);
+            } catch (error) {
+              throw new Error(/nothing was deleted/i.test(error.message) ? error.message : `${error.message}. Nothing was deleted: the undo is one transaction, and it was rolled back.`);
+            } finally {
+              u.busy = false;
+            }
+          })();
+        },
+      })),
+    ),
+  );
+}
+
 export function renderStrongImport(ctx) {
   const { services } = ctx;
   if (!services.strongImport) return null;
@@ -111,6 +251,7 @@ export function renderStrongImport(ctx) {
     h("h2", { tabindex: "-1", "data-region": "strong-heading" }, "Import from Strong"),
     h("p", {}, "Adds the workouts in a Strong export (a CSV file) to this device. It never replaces or changes anything already stored. The file is read on this device only."),
     ...children,
+    renderStrongUndo(ctx), // needs no exercise library, so it is there in every state of the import above
   );
 
   // The names are matched against the whole exercise library, so it must be stored first.

@@ -19,7 +19,9 @@ import { createCatalogStore } from "../../src/storage/catalog-store.js";
 import { EXERCISE, makeDetails, rawCounts } from "../store-rules.js";
 import { incomingFile } from "../backup-rules.js";
 import { readImportContext, applyStrongPlan } from "../../src/importers/strong-apply.js";
-import { strongWorkoutId } from "../../src/importers/strong.js";
+import { strongWorkoutId, strongExerciseId } from "../../src/importers/strong.js";
+import { prepareStrongUndo, checkStrongUndo, applyStrongUndo } from "../../src/importers/strong-undo.js";
+import { nameKey } from "../../src/domain/exercise-names.js";
 
 export const uiRules = [];
 const rule = (name, run) => uiRules.push({ name, run });
@@ -71,7 +73,13 @@ async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize }
     backup: createBackup(adapter),
     downloadBlob: (blob, filename) => calls.downloads.push({ blob, filename }),
     readFileAsText: (file) => file.text(),
-    strongImport: { readContext: () => readImportContext(adapter), apply: (plan) => applyStrongPlan(adapter, plan) },
+    strongImport: {
+      readContext: () => readImportContext(adapter),
+      apply: (plan) => applyStrongPlan(adapter, plan),
+      prepare: (text) => prepareStrongUndo(text),
+      undoCheck: (prepared) => checkStrongUndo(adapter, prepared),
+      undoApply: (prepared, shown) => applyStrongUndo(adapter, prepared, shown),
+    },
     persistence: {
       getStatus: () => store.getPersistStatus(),
       check: () => checkPersistence({
@@ -2591,7 +2599,8 @@ rule("strong confirm: after the dry run the only new controls are the Backup lin
     await strongDryRun(root);
     const actions = new Set([...region(root, "strong-import").querySelectorAll("[data-action]")].map((el) => el.dataset.action));
     ctx.assert.deepEqual([...actions].sort(), ["strong-choice", "strong-choose-muscles", "strong-confirm", "strong-dry-run", "strong-fill-muscles", "strong-to-backup", "strong-unit"]); // the helper has used every suggestion
-    ctx.assert.deepEqual([...region(root, "strong-import").querySelectorAll("[data-field]")].map((el) => el.dataset.field), ["strong-file", "strong-confirm-check"]);
+    const importFields = [...region(root, "strong-import").querySelectorAll("[data-field]")].filter((el) => !el.closest('[data-region="strong-undo"]')); // the undo block has its own test
+    ctx.assert.deepEqual(importFields.map((el) => el.dataset.field), ["strong-file", "strong-confirm-check"]);
     click(field(root, "strong-confirm-check"));
     await waitFor(() => action(root, "strong-confirm")?.disabled === false, "the tick");
     ctx.assert.deepEqual([...root.querySelectorAll('[data-action="strong-choice"]')].map((r) => r.checked), choicesBefore, "the tick picks nothing");
@@ -2659,6 +2668,211 @@ rule("strong import: a rule-b name can use the stored exercise; Confirm writes i
     const workoutId = await strongWorkoutId("2025-02-01 09:00:00", "Strong test");
     ctx.assert.deepEqual(after.entries.filter((e) => e.workoutId === workoutId).map((e) => e.exerciseId).filter((id) => id === BENCH), [BENCH]);
     ctx.assert.deepEqual(after.exercises.find((e) => e.id === BENCH), before.exercises.find((e) => e.id === BENCH), "the stored exercise is unchanged");
+  });
+});
+
+// ---- Undo a Strong import (the screen)
+
+// STRONG_CSV plus a second workout that uses only one of its names.
+const STRONG_CSV_TWO = `${STRONG_CSV}\n2025-02-08 09:00:00,"Strong test 2",30m,"Zzz Unknown Thing",1,25.0,8.0,0,0.0,`;
+const FIRST_WORKOUT = ["2025-02-01 09:00:00", "Strong test"];
+
+async function importViaUi(root, text = STRONG_CSV) {
+  await pickStrongFile(root, text);
+  await readyStrongChoices(root);
+  await strongDryRun(root);
+  await tickAndConfirm(root);
+  await waitFor(() => region(root, "strong-written"), "the import result");
+}
+async function pickUndoFile(root, text = STRONG_CSV, name = "strong.csv") {
+  const input = await waitFor(() => field(root, "strong-undo-file"), "the undo file input");
+  const files = new DataTransfer();
+  files.items.add(new File([text], name, { type: "text/csv" }));
+  input.files = files.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitFor(() => region(root, "strong-undo-file-name")?.textContent === `File: ${name}` && (action(root, "strong-undo-check") || region(root, "strong-undo-error")), "the undo file");
+}
+async function undoCheck(root) {
+  click(action(root, "strong-undo-check"));
+  return waitFor(() => region(root, "strong-undo-report"), "the undo report");
+}
+// One more rep on the first set of the first entry of a stored workout.
+async function addRep(adapter, workoutId) {
+  await adapter.transaction(["sets"], "readwrite", async (tx) => {
+    const set = await tx.get("sets", `${workoutId}-e0-s0`);
+    await tx.put("sets", { ...set, reps: set.reps + 1 });
+  });
+}
+
+rule("strong undo: its own block below the import, apart from Backup, sharing no action or region name with the import", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await importViaUi(root);
+    await pickUndoFile(root);
+    await undoCheck(root);
+    const card = region(root, "strong-import");
+    const undo = region(root, "strong-undo");
+    ctx.assert.ok(card.contains(undo), "inside the Strong card");
+    ctx.assert.equal(undo.querySelector('[data-region="backup-heading"], [data-action="check-import"]'), null);
+    ctx.assert.ok(undo.compareDocumentPosition(region(root, "backup-heading")) & Node.DOCUMENT_POSITION_FOLLOWING, "Backup comes after it");
+    ctx.assert.ok(field(root, "strong-file").compareDocumentPosition(undo) & Node.DOCUMENT_POSITION_FOLLOWING, "below the import");
+    ctx.assert.ok(undo.classList.contains("confirm"), "the danger outline");
+    const names = (el, attr) => [...el.querySelectorAll(`[${attr}]`)].map((x) => x.getAttribute(attr));
+    const inside = ["data-action", "data-region", "data-field"].flatMap((attr) => names(undo, attr));
+    ctx.assert.ok(inside.length > 10);
+    for (const name of inside) ctx.assert.ok(name.startsWith("strong-undo-"), name);
+    const outside = ["data-action", "data-region", "data-field"].flatMap((attr) => [...card.querySelectorAll(`[${attr}]`)]
+      .filter((el) => !undo.contains(el)).map((el) => el.getAttribute(attr)));
+    for (const name of outside) ctx.assert.equal(name.startsWith("strong-undo"), false, name);
+  });
+});
+
+rule("strong undo: the check writes nothing; Confirm sits below the Backup reminder, needs the tick, and gives back the export from before the import", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const beforeImport = await services.backup.exportToText({ now: STRONG_NOW });
+    await goToTab(root, "settings");
+    await importViaUi(root);
+    const imported = await services.backup.exportToText({ now: STRONG_NOW });
+    ctx.assert.ok(imported !== beforeImport, "the import wrote something");
+    await pickUndoFile(root);
+    ctx.assert.equal(action(root, "strong-undo-confirm"), null, "no Confirm before a check");
+    const report = await undoCheck(root);
+    await waitFor(() => document.activeElement === region(root, "strong-undo-report-heading"), "focus on the report heading");
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), imported, "the check wrote nothing");
+    ctx.assert.ok(/Workouts to delete: 1 \(5 exercise entries, 5 sets\)\./.test(report.textContent), report.textContent);
+    ctx.assert.ok(/2025-02-01 09:00:00, Strong test: 5 exercise entries, 5 sets, in lb; names with no stored sets: 0/.test(region(root, "strong-undo-delete").textContent));
+    ctx.assert.equal(region(root, "strong-undo-exercises").querySelectorAll("li").length, 4);
+    ctx.assert.ok(report.textContent.includes("Templates, settings and every other workout and exercise are not touched."));
+    const confirm = action(root, "strong-undo-confirm");
+    const reminder = region(root, "strong-undo-backup-first");
+    ctx.assert.ok(confirm.disabled && confirm.classList.contains("danger"));
+    ctx.assert.ok(reminder.textContent.startsWith("Export a Backup first."));
+    ctx.assert.ok(report.compareDocumentPosition(reminder) & Node.DOCUMENT_POSITION_FOLLOWING, "below the report");
+    ctx.assert.ok(reminder.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING, "the reminder is above Confirm");
+    ctx.assert.equal(field(root, "strong-undo-confirm-check").parentElement.textContent, "I understand 1 workout and 4 custom exercises will be deleted for good");
+    click(action(root, "strong-undo-to-backup"));
+    await waitFor(() => document.activeElement === region(root, "backup-heading"), "focus on the Backup heading");
+
+    click(field(root, "strong-undo-confirm-check"));
+    await waitFor(() => action(root, "strong-undo-confirm")?.disabled === false, "Confirm to be enabled");
+    click(action(root, "strong-undo-confirm"));
+    const done = await waitFor(() => region(root, "strong-undo-done"), "the undo result");
+    ctx.assert.equal(done.textContent, "Deleted 1 workout, 4 custom exercises. Kept: 0 edited, 0 in use, 0 renamed.");
+    await waitFor(() => document.activeElement === region(root, "strong-undo-heading"), "focus on the undo heading");
+    ctx.assert.equal(region(root, "strong-undo-report"), null);
+    ctx.assert.equal(action(root, "strong-undo-confirm"), null);
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), beforeImport, "byte-identical to before the import");
+  });
+});
+
+rule("strong undo: with nothing to delete there is no Confirm", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const before = await services.backup.exportToText({ now: STRONG_NOW });
+    await goToTab(root, "settings");
+    await pickUndoFile(root);
+    const report = await undoCheck(root);
+    ctx.assert.ok(/Workouts to delete: 0 /.test(report.textContent) && /Not found on this device: 1\./.test(report.textContent), report.textContent);
+    ctx.assert.equal(region(root, "strong-undo-confirm"), null);
+    ctx.assert.equal(action(root, "strong-undo-confirm"), null);
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), before);
+  });
+});
+
+rule("strong undo: an edited workout is kept and listed with its reason; the other is deleted", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter, services }) => {
+    await goToTab(root, "settings");
+    await importViaUi(root, STRONG_CSV_TWO);
+    const first = await strongWorkoutId(...FIRST_WORKOUT);
+    await addRep(adapter, first);
+    await pickUndoFile(root, STRONG_CSV_TWO);
+    await undoCheck(root);
+    ctx.assert.equal(region(root, "strong-undo-edited").textContent, "2025-02-01 09:00:00, Strong test: its sets differ from the file");
+    ctx.assert.equal(region(root, "strong-undo-delete").querySelectorAll("li").length, 1);
+    ctx.assert.ok(/2025-02-08 09:00:00, Strong test 2/.test(region(root, "strong-undo-delete").textContent));
+    ctx.assert.equal(region(root, "strong-undo-time-zone"), null);
+    click(field(root, "strong-undo-confirm-check"));
+    await waitFor(() => action(root, "strong-undo-confirm")?.disabled === false, "Confirm to be enabled");
+    click(action(root, "strong-undo-confirm"));
+    await waitFor(() => /^Deleted 1 workout, 0 custom exercises\. Kept: 1 edited, 4 in use, 0 renamed\.$/.test(region(root, "strong-undo-done")?.textContent ?? ""), "the undo result");
+    const data = await exportData(services);
+    ctx.assert.ok(data.workouts.some((w) => w.id === first), "the edited workout is kept");
+    const second = await strongWorkoutId("2025-02-08 09:00:00", "Strong test 2");
+    ctx.assert.equal(data.workouts.some((w) => w.id === second), false, "the other is deleted");
+  });
+});
+
+rule("strong undo: a custom exercise used by a template is kept and listed", async (ctx) => {
+  await withApp(ctx, async ({ root, store, services }) => {
+    await goToTab(root, "settings");
+    await importViaUi(root);
+    const bench = await strongExerciseId(nameKey("Bench Press (Barbell)"));
+    await store.saveTemplate({ name: "Push", exercises: [{ exerciseId: bench, setCount: 3 }] });
+    await pickUndoFile(root);
+    await undoCheck(root);
+    ctx.assert.equal(region(root, "strong-undo-in-use").textContent, "Bench Press (Barbell) (used by 1 template)");
+    ctx.assert.equal(region(root, "strong-undo-exercises").querySelectorAll("li").length, 3);
+    click(field(root, "strong-undo-confirm-check"));
+    await waitFor(() => action(root, "strong-undo-confirm")?.disabled === false, "Confirm to be enabled");
+    click(action(root, "strong-undo-confirm"));
+    await waitFor(() => /^Deleted 1 workout, 3 custom exercises\. Kept: 0 edited, 1 in use, 0 renamed\.$/.test(region(root, "strong-undo-done")?.textContent ?? ""), "the undo result");
+    const data = await exportData(services);
+    ctx.assert.ok(data.exercises.some((e) => e.id === bench), "the template's exercise is kept");
+    ctx.assert.equal(data.templates.length, 1);
+  });
+});
+
+rule("strong undo: data changed between the check and Confirm is refused, the report is cleared and nothing is deleted", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter, services }) => {
+    await goToTab(root, "settings");
+    await importViaUi(root);
+    await pickUndoFile(root);
+    await undoCheck(root);
+    click(field(root, "strong-undo-confirm-check"));
+    await waitFor(() => action(root, "strong-undo-confirm")?.disabled === false, "Confirm to be enabled");
+    await addRep(adapter, await strongWorkoutId(...FIRST_WORKOUT)); // another tab edits the workout
+    const before = await services.backup.exportToText({ now: STRONG_NOW });
+    click(action(root, "strong-undo-confirm"));
+    const error = await waitFor(() => region(root, "strong-undo-error"), "the refusal");
+    ctx.assert.equal(error.textContent, "The data changed since the check; nothing was deleted. Check again.");
+    ctx.assert.equal(region(root, "strong-undo-report"), null);
+    ctx.assert.equal(region(root, "strong-undo-done"), null);
+    ctx.assert.equal(action(root, "strong-undo-confirm"), null);
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), before);
+  });
+});
+
+rule("strong undo: a file that is not a Strong export is refused", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await pickUndoFile(root, STRONG_CSV.replace("Workout Name", "Routine"), "other.csv");
+    ctx.assert.ok(region(root, "strong-undo-error").textContent.startsWith("The file cannot be used: The header is not the 10 Strong columns"));
+    ctx.assert.equal(action(root, "strong-undo-check"), null);
+    ctx.assert.equal(region(root, "strong-undo-report"), null);
+  });
+});
+
+rule("strong undo: every workout edited in its date or time points to a time-zone change; a new check or file clears the tick and report", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    await goToTab(root, "settings");
+    await importViaUi(root);
+    await pickUndoFile(root);
+    await undoCheck(root);
+    click(field(root, "strong-undo-confirm-check"));
+    await waitFor(() => field(root, "strong-undo-confirm-check")?.checked, "the tick");
+    await undoCheck(root); // a new check
+    await waitFor(() => field(root, "strong-undo-confirm-check")?.checked === false, "the tick to go");
+    ctx.assert.ok(action(root, "strong-undo-confirm").disabled);
+    const id = await strongWorkoutId(...FIRST_WORKOUT);
+    await adapter.transaction(["workouts"], "readwrite", async (tx) => {
+      const w = await tx.get("workouts", id);
+      const shift = (iso) => new Date(Date.parse(iso) + HOUR).toISOString();
+      await tx.put("workouts", { ...w, startedAt: shift(w.startedAt), endedAt: shift(w.endedAt) });
+    });
+    await pickUndoFile(root, STRONG_CSV, "again.csv"); // a new file clears the report
+    ctx.assert.equal(region(root, "strong-undo-report"), null);
+    await undoCheck(root);
+    ctx.assert.ok(/time zone/.test(region(root, "strong-undo-time-zone").textContent));
+    ctx.assert.equal(action(root, "strong-undo-confirm"), null, "nothing would be deleted");
   });
 });
 
