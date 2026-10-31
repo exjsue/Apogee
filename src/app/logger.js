@@ -16,6 +16,7 @@ import {
   isWarmupSet, workingSetCount,
 } from "../domain/workout-plan.js";
 import { templateFromWorkout, planFromTemplate } from "../domain/template.js";
+import { applyWorkoutEdit } from "../domain/workout-edit.js";
 import { computeMuscleLoad } from "../domain/muscle-load.js";
 import { buildMuscleDetails } from "../domain/muscle-detail.js";
 import { computeBodyStatus, WINDOW_DAYS, NEGLECTED_WEEKS } from "../domain/body-status.js";
@@ -733,6 +734,15 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     return store.deleteWorkout(id);
   }
 
+  // Saves an edit of a FINISHED workout made in History (applyWorkoutEdit). `original` is the detail the edit started
+  // from (getWorkoutDetail). One transaction, which refuses an unfinished workout, and one that changed since
+  // `original` was read (code WORKOUT_CHANGED); a refused save writes nothing. Resolves { workout, entries, sets }.
+  async function saveWorkoutEdit(original, draft) {
+    const before = splitDetails(original);
+    const { workout, entries, sets } = applyWorkoutEdit(before, draft, { now: nowDate() });
+    return store.saveWorkoutWithDetails(workout, entries, sets, { expectFinished: before });
+  }
+
   // Saves a FINISHED workout as a template (exercises in order, working sets counted; see templateFromWorkout).
   // A workout with nothing countable, an unfinished one, or a bad name is refused and nothing is written.
   // Duplicate names are allowed.
@@ -859,6 +869,7 @@ export function createLogger(store, { now = () => new Date(), staleAfterHours = 
     getRecords,
     deleteFinishedWorkout,
     getWorkoutDetail: detailWithNames,
+    saveWorkoutEdit,
     saveWorkoutAsTemplate,
     listTemplates: () => store.listTemplates(),
     renameTemplate,

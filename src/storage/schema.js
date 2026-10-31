@@ -34,3 +34,7 @@ export const CATALOG_VERSION_META_KEY = "catalogVersion";
 // The code of the error a session write throws when the plan changed since it was
 // read (see checkRevision in store.js). The logger reads again and retries.
 export const SESSION_CONFLICT = "session-conflict";
+
+// The code of the error an edit of a finished workout throws when the stored workout changed since the edit
+// started (see checkUnchanged in store.js). Never retried: the user cancels and edits again.
+export const WORKOUT_CHANGED = "workout-changed";

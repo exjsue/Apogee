@@ -11,6 +11,7 @@ import { showDatabaseNotice } from "../../src/ui/db-notices.js";
 import { installPullToRefresh } from "../../src/ui/pull-refresh.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../../src/domain/seed.js";
 import { createExercise } from "../../src/domain/model.js";
+import { draftFromWorkout, localDate } from "../../src/domain/workout-edit.js";
 import { mountApp } from "../../src/ui/app.js";
 import { createOffline, CACHE_PREFIX } from "../../src/app/offline.js";
 import { createCatalogService, startAfterFirstPaint } from "../../src/app/catalog.js";
@@ -473,6 +474,107 @@ rule("ui: Save as template asks for a name, shows the refusal and keeps the fiel
     const saved = await store.listTemplates();
     ctx.assert.deepEqual(saved.map((template) => [template.name, template.exercises]), [["Bench day", [{ exerciseId: BENCH, setCount: 1 }]]]);
   }, { prepare: twoFinishedWorkouts });
+});
+
+// ---- editing a finished workout ----
+
+const pastSets = (root) => [...root.querySelectorAll("li.past-set")];
+const pastField = (li, name) => li.querySelector(`[data-field="past-${name}"]`);
+const storedTree = async (store) => Promise.all((await store.listWorkouts()).map((workout) => store.getWorkoutWithDetails(workout.id)));
+
+async function openEdit(root) {
+  await openWorkout(root, 0);
+  click(await waitFor(() => action(root, "edit-workout"), "the Edit button"));
+  await waitFor(() => field(root, "past-date") && document.activeElement === field(root, "past-date"), "edit mode with focus on the date");
+}
+
+async function addPastExercise(root, query, id) {
+  setValue(field(root, "past-exercise-search"), query);
+  click(await waitFor(() => $(root, `[data-action="past-add-exercise"][data-exercise-id="${id}"]`), "the exercise in the matches"));
+}
+
+rule("ui: Edit in History: Cancel discards every change, stores nothing and returns focus to Edit", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    const before = await storedTree(store);
+    await openEdit(root);
+    setValue(field(root, "past-date"), "2026-01-01");
+    setValue(pastField(pastSets(root)[0], "reps"), "1");
+    click(pastSets(root)[1].querySelector('[data-action="past-delete-set"]'));
+    await waitFor(() => pastSets(root).length === 1, "one set left in the draft");
+    await addPastExercise(root, "squat", "seed-barbell-squat");
+    await waitFor(() => pastSets(root).length === 2, "the new exercise's blank set");
+    click(action(root, "cancel-past-edit"));
+    await waitFor(() => document.activeElement === action(root, "edit-workout"), "focus back on Edit");
+    ctx.assert.ok(root.textContent.includes("8 reps · 100 kg") && root.textContent.includes("5 reps · 110 kg"));
+    ctx.assert.deepEqual(await storedTree(store), before);
+    click(action(root, "edit-workout")); // opens again from the stored workout, not the discarded draft
+    await waitFor(() => pastSets(root).length === 2 && pastField(pastSets(root)[0], "reps").value === "8", "a fresh draft");
+  }, { prepare: async (store) => { await store.setPreferredUnit("kg"); await finishedWorkouts([[["8", "100"], ["5", "110"]]])(store); } });
+});
+
+rule("ui: Edit in History: change, delete and add sets, add an exercise, mark a warm-up; Save stores it and the list counts working sets", async (ctx) => {
+  await withApp(ctx, async ({ root, store, adapter }) => {
+    await openEdit(root);
+    setValue(pastField(pastSets(root)[0], "reps"), "9");
+    const unit = pastField(pastSets(root)[0], "unit");
+    unit.value = "lb";
+    unit.dispatchEvent(new Event("change", { bubbles: true }));
+    click(pastSets(root)[1].querySelector('[data-action="past-delete-set"]'));
+    await waitFor(() => pastSets(root).length === 1, "the set deleted from the draft");
+    click(action(root, "past-add-set"));
+    await waitFor(() => pastSets(root).length === 2 && document.activeElement === pastField(pastSets(root)[1], "reps"), "a blank set with focus on its reps");
+    setValue(pastField(pastSets(root)[1], "reps"), "10");
+    setValue(pastField(pastSets(root)[1], "weight"), "40");
+    const warmup = pastField(pastSets(root)[1], "warmup");
+    warmup.checked = true;
+    warmup.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => pastSets(root)[1].dataset.warmup === "true", "the set drawn as a warm-up");
+    await addPastExercise(root, "squat", "seed-barbell-squat");
+    await waitFor(() => pastSets(root).length === 3, "the new exercise's blank set");
+    setValue(pastField(pastSets(root)[2], "reps"), "5");
+    setValue(pastField(pastSets(root)[2], "weight"), "140");
+    click(action(root, "save-past-edit"));
+    await waitFor(() => region(root, "notice")?.textContent === "Workout saved.", "the saved notice");
+    await waitFor(() => document.activeElement === action(root, "edit-workout"), "focus back on Edit");
+    ctx.assert.equal(field(root, "past-date"), null);
+    ctx.assert.ok(root.textContent.includes("9 reps · 45.4 kg (entered 100 lb)"));
+    ctx.assert.deepEqual(await rawCounts(adapter), { workouts: 1, entries: 2, sets: 3 });
+    const [saved] = await storedTree(store);
+    ctx.assert.deepEqual(saved.entries.map((entry) => entry.sets.map((set) => [set.reps, set.weightValue, set.weightUnit, set.isWarmup])), [[[9, 100, "lb", false], [10, 40, "lb", true]], [[5, 140, "kg", false]]]); // a new set takes the unit of the set above it
+    click(action(root, "back-to-history"));
+    await waitFor(() => region(root, "history-list"), "the list");
+    ctx.assert.ok($(root, '[data-action="open-workout"] .pick-meta').textContent.includes("2 exercises · 2 sets"));
+  }, { prepare: async (store) => { await store.setPreferredUnit("kg"); await finishedWorkouts([[["8", "100"], ["5", "110"]]])(store); } });
+});
+
+rule("ui: Edit in History: a refused value, a future date or a change from elsewhere is said so, the draft stays and nothing is stored", async (ctx) => {
+  await withApp(ctx, async ({ root, store }) => {
+    const before = await storedTree(store);
+    await openEdit(root);
+    setValue(pastField(pastSets(root)[0], "reps"), "");
+    click(action(root, "save-past-edit"));
+    await waitFor(() => /set 1: reps is required/.test(region(root, "past-edit-error")?.textContent), "the reps error");
+    ctx.assert.equal(pastField(pastSets(root)[0], "reps").value, "");
+    setValue(pastField(pastSets(root)[0], "reps"), "8");
+    const tomorrow = new Date(Date.now() + 24 * HOUR);
+    setValue(field(root, "past-date"), `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`);
+    click(action(root, "save-past-edit"));
+    await waitFor(() => /in the future/.test(region(root, "past-edit-error")?.textContent), "the future-date error");
+    ctx.assert.deepEqual(await storedTree(store), before);
+
+    // Another tab saves an edit of the same workout meanwhile.
+    const other = createLogger(store);
+    const detail = await other.getWorkoutDetail(before[0].id);
+    const draft = draftFromWorkout(detail);
+    draft.entries[0].sets[0].reps = "7";
+    await other.saveWorkoutEdit(detail, draft);
+    const changed = await storedTree(store);
+    setValue(field(root, "past-date"), localDate(before[0].startedAt));
+    setValue(pastField(pastSets(root)[0], "reps"), "3");
+    click(action(root, "save-past-edit"));
+    await waitFor(() => /changed somewhere else/.test(region(root, "past-edit-error")?.textContent), "the conflict error");
+    ctx.assert.deepEqual(await storedTree(store), changed);
+  }, { prepare: finishedWorkouts([[["8", "100"]]]) });
 });
 
 const startButton = (root, id) => $(root, `[data-action="start-template"][data-template-id="${id}"]`);

@@ -3,8 +3,133 @@
 import { h, button, exerciseHeading, setMark } from "./dom.js";
 import { formatSetWeight, formatDateTime, formatCount } from "../domain/format.js";
 import { isWarmupSet, setNumbers } from "../domain/workout-plan.js";
+import { draftFromWorkout, localDate } from "../domain/workout-edit.js";
+import { WEIGHT_UNITS } from "../domain/model.js";
 
-export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, notice: null, error: null });
+// editing: null, or { original, draft, error } while a finished workout is edited (Cancel sets it back to null).
+export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, editing: null, notice: null, error: null });
+
+const EXERCISE_RESULTS = 8; // how many matches the Add exercise search shows
+
+// Edit mode for a finished workout: the draft lives in history.editing and nothing is stored until Save, which
+// the logger checks and writes in one transaction (saveWorkoutEdit). Typing updates the draft without a redraw;
+// adding or deleting redraws from it.
+function editView(ctx) {
+  const history = ctx.state.history;
+  const editing = history.editing;
+  const { draft } = editing;
+  const redraw = () => ctx.rerender();
+  const blankSet = (unit) => ({ id: null, reps: "", weight: "", unit, isWarmup: false });
+  const view = h(
+    "section",
+    { class: "view", "aria-label": "Workout detail" },
+    h("h2", {}, "Edit workout"),
+    h("label", { class: "field" }, h("span", {}, "Date"), h("input", {
+      type: "date", "data-field": "past-date", value: draft.date, max: localDate(new Date().toISOString()),
+      onInput: (event) => { draft.date = event.target.value; },
+    })),
+  );
+  draft.entries.forEach((entry, entryIndex) => {
+    const numbers = setNumbers(entry.sets);
+    view.append(h(
+      "div",
+      { class: "card entry", "data-exercise-id": entry.exerciseId, "data-entry-index": entryIndex },
+      exerciseHeading(entry.exerciseName, entry.markCustom),
+      entry.sets.length === 0 ? h("p", { class: "muted" }, "No sets: this exercise is removed on Save.") : null,
+      h("ol", { class: "sets" }, entry.sets.map((set, setIndex) => h(
+        "li",
+        { class: "past-set", "data-warmup": set.isWarmup ? "true" : null },
+        h("span", { class: "set-text" }, setMark(numbers[setIndex])),
+        h("input", {
+          type: "text", inputmode: "numeric", autocomplete: "off", "aria-label": "Reps", placeholder: "reps", "data-field": "past-reps", value: set.reps,
+          onInput: (event) => { set.reps = event.target.value; },
+        }),
+        h("input", {
+          type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Weight", placeholder: "weight", "data-field": "past-weight", value: set.weight,
+          onInput: (event) => { set.weight = event.target.value; },
+        }),
+        h(
+          "select",
+          { "aria-label": "Unit", "data-field": "past-unit", onChange: (event) => { set.unit = event.target.value; } },
+          WEIGHT_UNITS.map((unit) => h("option", { value: unit, selected: unit === set.unit }, unit)),
+        ),
+        h("label", { class: "check" }, h("input", {
+          type: "checkbox", "data-field": "past-warmup", checked: set.isWarmup,
+          onChange: (event) => { set.isWarmup = event.target.checked; return redraw(); }, // renumbers the sets
+        }), "Warm-up"),
+        button("Delete", {
+          class: "small danger-outline",
+          "data-action": "past-delete-set",
+          "aria-label": `Delete ${numbers[setIndex] === null ? "warm-up set" : `set ${numbers[setIndex]}`} of ${entry.exerciseName}`,
+          onClick: () => { entry.sets.splice(setIndex, 1); return redraw(); },
+        }),
+      ))),
+      button("Add set", {
+        class: "small",
+        "data-action": "past-add-set",
+        onClick: () => {
+          entry.sets.push(blankSet(entry.sets.at(-1)?.unit ?? ctx.unit));
+          ctx.state.focus = `[data-entry-index="${entryIndex}"] li:last-child [data-field="past-reps"]`;
+          return redraw();
+        },
+      }),
+    ));
+  });
+
+  // Add exercise: a search box whose matches are redrawn in place, so typing keeps focus. Picking an exercise
+  // already in the workout adds a set to it instead of a second card.
+  const results = h("ul", { class: "pick-list", "data-region": "past-exercise-results" });
+  const search = h("input", {
+    type: "search", autocomplete: "off", "aria-label": "Find an exercise to add", placeholder: "Find an exercise to add", "data-field": "past-exercise-search",
+    onInput: async () => {
+      const query = search.value;
+      const found = query.trim() === "" ? [] : (await ctx.services.logger.findExercises(query)).slice(0, EXERCISE_RESULTS);
+      if (search.value !== query) return; // a newer search is on its way
+      results.replaceChildren(...found.map((exercise) => h("li", {}, button(h("span", { class: "pick-name" }, exercise.name), {
+        class: "pick",
+        "data-action": "past-add-exercise",
+        "data-exercise-id": exercise.id,
+        onClick: () => {
+          const existing = draft.entries.find((entry) => entry.exerciseId === exercise.id);
+          if (existing) existing.sets.push(blankSet(existing.sets.at(-1)?.unit ?? ctx.unit));
+          else draft.entries.push({ id: null, exerciseId: exercise.id, exerciseName: exercise.name, markCustom: false, sets: [blankSet(ctx.unit)] });
+          return redraw();
+        },
+      }))));
+    },
+  });
+  view.append(h("div", { class: "card" }, h("h3", {}, "Add exercise"), search, results));
+
+  if (editing.error) view.append(h("p", { class: "error", role: "alert", "data-region": "past-edit-error" }, editing.error));
+  view.append(h(
+    "div",
+    { class: "actions" },
+    button("Save", {
+      class: "primary",
+      "data-action": "save-past-edit",
+      onClick: async () => {
+        try {
+          await ctx.services.logger.saveWorkoutEdit(editing.original, draft);
+          history.editing = null;
+          history.notice = "Workout saved.";
+          ctx.state.focus = '[data-action="edit-workout"]';
+        } catch (error) {
+          editing.error = error.message; // the draft is kept, so the value can be fixed
+        }
+        return redraw();
+      },
+    }),
+    button("Cancel", {
+      "data-action": "cancel-past-edit",
+      onClick: () => {
+        history.editing = null;
+        ctx.state.focus = '[data-action="edit-workout"]';
+        return redraw();
+      },
+    }),
+  ));
+  return view;
+}
 
 // "Save as template" on a finished workout: a button, then a form asking for the name. The name rule and the
 // "nothing countable" refusal live in the logger; their message is shown here and the typed name is kept.
@@ -125,8 +250,20 @@ async function detail(ctx, id) {
     history.detailId = null;
     history.confirmDelete = false;
     history.savingTemplate = false;
+    history.editing = null;
     return null;
   }
+  if (history.editing !== null && history.editing.original.id === id) return editView(ctx);
+  // A workout still in progress has no Edit button: it is changed on the New tab.
+  const edit = workout.endedAt && !history.savingTemplate ? button("Edit", {
+    "data-action": "edit-workout",
+    onClick: () => {
+      history.editing = { original: workout, draft: draftFromWorkout(workout), error: null };
+      history.confirmDelete = false;
+      ctx.state.focus = '[data-field="past-date"]';
+      return ctx.rerender();
+    },
+  }) : null;
   // Records are read once per detail open. A failure only drops the Records lines and PR labels.
   let rec = null;
   try { rec = await ctx.services.logger.getRecords(); } catch { rec = null; }
@@ -147,9 +284,11 @@ async function detail(ctx, id) {
           history.detailId = null;
           history.confirmDelete = false;
           history.savingTemplate = false;
+          history.editing = null;
           return ctx.rerender();
         },
       }),
+      edit,
       history.savingTemplate ? null : template,
     ),
     history.savingTemplate ? template : null,
@@ -224,6 +363,7 @@ async function list(ctx) {
             history.detailId = workout.id;
             history.confirmDelete = false;
             history.savingTemplate = false;
+            history.editing = null;
             return ctx.rerender();
           },
         },

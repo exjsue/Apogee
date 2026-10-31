@@ -32,7 +32,7 @@ import {
   createWorkSet,
   createTemplate,
 } from "../domain/model.js";
-import { WORKOUT_META_KEYS, SESSION_CONFLICT, CATALOG_VERSION_META_KEY } from "./schema.js";
+import { WORKOUT_META_KEYS, SESSION_CONFLICT, WORKOUT_CHANGED, CATALOG_VERSION_META_KEY } from "./schema.js";
 import { normalizePlan, emptyPlan } from "../domain/workout-plan.js";
 import { requireFreeName } from "../domain/exercise-names.js";
 
@@ -104,6 +104,29 @@ async function checkRevision(tx, expectRev) {
   if (rev !== expectRev) {
     const error = new Error("The workout was changed in another tab. Try again.");
     error.code = SESSION_CONFLICT;
+    throw error;
+  }
+}
+
+// Every stored field equal; fields the caller added (exerciseName, sets, counts) are ignored.
+const sameRecords = (stored, given) => stored.length === given.length && stored.every((record) => {
+  const other = given.find((candidate) => candidate.id === record.id);
+  return other !== undefined && Object.keys(record).every((key) => JSON.stringify(record[key]) === JSON.stringify(other[key]));
+});
+
+// Runs inside a transaction, before anything is written: refuses an edit of a finished workout unless the stored
+// workout is finished and its record, entries and sets are still exactly `expected` (what the edit started from).
+// Otherwise it was changed meanwhile (another tab, an import): the error has code WORKOUT_CHANGED and nothing is written.
+async function checkUnchanged(tx, workoutId, expected) {
+  const stored = await tx.get("workouts", workoutId);
+  if (stored === undefined) throw new Error("This workout no longer exists. Nothing was saved.");
+  if (stored.endedAt === null) throw new Error("This workout is still in progress. Finish it before editing it here.");
+  const entries = await tx.getAllByIndex("entries", "workoutId", workoutId);
+  const sets = [];
+  for (const entry of entries) sets.push(...await tx.getAllByIndex("sets", "entryId", entry.id));
+  if (!sameRecords([stored], [expected.workout]) || !sameRecords(entries, expected.entries) || !sameRecords(sets, expected.sets)) {
+    const error = new Error("This workout was changed somewhere else since you started editing. Nothing was saved: cancel, then edit again.");
+    error.code = WORKOUT_CHANGED;
     throw error;
   }
 }
@@ -227,7 +250,9 @@ export function createStore(adapter) {
   // lists are deleted in the same transaction.
   // `meta` ({ plan, timer }) is written, and `expectRev` checked, in the same
   // transaction (see applyWorkoutMeta and checkRevision).
-  async function saveWorkoutWithDetails(workoutInput, entryInputs = [], setInputs = [], { meta, expectRev } = {}) {
+  // `expectFinished` ({ workout, entries, sets }) is for an edit of a finished workout: the write is refused unless
+  // the stored workout is finished and still exactly that (see checkUnchanged).
+  async function saveWorkoutWithDetails(workoutInput, entryInputs = [], setInputs = [], { meta, expectRev, expectFinished } = {}) {
     const workout = createWorkout(workoutInput);
     const entries = validateAll(entryInputs, createWorkoutEntry, "entries");
     const sets = validateAll(setInputs, createWorkSet, "sets");
@@ -248,6 +273,7 @@ export function createStore(adapter) {
 
     await adapter.transaction(["workouts", "exercises", "entries", "sets", "meta"], "readwrite", async (tx) => {
       await checkRevision(tx, expectRev);
+      if (expectFinished !== undefined) await checkUnchanged(tx, workout.id, expectFinished);
       const checkedExercises = new Set();
       for (const [i, entry] of entries.entries()) {
         if (checkedExercises.has(entry.exerciseId)) continue;

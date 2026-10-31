@@ -229,7 +229,7 @@ button.wide { width: 100%; }
 .field-row .field { flex: 1; }
 .field-row .field.narrow { flex: 0 0 96px; }
 
-input[type="text"], input[type="search"], input[type="file"], select, textarea {
+input[type="text"], input[type="search"], input[type="file"], input[type="date"], select, textarea {
   display: block;
   width: 100%;
   min-height: 44px;
@@ -320,6 +320,10 @@ button.pick {
   border-bottom: 1px solid var(--line);
 }
 .sets li:last-child { border-bottom: 0; }
+/* History edit: one set per line, wrapping on a narrow phone. */
+.sets li.past-set { flex-wrap: wrap; justify-content: flex-start; }
+.past-set input[type="text"] { width: 5.5em; }
+.past-set select { width: auto; }
 .inline-confirm { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 .confirm {
