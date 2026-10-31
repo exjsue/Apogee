@@ -5,6 +5,7 @@
 import { nameKey } from "../domain/exercise-names.js";
 import { normalizeName } from "./strong.js";
 import { STRONG_MUSCLES } from "./strong-muscles.js";
+import { STRONG_ALIASES } from "./strong-aliases.js";
 
 export const MAX_SUGGESTIONS = 3;
 // A candidate needs at least this share of the words of both names in common (shared words / all words).
@@ -34,11 +35,15 @@ export const tableKey = (name) => normalizeName(name.replace(/\s*\([^()]*\)$/, "
 //   status      "auto" (one stored exercise has the same nameKey, rule a, or the same after reordering the equipment
 //               ending, rule b), "suggested" (candidates by shared words), "none"
 //   target      the stored exercise for "auto"
-//   suggestions up to MAX_SUGGESTIONS [{ exercise, score }], best first
+//   suggestions up to MAX_SUGGESTIONS [{ exercise, score }], best first. A name in STRONG_ALIASES whose target is
+//               stored and not retired gets that target first as { exercise, score: null, alias: true }, still only
+//               suggested.
 //   muscles     { source: "candidate" | "table" | null, ids }: the muscles to suggest if the name becomes a custom
-//               exercise. From the best candidate when there is one, else from the table, else none.
+//               exercise. From the first suggestion (the alias target when there is one), else from the table,
+//               else none.
 export function matchStrongNames(names, exercises) {
   const pool = exercises.filter((exercise) => exercise.retired !== true);
+  const poolById = new Map(pool.map((exercise) => [exercise.id, exercise]));
   const byKey = new Map();
   for (const exercise of pool) {
     const key = nameKey(exercise.name);
@@ -53,14 +58,19 @@ export function matchStrongNames(names, exercises) {
       if (found.length === 1) return { ...result, status: "auto", rule, target: found[0] };
     }
     const mine = words(name);
-    result.suggestions = poolWords
+    const scored = poolWords
       .map(({ exercise, words: theirs }) => {
         const shared = [...mine].filter((word) => theirs.has(word)).length;
         return { exercise, score: shared / (mine.size + theirs.size - shared) };
       })
       .filter((candidate) => candidate.score >= MIN_SCORE)
-      .sort((a, b) => b.score - a.score || a.exercise.name.localeCompare(b.exercise.name) || (a.exercise.id < b.exercise.id ? -1 : 1))
-      .slice(0, MAX_SUGGESTIONS);
+      .sort((a, b) => b.score - a.score || a.exercise.name.localeCompare(b.exercise.name) || (a.exercise.id < b.exercise.id ? -1 : 1));
+    const aliasKey = nameKey(name);
+    const alias = Object.hasOwn(STRONG_ALIASES, aliasKey) ? poolById.get(STRONG_ALIASES[aliasKey]) : undefined;
+    result.suggestions = (alias === undefined
+      ? scored
+      : [{ exercise: alias, score: null, alias: true }, ...scored.filter((candidate) => candidate.exercise.id !== alias.id)]
+    ).slice(0, MAX_SUGGESTIONS);
     if (result.suggestions.length > 0) {
       result.status = "suggested";
       result.muscles = { source: "candidate", ids: [...result.suggestions[0].exercise.primaryMuscles] };
@@ -99,7 +109,7 @@ export function renderReview(results) {
     }
     if (r.status === "suggested") {
       tally.candidate += 1;
-      const shown = r.suggestions.map((s, i) => `${i + 1}) "${s.exercise.name}" [${list(s.exercise.primaryMuscles)}] ${s.score.toFixed(2)}`);
+      const shown = r.suggestions.map((s, i) => `${i + 1}) "${s.exercise.name}" [${list(s.exercise.primaryMuscles)}] ${s.alias ? "alias" : s.score.toFixed(2)}`);
       return `${head}SUGGESTED: ${shown.join("; ")} | muscles if made a custom exercise: suggested: ${list(r.muscles.ids)} (from candidate 1)`;
     }
     if (r.muscles.source === "table") {

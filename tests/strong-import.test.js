@@ -9,8 +9,10 @@ import { ALL_MUSCLES } from "../src/domain/model.js";
 import { nameKey } from "../src/domain/exercise-names.js";
 import { isCountableSet, personalRecords, prHistory } from "../src/domain/strength.js";
 import { sessionsOf } from "../src/domain/top-set.js";
-import { SEED_EXERCISES } from "../src/domain/seed.js";
-import { CATALOG } from "../src/catalog/catalog.js";
+import { SEED_EXERCISES, SEED_VERSION } from "../src/domain/seed.js";
+import { CATALOG, CATALOG_VERSION } from "../src/catalog/catalog.js";
+import { createCatalogStore } from "../src/storage/catalog-store.js";
+import { STRONG_ALIASES } from "../src/importers/strong-aliases.js";
 import { catalogEntryToRecord } from "../src/domain/builtin.js";
 import { parseCsv, parseDuration, parseStrongCsv, buildStrongPlan, sha256Hex, STRONG_HEADER } from "../src/importers/strong.js";
 import { matchStrongNames, strongNameCounts, renderReview, reorderEquipment, tableKey, MAX_SUGGESTIONS } from "../src/importers/strong-match.js";
@@ -425,6 +427,63 @@ test("strong muscle table: every id is a real muscle, every key is in its stored
     assert.ok(ids.length > 0);
     for (const id of ids) assert.ok(ALL_MUSCLES.includes(id), `${key}: ${id}`);
   }
+});
+
+// ---- aliases
+
+const ALIAS_NAMES = [
+  "Hip Abductor (Machine)", "Hip Adductor (Machine)", "Farmer Carries", "Palloff Press", "Cable Woodchoppers",
+  "Reverse Fly (Dumbbell)", "Triceps Pushdown (Cable - Straight Bar)",
+];
+const BUILT_IN = [...SEED_EXERCISES, ...CATALOG.map(catalogEntryToRecord)];
+
+test("strong aliases: exactly the 7 known misses, each pointing at a seed or catalog exercise that is not retired", () => {
+  assert.equal(CATALOG_VERSION, 1, "the catalog changed: check every alias target again, then update this pin");
+  assert.deepEqual(Object.keys(STRONG_ALIASES).sort(), ALIAS_NAMES.map(nameKey).sort());
+  const byId = new Map(BUILT_IN.map((exercise) => [exercise.id, exercise]));
+  for (const [key, id] of Object.entries(STRONG_ALIASES)) {
+    assert.ok(byId.has(id), `${key}: ${id} is not a seed or catalog id`);
+    assert.notEqual(byId.get(id).retired, true, `${key}: ${id} is retired`);
+  }
+});
+
+test("strong aliases: shown first and only suggested, muscles from the target's record; ignored when the target is not stored or retired", () => {
+  const results = matchStrongNames(names(...ALIAS_NAMES), BUILT_IN);
+  for (const r of results) {
+    const target = BUILT_IN.find((exercise) => exercise.id === STRONG_ALIASES[nameKey(r.name)]);
+    assert.equal(r.status, "suggested", r.name);
+    assert.equal(r.target, null, r.name);
+    assert.deepEqual([r.suggestions[0].exercise.id, r.suggestions[0].alias], [target.id, true], r.name);
+    assert.ok(r.suggestions.length <= MAX_SUGGESTIONS && r.suggestions.filter((s) => s.exercise.id === target.id).length === 1, r.name);
+    assert.deepEqual(r.muscles, { source: "candidate", ids: target.primaryMuscles }, r.name);
+  }
+  const palloff = results.find((r) => r.name === "Palloff Press");
+  assert.deepEqual(palloff.muscles.ids, ["abs"]); // the catalog record's muscles, not the importer's table (obliques)
+  assert.match(renderReview(results), /1\) "Pallof Press" \[abs\] alias/);
+  const withoutTarget = BUILT_IN.filter((exercise) => exercise.id !== "Pallof_Press");
+  const retiredTarget = BUILT_IN.map((exercise) => (exercise.id === "Pallof_Press" ? { ...exercise, retired: true } : exercise));
+  for (const stored of [withoutTarget, retiredTarget]) {
+    const [r] = matchStrongNames(names("Palloff Press"), stored);
+    assert.ok(r.suggestions.every((s) => s.alias !== true && s.exercise.id !== "Pallof_Press"));
+  }
+});
+
+test("strong apply: a seed or a catalog exercise can be the target; both records are left exactly as stored", async () => {
+  const { adapter, store } = await freshStore();
+  await store.seedExercises(SEED_EXERCISES, SEED_VERSION);
+  await createCatalogStore(adapter).syncCatalog(CATALOG, { version: CATALOG_VERSION, count: CATALOG.length });
+  const targets = { "Curl (Dumbbell)": "seed-triceps-pushdown", Plank: "Pallof_Press" };
+  const before = await Promise.all(Object.values(targets).map((id) => store.getExercise(id)));
+  assert.ok(before.every((exercise) => exercise !== undefined && exercise !== null));
+  const { plan } = await planFor(FIXTURE, adapter, {
+    pick: (n) => (Object.hasOwn(targets, n.name) ? { kind: "existing", exerciseId: targets[n.name] } : chest()),
+  });
+  assert.equal(plan.ok, true, JSON.stringify(plan.errors));
+  assert.deepEqual(plan.requiredExerciseIds.sort(), Object.values(targets).sort());
+  await applyStrongPlan(adapter, plan);
+  const entries = await adapter.transaction(["entries"], "readonly", (tx) => tx.getAll("entries"));
+  for (const id of Object.values(targets)) assert.ok(entries.some((entry) => entry.exerciseId === id), id);
+  assert.deepEqual(await Promise.all(Object.values(targets).map((id) => store.getExercise(id))), before);
 });
 
 test("strong review: one line per name, says nothing is applied, and shows each kind of proposal", () => {
