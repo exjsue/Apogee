@@ -3021,6 +3021,62 @@ rule("body panel: the Top set row, its sparkline beside the text and not over it
   });
 });
 
+rule("body panel: the Weekly row's text and bar, Details closed by default and opening below without moving the rows above, and the sparkline only from 3 sessions", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "body");
+    await waitFor(() => diagram(root), "the diagram");
+    const inPanel = (name) => region(panelOf(root), name);
+    tapDiagram(root, ...QUADS);
+    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 22 (guide 10-20) +22 vs prior 7 days");
+    ctx.assert.equal(inPanel("muscle-weekly-fill").getAttribute("width"), "20", "the bar is full at 20 and above");
+    ctx.assert.ok(inPanel("muscle-weighted").classList.contains("visually-hidden") && inPanel("muscle-position").textContent === "Above the default target", "the range state is kept for screen readers");
+    // Details: closed by default, with the four rows inside in their order
+    const toggle = action(panelOf(root), "muscle-details");
+    const box = inPanel("muscle-details");
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    ctx.assert.equal(toggle.getAttribute("aria-controls"), box.id);
+    ctx.assert.ok(box.hidden && box.getBoundingClientRect().height === 0, "closed by default");
+    ctx.assert.deepEqual([...box.children].map((el) => el.dataset.region ?? el.querySelector("h4").textContent), ["muscle-trend", "Primary credit", "muscle-balance"]);
+    panelOf(root).getAnimations({ subtree: true }).forEach((a) => a.finish()); // the final state, so positions are settled
+    const tops = () => ["muscle-weekly", "muscle-last", "muscle-top-set"].map((name) => inPanel(name).getBoundingClientRect().top);
+    const before = tops();
+    click(toggle);
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    ctx.assert.ok(!box.hidden && box.getBoundingClientRect().height > 0, "open");
+    ctx.assert.deepEqual(tops(), before, "opening moves nothing above");
+    ctx.assert.ok(box.getBoundingClientRect().top >= toggle.getBoundingClientRect().bottom, "it opens below the button");
+    ctx.assert.equal(panelName(root), "Quads", "the panel stays open");
+    click(toggle);
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    ctx.assert.ok(box.hidden, "closed again");
+    // no sets this week and no trend: the value is 0, there is no delta
+    tapDiagram(root, 84, 99);
+    ctx.assert.equal(inPanel("muscle-weekly").querySelector(".weekly-line").textContent, "Weekly sets 0 (guide 10-20)");
+    ctx.assert.equal(inPanel("muscle-weekly-fill").getAttribute("width"), "0");
+    tapDiagram(root, 78, 336);
+    ctx.assert.equal(inPanel("muscle-weekly-delta").textContent, "-5 vs prior 7 days");
+    // biceps: 2 curl sessions, no sparkline; triceps: 3 pushdown sessions, a sparkline; the slot keeps its width
+    click($(root, '[data-action="muscle-open"][data-muscle="biceps"]'));
+    ctx.assert.equal(inPanel("muscle-spark"), null, "2 sessions: hidden");
+    const emptySlot = inPanel("muscle-top-set").querySelector(".spark-slot").getBoundingClientRect().width;
+    click(action(root, "muscle-close"));
+    await showView(root, "back");
+    click($(root, '[data-action="muscle-open"][data-muscle="triceps"]'));
+    ctx.assert.ok(inPanel("muscle-spark") !== null, "3 sessions: shown");
+    ctx.assert.equal(inPanel("muscle-top-set").querySelector(".spark-slot").getBoundingClientRect().width, emptySlot, "the slot is the same width either way");
+  }, {
+    width: 390,
+    prepare: async (store) => {
+      await seedBodyWorkouts(store);
+      await store.saveExercise(createExercise({ id: "pushdown-test", name: "Pushdown test", primaryMuscles: ["triceps"], secondaryMuscles: [], equipmentTags: ["cable"], isCustom: true }));
+      const at = (d) => new Date(Date.now() - d * DAY_MS).toISOString();
+      const session = async (id, days, exerciseId) => store.saveWorkoutWithDetails({ id, startedAt: at(days + 0.02), endedAt: at(days) }, [{ id: `${id}-e`, workoutId: id, exerciseId, order: 0 }], [{ id: `${id}-s0`, entryId: `${id}-e`, order: 0, reps: 5, weightValue: 50, weightUnit: "kg", isWarmup: false, completedAt: at(days + 0.01) }]);
+      await session("bw-curl-2", 6, "seed-dumbbell-curl");
+      for (const days of [9, 5, 3]) await session(`bw-push-${days}`, days, "pushdown-test");
+    },
+  });
+});
+
 // ---- the picker's menu for the user's own exercises: edit, remove (delete or hide), show again ----
 
 const FLY = createExercise({ id: "c-fly", name: "Cable Fly", primaryMuscles: ["chest", "neck"], secondaryMuscles: [], equipmentTags: ["cable", "trap_bar"], isCustom: true });

@@ -543,10 +543,22 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .muscle-panel h4 { margin: 8px 0 4px; font-size: 0.9375rem; }
 .muscle-panel li { padding: 2px 0; }
 .muscle-panel .contributors { margin-bottom: 8px; }
-/* the Top set row: the sentence takes the room left, the sparkline keeps its own 60 px beside it, so they never overlap */
-.muscle-panel .top-set { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.muscle-panel .top-set p { flex: 1 1 auto; min-width: 0; margin: 0; }
-.muscle-panel .sparkline { flex: 0 0 60px; width: 60px; height: 20px; }
+/* the Weekly row: a short line, then a bar of the value against the top of the target range, the range itself marked
+   in a neutral tone behind it (no warning colour) */
+.muscle-panel .weekly { margin-bottom: 8px; }
+.muscle-panel .weekly-line { margin: 0 0 4px; }
+.muscle-panel .weekly-label { font-weight: 600; }
+.muscle-panel .weekly-bar { display: block; width: 100%; height: 8px; }
+.muscle-panel .weekly-bar .track { fill: var(--line); }
+.muscle-panel .weekly-bar .band { fill: var(--muted); fill-opacity: 0.4; }
+.muscle-panel .weekly-bar .fill { fill: var(--text); }
+/* the Top set row: the sentence wraps in its own column, the sparkline has a reserved 60 px column beside it, empty or
+   not, so they never overlap and the row does not change shape */
+.muscle-panel .top-set { display: grid; grid-template-columns: minmax(0, 1fr) 60px; align-items: center; gap: 12px; margin-bottom: 8px; }
+.muscle-panel .top-set p { margin: 0; }
+.muscle-panel .spark-slot { display: block; width: 60px; height: 20px; }
+.muscle-panel .sparkline { display: block; width: 60px; height: 20px; }
+.muscle-panel .details-toggle { margin-bottom: 8px; }
 .muscle-panel .sparkline polyline { fill: none; stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 /* the stall line is the panel's only use of the accent */
 .muscle-panel .stall { color: var(--accent); font-weight: 600; }

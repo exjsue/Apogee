@@ -38,27 +38,94 @@ function contributorGroup(title, rows) {
   return h("div", { class: "contributors" }, h("h4", {}, title), h("ul", {}, rows.map((row) => h("li", {}, row.text))));
 }
 
-// Best e1RM per session as a small line, scaled to its own lowest and highest value. The numbers are in its label.
-// The SVG namespace is read from the diagram's template (as body-diagram.js does), so no URL is written in src/.
-function sparkline(values, label) {
+// An SVG element with its attributes. The namespace is read from the diagram's template (as body-diagram.js does), so
+// no URL is written in src/; null when the template is missing.
+function svgElement(tag, attributes) {
   const ns = document.getElementById("body-diagram-template")?.content.firstElementChild?.namespaceURI;
   if (ns === undefined) return null;
+  const element = document.createElementNS(ns, tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
+  return element;
+}
+
+// Best e1RM per session as a small line, scaled to its own lowest and highest value. The numbers are in its label.
+function sparkline(values, label) {
+  const svg = svgElement("svg", { class: "sparkline", viewBox: "0 0 60 20", preserveAspectRatio: "none", role: "img", "aria-label": label, "data-region": "muscle-spark" });
+  if (svg === null) return null;
   const [low, high] = [Math.min(...values), Math.max(...values)];
   const y = (v) => (high === low ? 10 : 18 - ((v - low) / (high - low)) * 16);
-  const svg = document.createElementNS(ns, "svg");
-  for (const [name, value] of [["class", "sparkline"], ["viewBox", "0 0 60 20"], ["preserveAspectRatio", "none"], ["role", "img"], ["aria-label", label], ["data-region", "muscle-spark"]]) svg.setAttribute(name, value);
-  const line = document.createElementNS(ns, "polyline");
-  line.setAttribute("points", values.map((v, i) => `${(i * 58) / (values.length - 1) + 1},${y(v)}`).join(" "));
-  svg.append(line);
+  svg.append(svgElement("polyline", { points: values.map((v, i) => `${(i * 58) / (values.length - 1) + 1},${y(v)}`).join(" ") }));
   return svg;
 }
 
+// The weekly bar: the value against TARGET_RANGE.max, the target range marked behind it. Widths are SVG attributes, as
+// inline styles are refused. Hidden from screen readers: the sentences below it say the same.
+function weeklyBar(value) {
+  const svg = svgElement("svg", { class: "weekly-bar", viewBox: `0 0 ${TARGET_RANGE.max} 4`, preserveAspectRatio: "none", "aria-hidden": "true", "data-region": "muscle-weekly-bar" });
+  if (svg === null) return null;
+  svg.append(
+    svgElement("rect", { class: "track", x: 0, y: 0, width: TARGET_RANGE.max, height: 4 }),
+    svgElement("rect", { class: "band", x: TARGET_RANGE.min, y: 0, width: TARGET_RANGE.max - TARGET_RANGE.min, height: 4 }),
+    svgElement("rect", { class: "fill", x: 0, y: 1, width: Math.min(value, TARGET_RANGE.max), height: 2, "data-region": "muscle-weekly-fill" }),
+  );
+  return svg;
+}
+
+// The short weekly line is for the eye; the three full sentences (the total, where it is against the default target,
+// and the target itself) stay in the row, visually hidden, so a screen reader loses nothing.
+function weeklyRow(detail) {
+  return h(
+    "div",
+    { class: "weekly", "data-region": "muscle-weekly" },
+    h(
+      "p",
+      { class: "weekly-line", "aria-hidden": "true" },
+      h("span", { class: "weekly-label" }, "Weekly sets"),
+      " ",
+      h("span", { class: "weekly-value", "data-region": "muscle-weekly-value" }, detail.weeklyText),
+      detail.deltaText === null ? null : [" ", h("span", { class: "muted weekly-delta", "data-region": "muscle-weekly-delta" }, detail.deltaText)],
+    ),
+    weeklyBar(detail.weighted),
+    h("p", { class: "visually-hidden", "data-region": "muscle-weighted" }, detail.weightedText),
+    detail.positionText === null ? null : h("p", { class: "visually-hidden", "data-region": "muscle-position" }, detail.positionText),
+    h("p", { class: "visually-hidden", "data-region": "muscle-target" }, detail.targetText),
+  );
+}
+
+// Below this many sessions the line says too little, so the slot stays empty (it keeps its width either way).
+const SPARK_MIN_SESSIONS = 3;
+
 function topSetRows(topSet) {
   if (topSet === undefined) return null;
+  const spark = topSet.spark !== null && topSet.spark.length >= SPARK_MIN_SESSIONS ? sparkline(topSet.spark, topSet.sparkText) : null;
   return [
-    h("div", { class: "top-set", "data-region": "muscle-top-set" }, h("p", {}, topSet.text), topSet.spark === null ? null : sparkline(topSet.spark, topSet.sparkText)),
+    h("div", { class: "top-set", "data-region": "muscle-top-set" }, h("p", {}, topSet.text), h("span", { class: "spark-slot" }, spark)),
     topSet.stallText === null ? null : h("p", { class: "stall", "data-region": "muscle-stall" }, topSet.stallText),
   ];
+}
+
+// Trend, the credit lists and Balance, unchanged and in this order, behind one Details button, closed when the
+// panel opens. They come after every visible row, so opening them moves nothing above.
+function detailsRows(detail) {
+  const inner = h(
+    "div",
+    { class: "panel-details", id: "muscle-details", "data-region": "muscle-details", hidden: true },
+    detail.trend === null ? null : h("p", { "data-region": "muscle-trend" }, `Trend: ${detail.trend.text}`),
+    contributorGroup("Primary credit", detail.contributors.primary),
+    contributorGroup("Secondary credit", detail.contributors.secondary),
+    detail.balance === null ? null : h("p", { "data-region": "muscle-balance" }, `Balance: ${detail.balance.text}`),
+  );
+  const toggle = button("Details", {
+    class: "small details-toggle",
+    "data-action": "muscle-details",
+    "aria-expanded": "false",
+    "aria-controls": "muscle-details",
+    onClick: () => {
+      inner.hidden = !inner.hidden;
+      toggle.setAttribute("aria-expanded", String(!inner.hidden));
+    },
+  });
+  return [toggle, inner];
 }
 
 function panelFor(detail, onClose) {
@@ -71,15 +138,10 @@ function panelFor(detail, onClose) {
       h("h3", { id: "muscle-panel-heading", tabindex: "-1", "data-region": "muscle-panel-heading" }, detail.label),
       button("Close", { class: "small", "data-action": "muscle-close", onClick: onClose }),
     ),
-    h("p", { "data-region": "muscle-weighted" }, detail.weightedText),
-    detail.positionText === null ? null : h("p", { "data-region": "muscle-position" }, detail.positionText),
-    h("p", { class: "muted", "data-region": "muscle-target" }, detail.targetText),
+    weeklyRow(detail),
     h("p", { "data-region": "muscle-last" }, `Last trained: ${detail.lastTrainedText}`),
-    detail.trend === null ? null : h("p", { "data-region": "muscle-trend" }, `Trend: ${detail.trend.text}`),
-    contributorGroup("Primary credit", detail.contributors.primary),
-    contributorGroup("Secondary credit", detail.contributors.secondary),
-    detail.balance === null ? null : h("p", { "data-region": "muscle-balance" }, `Balance: ${detail.balance.text}`),
     topSetRows(detail.topSet),
+    detailsRows(detail),
   );
 }
 

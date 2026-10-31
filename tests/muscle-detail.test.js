@@ -230,3 +230,16 @@ test("the inputs are only read: frozen loads and exercises do not throw, and bad
   assert.throws(() => buildMuscleDetails({ recent: load(NOW - 7 * DAY, NOW + 1), previous, longer, exercises, now: NOW }), TypeError);
   assert.ok(buildMuscleDetails({ recent, previous, longer, exercises: new Map(ALL.map((e) => [e.id, e])), now: NOW }).chest.contributors.primary[0].name === "Bench press", "a Map of exercises works too");
 });
+
+test("the panel's weekly value and delta: the rounded total with the guide, the trend's own signed delta, none without a trend", () => {
+  const up = of("biceps", entry("curl", ...day(1, 6)));
+  assert.equal(up.weeklyText, "6 (guide 10-20)");
+  assert.equal(up.deltaText, "+6 vs prior 7 days");
+  const down = of("front_delts", entry("bench", ...day(1, 3)), entry("log", ...day(9, 6)));
+  assert.deepEqual([down.weeklyText, down.deltaText], ["1.5 (guide 10-20)", "-4.5 vs prior 7 days"]);
+  assert.equal(down.deltaText, `${down.trend.delta} vs prior 7 days`, "the same delta as the trend line");
+  const flat = of("biceps", entry("curl", ...day(1, 2), ...day(9, 2)));
+  assert.equal(flat.deltaText, "0 vs prior 7 days");
+  const none = of("chest");
+  assert.deepEqual([none.weeklyText, none.deltaText, none.trend], ["0 (guide 10-20)", null, null]);
+});
