@@ -16,7 +16,7 @@ import { createOffline } from "../app/offline.js";
 import { checkPersistence } from "../app/persistence.js";
 import { createCatalogService, startAfterFirstPaint, resyncAfterImport } from "../app/catalog.js";
 import { SEED_EXERCISES, SEED_VERSION } from "../domain/seed.js";
-import { readImportContext } from "../importers/strong-apply.js";
+import { readImportContext, applyStrongPlan } from "../importers/strong-apply.js";
 
 const root = document.getElementById("app");
 
@@ -55,7 +55,8 @@ async function start() {
       persistence,
       offline,
       catalog,
-      strongImport: { readContext: () => readImportContext(adapter) }, // read only; the Strong import writes nothing yet
+      // The UI gets these two calls, never the adapter. apply ADDS a plan's records in one transaction (strong-apply.js).
+      strongImport: { readContext: () => readImportContext(adapter), apply: (plan) => applyStrongPlan(adapter, plan) },
     });
     catalog.onChange(() => app.renderInBackground()); // the picker's note and list follow the library
     startAfterFirstPaint(() => catalog.ensureCurrent());

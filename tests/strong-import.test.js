@@ -17,7 +17,7 @@ import { catalogEntryToRecord } from "../src/domain/builtin.js";
 import { parseCsv, parseDuration, parseStrongCsv, buildStrongPlan, sha256Hex, STRONG_HEADER } from "../src/importers/strong.js";
 import { matchStrongNames, strongNameCounts, renderReview, reorderEquipment, tableKey, MAX_SUGGESTIONS } from "../src/importers/strong-match.js";
 import { STRONG_MUSCLES } from "../src/importers/strong-muscles.js";
-import { applyStrongPlan, readImportContext } from "../src/importers/strong-apply.js";
+import { applyStrongPlan, readImportContext, samePlan } from "../src/importers/strong-apply.js";
 
 const FIXTURE = readFileSync(new URL("./fixtures/strong-sample.csv", import.meta.url), "utf8");
 const NOW = new Date("2026-01-01T00:00:00.000Z");
@@ -348,6 +348,30 @@ test("strong apply: a custom exercise whose name is taken is refused", async () 
   const before = await exportOf(adapter);
   await assert.rejects(applyStrongPlan(adapter, plan), /name/);
   assert.equal(await exportOf(adapter), before);
+});
+
+test("strong confirm gate: samePlan accepts only the plan shown; a plan changed since the dry run is refused and nothing is written", async () => {
+  const { adapter } = await storeWithExisting();
+  const { parsed, plan: shown } = await planFor(FIXTURE, adapter);
+  const rebuild = async (unit = "lb") => buildStrongPlan({ parsed, unit, mapping: mappingFor(parsed), existing: await readImportContext(adapter) });
+  assert.equal(samePlan(shown, await rebuild()), true, "nothing changed: the same plan");
+  assert.equal(samePlan(shown, await rebuild("kg")), false, "same ids and counts, different records");
+  // Another import stored one of the workouts and one of the custom exercises meanwhile.
+  await adapter.transaction(["exercises", "workouts"], "readwrite", async (tx) => {
+    await tx.put("exercises", shown.records.exercises[0]);
+    await tx.put("workouts", shown.records.workouts[0]);
+  });
+  const before = await exportOf(adapter);
+  const changed = await rebuild();
+  assert.equal(changed.ok, true);
+  assert.equal(changed.records.workouts.length, shown.records.workouts.length - 1);
+  assert.ok(changed.records.exercises.length < shown.records.exercises.length);
+  assert.equal(samePlan(shown, changed), false);
+  assert.equal(await exportOf(adapter), before, "the compare writes nothing");
+  // A plan with errors is never the same, even compared with itself.
+  const broken = { ...shown, ok: false };
+  assert.equal(samePlan(broken, broken), false);
+  assert.equal(samePlan(shown, undefined), false);
 });
 
 test("strong apply: records and PR / top-set results do not depend on stored order or timestamps", async () => {

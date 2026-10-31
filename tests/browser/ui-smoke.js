@@ -18,7 +18,8 @@ import { createCatalogService, startAfterFirstPaint } from "../../src/app/catalo
 import { createCatalogStore } from "../../src/storage/catalog-store.js";
 import { EXERCISE, makeDetails, rawCounts } from "../store-rules.js";
 import { incomingFile } from "../backup-rules.js";
-import { readImportContext } from "../../src/importers/strong-apply.js";
+import { readImportContext, applyStrongPlan } from "../../src/importers/strong-apply.js";
+import { strongWorkoutId } from "../../src/importers/strong.js";
 
 export const uiRules = [];
 const rule = (name, run) => uiRules.push({ name, run });
@@ -70,7 +71,7 @@ async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize }
     backup: createBackup(adapter),
     downloadBlob: (blob, filename) => calls.downloads.push({ blob, filename }),
     readFileAsText: (file) => file.text(),
-    strongImport: { readContext: () => readImportContext(adapter) },
+    strongImport: { readContext: () => readImportContext(adapter), apply: (plan) => applyStrongPlan(adapter, plan) },
     persistence: {
       getStatus: () => store.getPersistStatus(),
       check: () => checkPersistence({
@@ -2347,7 +2348,7 @@ async function readyStrongChoices(root) {
   await waitFor(() => $(root, '[data-action="strong-unit"][data-unit="lb"]').getAttribute("aria-pressed") === "true", "lb");
 }
 
-rule("strong import: its own section in Settings, apart from Backup's replace-everything import, with no confirm yet", async (ctx) => {
+rule("strong import: its own section in Settings, apart from Backup's replace-everything import, with no Confirm before a dry run", async (ctx) => {
   await withApp(ctx, async ({ root }) => {
     await goToTab(root, "settings");
     const section = await waitFor(() => region(root, "strong-import"), "the Strong section");
@@ -2360,7 +2361,7 @@ rule("strong import: its own section in Settings, apart from Backup's replace-ev
     }
     ctx.assert.equal(root.querySelectorAll('[data-action="check-import"]').length, 1);
     await pickStrongFile(root);
-    ctx.assert.equal(root.querySelector('[data-action="strong-confirm"]'), null, "nothing can be written in this version");
+    ctx.assert.equal(root.querySelector('[data-action="strong-confirm"]'), null, "Confirm appears only after a dry run with no errors");
   });
 });
 
@@ -2444,6 +2445,220 @@ rule("strong import: an alias is shown first with its muscles and is not selecte
     ctx.assert.equal(radios[1].checked, false);
     ctx.assert.ok(radios[0].checked);
     ctx.assert.ok(/Use suggested muscles \(Triceps\)/.test(rowAction(root, name, "strong-use-suggested").textContent));
+  });
+});
+
+// ---- the Strong import: Confirm (commit 3)
+
+const STRONG_NOW = new Date("2026-01-01T00:00:00.000Z");
+const exportData = async (services) => JSON.parse(await services.backup.exportToText({ now: STRONG_NOW })).data;
+const sizes = (data) => Object.fromEntries(["exercises", "workouts", "entries", "sets"].map((name) => [name, data[name].length]));
+
+async function strongDryRun(root) {
+  click(action(root, "strong-dry-run"));
+  return waitFor(() => region(root, "strong-report"), "the dry run");
+}
+async function tickAndConfirm(root) {
+  click(field(root, "strong-confirm-check"));
+  await waitFor(() => action(root, "strong-confirm")?.disabled === false, "Confirm to be enabled");
+  click(action(root, "strong-confirm"));
+}
+
+rule("strong confirm: disabled until ticked, below the Backup reminder; writes exactly the dry run; a second import adds 0", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const before = sizes(await exportData(services));
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    await readyStrongChoices(root);
+    await strongDryRun(root);
+    ctx.assert.equal(/not available yet/.test(region(root, "strong-import").textContent), false);
+    const confirm = action(root, "strong-confirm");
+    ctx.assert.ok(confirm.disabled, "not ticked yet");
+    ctx.assert.equal(field(root, "strong-confirm-check").checked, false);
+    ctx.assert.equal(field(root, "strong-confirm-check").parentElement.textContent, "This adds 1 workout to this device");
+    const reminder = region(root, "strong-backup-first");
+    ctx.assert.ok(reminder.textContent.startsWith("Export a Backup first. If the result is wrong, restoring a Backup is the only way back until Undo exists."));
+    ctx.assert.ok(region(root, "strong-report").compareDocumentPosition(reminder) & Node.DOCUMENT_POSITION_FOLLOWING, "below the report");
+    ctx.assert.ok(reminder.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING, "the reminder is above Confirm");
+    click(action(root, "strong-to-backup"));
+    await waitFor(() => document.activeElement === region(root, "backup-heading"), "focus on the Backup heading");
+    ctx.assert.deepEqual(sizes(await exportData(services)), before, "nothing written before Confirm");
+
+    await tickAndConfirm(root);
+    const written = await waitFor(() => region(root, "strong-written"), "the result");
+    ctx.assert.equal(written.textContent, "Added 1 workout, 5 exercise entries, 5 sets and 4 custom exercises. Re-importing the same file adds nothing.");
+    const after = sizes(await exportData(services));
+    // The dry run said 1 workout, 5 entries, 5 sets, 4 custom exercises.
+    ctx.assert.deepEqual(after, { exercises: before.exercises + 4, workouts: before.workouts + 1, entries: before.entries + 5, sets: before.sets + 5 });
+    ctx.assert.equal(region(root, "strong-report"), null, "the plan is cleared");
+    ctx.assert.equal(action(root, "strong-confirm"), null);
+    ctx.assert.equal(region(root, "strong-file-name").textContent, "File: strong.csv", "the file name stays");
+    ctx.assert.equal($(root, '[data-action="strong-unit"][aria-pressed="true"]'), null, "the unit is cleared");
+    ctx.assert.equal(region(root, "strong-error"), null);
+
+    // Again: every name now matches by name a stored exercise, so each is picked by hand.
+    const exported = await services.backup.exportToText({ now: STRONG_NOW });
+    for (const name of STRONG_NAMES) {
+      ctx.assert.equal(strongRow(root, name).querySelectorAll('[data-action="strong-choice"]:checked').length, 0, `${name} starts with no choice`);
+      click(strongRow(root, name).querySelector('[data-action="strong-choice"][value^="existing:"]'));
+      await waitFor(() => strongRow(root, name).querySelector('[data-action="strong-choice"][value^="existing:"]').checked, name);
+    }
+    click($(root, '[data-action="strong-unit"][data-unit="lb"]'));
+    await waitFor(() => action(root, "strong-dry-run")?.disabled === false, "the dry run to be ready");
+    await strongDryRun(root);
+    const counts = region(root, "strong-counts").textContent;
+    ctx.assert.ok(counts.includes("Workouts in the file: 1. New: 0. Already imported: 1."), counts);
+    ctx.assert.equal(field(root, "strong-confirm-check").parentElement.textContent, "This adds 0 workouts to this device");
+    await tickAndConfirm(root);
+    await waitFor(() => /^Added 0 workouts, 0 exercise entries, 0 sets and 0 custom exercises\./.test(region(root, "strong-written")?.textContent ?? ""), "the second result");
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), exported, "the second import changed nothing");
+  });
+});
+
+rule("strong confirm: an id that is already stored (real IndexedDB) shows the error and leaves the export byte-identical", async (ctx) => {
+  const workoutId = await strongWorkoutId("2025-02-01 09:00:00", "Strong test");
+  await withApp(ctx, async ({ root, services }) => {
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    await readyStrongChoices(root);
+    await strongDryRun(root);
+    const before = await services.backup.exportToText({ now: STRONG_NOW });
+    await tickAndConfirm(root);
+    const error = await waitFor(() => region(root, "strong-error"), "the error");
+    ctx.assert.ok(/same id already exists/.test(error.textContent), error.textContent);
+    ctx.assert.ok(error.textContent.endsWith("Nothing was written: the import is one transaction, and it was rolled back."), error.textContent);
+    ctx.assert.equal(region(root, "strong-written"), null);
+    ctx.assert.equal(region(root, "strong-report"), null);
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), before);
+  }, {
+    // An entry with the id the plan gives the workout's first entry; the dry run reads only workout ids, so it is unseen.
+    prepare: (store) => store.saveWorkoutWithDetails(
+      { id: "w-clash", startedAt: "2024-12-01T10:00:00.000Z", endedAt: "2024-12-01T11:00:00.000Z" },
+      [{ id: `${workoutId}-e0`, workoutId: "w-clash", exerciseId: BENCH, order: 0 }],
+      [{ id: "s-clash", entryId: `${workoutId}-e0`, order: 0, reps: 5, weightValue: 50, weightUnit: "kg", completedAt: "2024-12-01T10:30:00.000Z" }],
+    ),
+  });
+});
+
+rule("strong confirm: a plan that changed since the dry run is refused, the report is cleared and nothing is written", async (ctx) => {
+  const workoutId = await strongWorkoutId("2025-02-01 09:00:00", "Strong test");
+  await withApp(ctx, async ({ root, store, services }) => {
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    await readyStrongChoices(root);
+    await strongDryRun(root);
+    // Meanwhile (another tab) the same workout is stored.
+    await store.saveWorkoutWithDetails(
+      { id: workoutId, startedAt: "2024-12-01T10:00:00.000Z", endedAt: "2024-12-01T11:00:00.000Z" },
+      [{ id: "e-other", workoutId, exerciseId: BENCH, order: 0 }],
+      [{ id: "s-other", entryId: "e-other", order: 0, reps: 5, weightValue: 50, weightUnit: "kg", completedAt: "2024-12-01T10:30:00.000Z" }],
+    );
+    const before = await services.backup.exportToText({ now: STRONG_NOW });
+    await tickAndConfirm(root);
+    const error = await waitFor(() => region(root, "strong-error"), "the refusal");
+    ctx.assert.ok(/^Nothing was written: what is stored changed since the dry run/.test(error.textContent), error.textContent);
+    ctx.assert.equal(region(root, "strong-report"), null);
+    ctx.assert.equal(action(root, "strong-confirm"), null);
+    ctx.assert.equal(await services.backup.exportToText({ now: STRONG_NOW }), before);
+  });
+});
+
+rule("strong confirm: changing the unit or the file clears the dry run and the tick", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    await readyStrongChoices(root);
+    await strongDryRun(root);
+    click(field(root, "strong-confirm-check"));
+    await waitFor(() => action(root, "strong-confirm")?.disabled === false, "the tick");
+    click($(root, '[data-action="strong-unit"][data-unit="kg"]'));
+    await waitFor(() => region(root, "strong-report") === null && action(root, "strong-confirm") === null, "the unit change to clear it");
+    await strongDryRun(root);
+    ctx.assert.equal(field(root, "strong-confirm-check").checked, false, "the tick does not come back");
+    ctx.assert.ok(action(root, "strong-confirm").disabled);
+    await pickStrongFile(root); // the old names are still on screen until the redraw, so wait for the report to go
+    await waitFor(() => region(root, "strong-report") === null && action(root, "strong-confirm") === null, "the new file to clear it");
+    ctx.assert.equal($(root, '[data-action="strong-unit"][aria-pressed="true"]'), null);
+  });
+});
+
+rule("strong confirm: after the dry run the only new controls are the Backup link, the tick and Confirm; no bulk pick", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    await readyStrongChoices(root);
+    const choicesBefore = [...root.querySelectorAll('[data-action="strong-choice"]')].map((r) => r.checked);
+    await strongDryRun(root);
+    const actions = new Set([...region(root, "strong-import").querySelectorAll("[data-action]")].map((el) => el.dataset.action));
+    ctx.assert.deepEqual([...actions].sort(), ["strong-choice", "strong-choose-muscles", "strong-confirm", "strong-dry-run", "strong-fill-muscles", "strong-to-backup", "strong-unit"]); // the helper has used every suggestion
+    ctx.assert.deepEqual([...region(root, "strong-import").querySelectorAll("[data-field]")].map((el) => el.dataset.field), ["strong-file", "strong-confirm-check"]);
+    click(field(root, "strong-confirm-check"));
+    await waitFor(() => action(root, "strong-confirm")?.disabled === false, "the tick");
+    ctx.assert.deepEqual([...root.querySelectorAll('[data-action="strong-choice"]')].map((r) => r.checked), choicesBefore, "the tick picks nothing");
+  });
+});
+
+rule("strong import: Use suggested muscles fills one row only; Cancel in the picker keeps the muscles as they were", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    const name = "Triceps Pushdown (Cable - Straight Bar)";
+    const musclesOf = (n) => strongRow(root, n).querySelector('[data-region="strong-muscles"]').textContent;
+    click(rowAction(root, name, "strong-use-suggested"));
+    await waitFor(() => musclesOf(name) === "Muscles: Triceps", "the row's suggested muscles");
+    ctx.assert.equal(rowAction(root, name, "strong-use-suggested"), null, "the button goes once they are used");
+    ctx.assert.equal(musclesOf("Hip Abductor (Machine)"), "Muscles: none chosen yet");
+    ctx.assert.equal(musclesOf("Bench Press (Barbell)"), "Muscles: none chosen yet");
+    ctx.assert.ok(strongChoice(root, name, "custom").checked);
+
+    click(rowAction(root, "Zzz Unknown Thing", "strong-choose-muscles"));
+    click(await waitFor(() => $(root, '[data-region="strong-picker"] input[value="biceps"]'), "the muscle picker"));
+    click(action(root, "strong-muscles-cancel"));
+    await waitFor(() => region(root, "strong-picker") === null, "the picker to close");
+    ctx.assert.equal(musclesOf("Zzz Unknown Thing"), "Muscles: none chosen yet");
+    click(rowAction(root, "Zzz Unknown Thing", "strong-choose-muscles"));
+    const reopened = await waitFor(() => $(root, '[data-region="strong-picker"] input[value="biceps"]'), "the picker again");
+    ctx.assert.equal(reopened.checked, false, "the cancelled tick is gone");
+  });
+});
+
+rule("strong import: a file with a different header is refused as a whole", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await goToTab(root, "settings");
+    const input = await waitFor(() => field(root, "strong-file"), "the Strong file input");
+    const files = new DataTransfer();
+    files.items.add(new File([STRONG_CSV.replace("Workout Name", "Routine")], "other.csv", { type: "text/csv" }));
+    input.files = files.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    const error = await waitFor(() => region(root, "strong-error"), "the refusal");
+    ctx.assert.ok(error.textContent.startsWith("The file cannot be imported: The header is not the 10 Strong columns (Date, Workout Name,"), error.textContent);
+    ctx.assert.equal(region(root, "strong-file-name").textContent, "File: other.csv");
+    ctx.assert.equal(region(root, "strong-names"), null);
+    ctx.assert.equal(action(root, "strong-dry-run"), null);
+  });
+});
+
+rule("strong import: a rule-b name can use the stored exercise; Confirm writes it there and makes no custom for it", async (ctx) => {
+  await withApp(ctx, async ({ root, services }) => {
+    const before = await exportData(services);
+    await goToTab(root, "settings");
+    await pickStrongFile(root);
+    const name = "Bench Press (Barbell)";
+    ctx.assert.ok(/with the equipment written first/.test(strongRow(root, name).querySelector('[data-region="strong-match"]').textContent));
+    click(strongChoice(root, name, `existing:${BENCH}`));
+    await waitFor(() => strongChoice(root, name, `existing:${BENCH}`).checked, "the stored exercise");
+    await readyStrongChoices(root);
+    ctx.assert.ok(strongChoice(root, name, `existing:${BENCH}`).checked, "the helper left the pick alone");
+    await strongDryRun(root);
+    ctx.assert.ok(region(root, "strong-counts").textContent.includes("New custom exercises: 3."));
+    await tickAndConfirm(root);
+    await waitFor(() => /^Added 1 workout, 5 exercise entries, 5 sets and 3 custom exercises\./.test(region(root, "strong-written")?.textContent ?? ""), "the result");
+    const after = await exportData(services);
+    ctx.assert.equal(after.exercises.length, before.exercises.length + 3);
+    ctx.assert.equal(after.exercises.some((e) => e.name === name), false, "no custom exercise with the Strong name");
+    const workoutId = await strongWorkoutId("2025-02-01 09:00:00", "Strong test");
+    ctx.assert.deepEqual(after.entries.filter((e) => e.workoutId === workoutId).map((e) => e.exerciseId).filter((id) => id === BENCH), [BENCH]);
+    ctx.assert.deepEqual(after.exercises.find((e) => e.id === BENCH), before.exercises.find((e) => e.id === BENCH), "the stored exercise is unchanged");
   });
 });
 

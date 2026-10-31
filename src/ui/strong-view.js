@@ -1,5 +1,6 @@
 // The "Import from Strong" section of the Settings tab. It ADDS workouts from a Strong CSV export and is kept apart
-// from the Backup import, which replaces everything. This version stops at the dry run: nothing is written.
+// from the Backup import, which replaces everything. Nothing is written before Confirm, and Confirm writes only a plan
+// that, built again from the stored data, equals the dry run shown (samePlan in strong-apply.js).
 // Parsing, matching and the plan live in src/importers; this file builds elements and keeps the user's choices in
 // ctx.state.strong, so a redraw never loses one. Nothing is chosen for the user: every name starts on "Create
 // custom" (a name a stored exercise already has starts with no choice), and there is no accept-all.
@@ -10,6 +11,7 @@ import { nameKey } from "../domain/exercise-names.js";
 import { formatLabel, formatCount } from "../domain/format.js";
 import { parseStrongCsv, buildStrongPlan } from "../importers/strong.js";
 import { matchStrongNames, strongNameCounts } from "../importers/strong-match.js";
+import { samePlan } from "../importers/strong-apply.js";
 import { primaryMusclePicker } from "./workout-view.js";
 
 const HEADING = '[data-region="strong-heading"]';
@@ -17,7 +19,11 @@ const CUSTOM = "custom";
 const SKIP = "skip";
 const EXISTING = "existing:";
 
-const fresh = () => ({ fileName: null, parsed: null, rows: [], unit: null, editing: null, draft: [], plan: null, error: null });
+const fresh = () => ({
+  fileName: null, parsed: null, rows: [], unit: null, editing: null, draft: [], plan: null, error: null,
+  ticked: false, busy: false, written: null,
+});
+const NOTHING_WRITTEN = "Nothing was written: the import is one transaction, and it was rolled back.";
 
 const muscleText = (ids) => (ids.length === 0 ? "none" : ids.map(formatLabel).join(", "));
 const needs = (count, what, verb) => `${formatCount(count, what)} ${count === 1 ? `${verb}s` : verb}`;
@@ -88,9 +94,11 @@ function reportView(plan) {
       r.merges.length === 0 ? null : `Joined into one entry (an exercise that appears more than once in a workout): ${r.merges.map((m) => `${m.date}, ${m.exercise}`).join("; ")}.`,
       `Not stored: ${r.dropped.fieldsNotStored.join("; ")}.`,
     ].filter((line) => line !== null), { "data-region": "strong-counts" }),
-    h("p", { class: "muted" }, "Adding the workouts is not available yet."),
   );
 }
+
+const writtenText = (w) => `Added ${formatCount(w.workouts, "workout")}, ${formatCount(w.entries, "exercise entry", "exercise entries")}, `
+  + `${formatCount(w.sets, "set")} and ${formatCount(w.exercises, "custom exercise")}. Re-importing the same file adds nothing.`;
 
 export function renderStrongImport(ctx) {
   const { services } = ctx;
@@ -124,8 +132,32 @@ export function renderStrongImport(ctx) {
     ctx.state.focus = focus;
     await ctx.rerender();
   };
-  // Any change of a choice makes the last dry run out of date.
-  const change = (run, focus) => act(async () => { run(); s.plan = null; }, focus);
+  // Any change of a choice makes the last dry run, its tick and the last result out of date.
+  const change = (run, focus) => act(async () => { run(); Object.assign(s, { plan: null, ticked: false, written: null }); }, focus);
+
+  // Builds the plan again from the same file, unit and choices against what is stored now, and writes it only if it
+  // equals the plan shown. Every outcome clears the plan, so Confirm is never offered for a stale one.
+  async function confirmImport() {
+    const shown = s.plan;
+    const unit = s.unit;
+    const mapping = mappingOf(s.rows);
+    const existing = await services.strongImport.readContext();
+    const again = await buildStrongPlan({ parsed: s.parsed, unit, mapping, existing });
+    if (!samePlan(shown, again)) {
+      Object.assign(s, { plan: null, ticked: false });
+      throw new Error("Nothing was written: what is stored changed since the dry run (another tab or another import), so the result would differ from what was shown. Run the dry run again.");
+    }
+    let written;
+    try {
+      written = await services.strongImport.apply(again);
+    } catch (error) {
+      Object.assign(s, { plan: null, ticked: false });
+      throw new Error(`The import failed: ${error.message}. ${NOTHING_WRITTEN}`);
+    }
+    // The choices start again, matched against the exercises stored now (the ones read above plus the new customs).
+    const rows = matchStrongNames(strongNameCounts(s.parsed.workouts), [...existing.exercises, ...again.records.exercises]).map(toRow);
+    Object.assign(s, fresh(), { fileName: s.fileName, parsed: s.parsed, rows, written });
+  }
 
   const fileInput = h("input", {
     type: "file",
@@ -149,6 +181,7 @@ export function renderStrongImport(ctx) {
     h("label", { class: "field" }, h("span", {}, "Choose a Strong export file"), fileInput),
     s.fileName === null ? null : h("p", { class: "muted", "data-region": "strong-file-name" }, `File: ${s.fileName}`),
     s.error === null ? null : h("p", { class: "error", role: "alert", "data-region": "strong-error" }, s.error),
+    s.written === null ? null : h("p", { class: "notice", role: "status", "data-region": "strong-written" }, writtenText(s.written)),
   ];
   if (s.parsed === null) return section(...children);
 
@@ -268,11 +301,44 @@ export function renderStrongImport(ctx) {
       "data-action": "strong-dry-run",
       disabled: blockers.length > 0,
       onClick: act(async () => {
+        Object.assign(s, { plan: null, ticked: false, written: null });
         const existing = await services.strongImport.readContext();
         s.plan = await buildStrongPlan({ parsed: s.parsed, unit: s.unit, mapping: mappingOf(s.rows), existing });
       }, '[data-region="strong-report"]'),
     })),
     s.plan === null ? null : reportView(s.plan),
+    s.plan?.ok !== true ? null : h(
+      "div",
+      { class: "strong-confirm", "data-region": "strong-confirm" },
+      h(
+        "p",
+        { class: "warning-text", "data-region": "strong-backup-first" },
+        "Export a Backup first. If the result is wrong, restoring a Backup is the only way back until Undo exists. ",
+        button("Go to Backup", { class: "small", "data-action": "strong-to-backup", onClick: act(async () => {}, '[data-region="backup-heading"]') }),
+      ),
+      h(
+        "label",
+        { class: "check" },
+        h("input", {
+          type: "checkbox", checked: s.ticked, "data-field": "strong-confirm-check",
+          onChange: (event) => act(async () => { s.ticked = event.target.checked; }, '[data-field="strong-confirm-check"]')(),
+        }),
+        `This adds ${formatCount(s.plan.report.workouts.new, "workout")} to this device`,
+      ),
+      h("div", { class: "actions" }, button("Confirm", {
+        class: "primary",
+        "data-action": "strong-confirm",
+        disabled: !s.ticked || s.busy,
+        onClick: (event) => {
+          if (s.busy) return undefined; // no double submit
+          s.busy = true;
+          event.currentTarget.disabled = true;
+          return act(async () => {
+            try { await confirmImport(); } finally { s.busy = false; }
+          })(); // focus goes to the heading, just above the result or the error
+        },
+      })),
+    ),
   );
   return section(...children);
 }

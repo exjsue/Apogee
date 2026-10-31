@@ -17,6 +17,16 @@ export function readImportContext(adapter) {
   }));
 }
 
+// The Confirm gate: `fresh` (the plan built again from the same file, unit and choices against the data stored now)
+// may be written only if it is what the dry run showed. Both must have no errors and the same workout ids and counts of
+// entries, sets and new custom exercises (what the report showed), and every record must be equal too, so nothing the
+// user did not see (a stored exercise's id, a start time read in another time zone) can slip through.
+export function samePlan(shown, fresh) {
+  if (shown?.ok !== true || fresh?.ok !== true) return false;
+  const summary = ({ records: r }) => JSON.stringify([r.workouts.map((w) => w.id), r.entries.length, r.sets.length, r.exercises.length]);
+  return summary(shown) === summary(fresh) && JSON.stringify(shown.records) === JSON.stringify(fresh.records);
+}
+
 // The plan's records are built by buildStrongPlan through the model; they go through the same create functions again
 // here and must come out identical, so a record that is invalid or not in the model's own form is refused. This does
 // not detect a change to another valid value (a different weight): the plan is built and applied in one run, not stored.
