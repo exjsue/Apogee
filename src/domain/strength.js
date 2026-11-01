@@ -22,7 +22,7 @@ export const PR_TYPES = Object.freeze(["weight", "e1rm", "volume", "reps"]);
 
 export const KG_PER_LB = 0.45359237; // exact
 const UNITS = Object.freeze(["kg", "lb"]);
-const round1 = (n) => Math.round(n * 10) / 10;
+export const round1 = (n) => Math.round(n * 10) / 10;
 
 // The set's weight in the target unit, rounded to 0.1 (a set already in that unit is only rounded).
 export function weightIn(set, unit) {

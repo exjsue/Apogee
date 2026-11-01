@@ -203,3 +203,7 @@
 - [ ] Bottom sheet exercise picker, with focus trap, scroll lock and Escape, and tests for each (the picker has none of them today) (added 2026-10-31).
 - [ ] Finish workout always confirms (added 2026-10-31).
 - [ ] The elapsed timer computed from `startedAt` (added 2026-10-31).
+- [ ] Browser tests for the History detail collapse toggle: cards start collapsed, a click expands and flips `aria-expanded` (and the Best set line hides), and a redraw keeps open cards open (added 2026-10-31).
+- [ ] Browser tests for the "Finished" line rules: shown for a valid `endedAt` at or after `startedAt`, omitted otherwise (added 2026-10-31).
+- [ ] History detail: check the Back button chevron and how the top bar wraps on narrow screens (added 2026-10-31).
+- [ ] The Best set line in the non-preferred unit is long ("220.5 lb (entered 100 kg)"); consider a shorter form (added 2026-10-31).

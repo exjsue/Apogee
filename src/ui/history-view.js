@@ -5,9 +5,12 @@ import { formatSetWeight, formatDateTime, formatCount, formatSetLine } from "../
 import { isWarmupSet, setNumbers } from "../domain/workout-plan.js";
 import { draftFromWorkout, localDate } from "../domain/workout-edit.js";
 import { WEIGHT_UNITS } from "../domain/model.js";
+import { bestSet } from "../domain/best-set.js";
 
 // editing: null, or { original, draft, error } while a finished workout is edited (Cancel sets it back to null).
-export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, editing: null, notice: null, error: null });
+// expanded: the "<workout id>:<exercise id>" of every exercise card in the detail whose sets are open (cards start
+// collapsed; a redraw, such as opening the delete question, keeps what was opened).
+export const freshHistoryState = () => ({ detailId: null, confirmDelete: false, savingTemplate: false, editing: null, notice: null, error: null, expanded: new Set() });
 
 const EXERCISE_RESULTS = 8; // how many matches the Add exercise search shows
 
@@ -243,6 +246,85 @@ function weightText(set, unit) {
   try { return formatSetWeight(set.weightValue, set.weightUnit, unit); } catch { return `${set.weightValue} ${set.weightUnit}`; }
 }
 
+// "Finished <date and time>" under the title: only when endedAt is a real time at or after startedAt, else no line.
+function finishedLine(workout) {
+  const started = Date.parse(workout.startedAt);
+  const ended = Date.parse(workout.endedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(ended) || ended < started) return null;
+  return h("p", { class: "muted" }, `Finished ${formatDateTime(workout.endedAt)}`);
+}
+
+// One exercise of a finished workout: a card whose header holds the name, the Records line, a PR pill when a set of it was
+// a record, and a button that opens the sets. Collapsed, a line gives the best set; the set list stays in the page
+// (hidden) so it is always there to read and to test. Opening is done in place and remembered in history.expanded.
+function entryCard(ctx, workout, entry, index, rec, prSets) {
+  const history = ctx.state.history;
+  const numbers = setNumbers(entry.sets);
+  const mine = rec?.records[entry.exerciseId] ?? {};
+  const parts = [["weight", "Heaviest"], ["e1rm", "Est. 1RM"], ["reps", "Most reps"]]
+    .filter(([type]) => mine[type])
+    .map(([type, label]) => (type === "reps" ? `${label} ${mine.reps.value}` : `${label} ${mine[type].value} ${rec.unit}`));
+  const key = `${workout.id}:${entry.exerciseId}`;
+  const open = history.expanded.has(key);
+  const best = bestSet(entry.sets, ctx.unit);
+  const summary = best === null ? null : h(
+    "p",
+    { class: "muted best-set", "data-region": "best-set", hidden: open },
+    `Best set: ${formatSetLine(best.set, weightText(best.set, ctx.unit))}`,
+  );
+  const sets = h(
+    "div",
+    { class: "entry-sets", id: `entry-sets-${index}`, hidden: !open },
+    h(
+      "ol",
+      { class: "sets" },
+      entry.sets.map((set, setIndex) => h(
+        "li",
+        { "data-warmup": isWarmupSet(set) ? "true" : null },
+        h(
+          "span",
+          { class: "set-text" },
+          setMark(numbers[setIndex]),
+          ` ${formatSetLine(set, weightText(set, ctx.unit))}`,
+        ),
+        !isWarmupSet(set) && prSets.has(set.id)
+          ? h("span", { class: "pr-label", "data-region": "pr", "data-enter": `pr:${set.id}` }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
+          : null,
+      )),
+    ),
+  );
+  const toggle = button(null, {
+    class: "entry-toggle",
+    "aria-expanded": String(open),
+    "aria-controls": sets.id,
+    "aria-label": `${entry.exerciseName} sets`,
+    onClick: () => {
+      const opening = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(opening));
+      sets.hidden = !opening;
+      if (summary) summary.hidden = opening;
+      if (opening) history.expanded.add(key);
+      else history.expanded.delete(key);
+    },
+  });
+  // The sets' own PR labels are hidden while collapsed, so the header says whether any set of this exercise was a record.
+  const hasPr = entry.sets.some((set) => !isWarmupSet(set) && prSets.has(set.id));
+  return h(
+    "div",
+    { class: "card entry", "data-enter": `detail:${workout.id}:${entry.exerciseId}` },
+    h(
+      "div",
+      { class: "entry-top" },
+      exerciseHeading(entry.exerciseName, entry.markCustom),
+      hasPr ? h("span", { class: "pr-label", "data-region": "pr-summary" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "includes a personal record")) : null,
+      toggle,
+    ),
+    parts.length ? h("p", { class: "muted", "data-region": "records", "data-enter": `records:${workout.id}:${entry.exerciseId}` }, `Records: ${parts.join(" · ")}`) : null,
+    summary,
+    sets,
+  );
+}
+
 async function detail(ctx, id) {
   const history = ctx.state.history;
   const workout = await ctx.services.logger.getWorkoutDetail(id);
@@ -276,9 +358,9 @@ async function detail(ctx, id) {
     { class: "view", "aria-label": "Workout detail" },
     h(
       "div",
-      { class: "actions" },
+      { class: "actions detail-bar" },
       button("Back to history", {
-        class: "small",
+        class: "small back-button",
         "data-action": "back-to-history",
         onClick: () => {
           history.detailId = null;
@@ -293,38 +375,9 @@ async function detail(ctx, id) {
     ),
     history.savingTemplate ? template : null,
     h("h2", {}, formatDateTime(workout.startedAt)),
-    workout.endedAt ? h("p", { class: "muted" }, `Finished ${formatDateTime(workout.endedAt)}`) : null,
+    workout.endedAt ? finishedLine(workout) : null,
   );
-  for (const entry of workout.entries) {
-    const numbers = setNumbers(entry.sets);
-    const mine = rec?.records[entry.exerciseId] ?? {};
-    const parts = [["weight", "Heaviest"], ["e1rm", "Est. 1RM"], ["reps", "Most reps"]]
-      .filter(([type]) => mine[type])
-      .map(([type, label]) => (type === "reps" ? `${label} ${mine.reps.value}` : `${label} ${mine[type].value} ${rec.unit}`));
-    view.append(h(
-      "div",
-      { class: "card entry", "data-enter": `detail:${workout.id}:${entry.exerciseId}` },
-      exerciseHeading(entry.exerciseName, entry.markCustom),
-      parts.length ? h("p", { class: "muted", "data-region": "records", "data-enter": `records:${workout.id}:${entry.exerciseId}` },`Records: ${parts.join(" · ")}`) : null,
-      h(
-        "ol",
-        { class: "sets" },
-        entry.sets.map((set, index) => h(
-          "li",
-          { "data-warmup": isWarmupSet(set) ? "true" : null },
-          h(
-            "span",
-            { class: "set-text" },
-            setMark(numbers[index]),
-            ` ${formatSetLine(set, weightText(set, ctx.unit))}`,
-          ),
-          !isWarmupSet(set) && prSets.has(set.id)
-            ? h("span", { class: "pr-label", "data-region": "pr", "data-enter": `pr:${set.id}` }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "personal record"))
-            : null,
-        )),
-      ),
-    ));
-  }
+  workout.entries.forEach((entry, index) => view.append(entryCard(ctx, workout, entry, index, rec, prSets)));
   if (rec?.ignored > 0) {
     view.append(h("p", { class: "muted", "data-region": "records-ignored" }, `${formatCount(rec.ignored, "set")} ${rec.ignored === 1 ? "was" : "were"} left out of records: missing exercise or unit`));
   }
