@@ -62,7 +62,7 @@ const waitForText = (root, text) => waitFor(() => root.textContent.includes(text
 
 // Mounts the app against a fresh seeded database and cleans up afterwards. `catalog` is a library service,
 // or a function that makes one from the adapter.
-async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize } = {}) {
+async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize, height } = {}) {
   const adapter = ctx.createAdapter();
   const store = createStore(adapter);
   await store.open();
@@ -101,7 +101,8 @@ async function withApp(ctx, body, { prepare, offline, catalog, width, fontSize }
   if (width) {
     frame = document.createElement("iframe");
     frame.style.width = `${width}px`;
-    frame.style.height = "4000px"; // tall enough that the frame has no scroll bar of its own to narrow it
+    // tall enough that the frame has no scroll bar of its own to narrow it; a short `height` makes the page scroll inside it
+    frame.style.height = `${height ?? 4000}px`;
     frame.style.border = "0";
     frame.srcdoc = '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../src/ui/app.css"><body>';
     document.body.append(frame);
@@ -2296,7 +2297,7 @@ rule("motion (stage 3): the picker menu, the exercise form, the weight buttons a
     click(action(root, "cancel-edit-custom"));
     // Closing the form draws the picker again, and the picker reads its list on its own (not tracked by app.idle).
     // Wait for the rows so that read is finished before the app is torn down and the next test deletes the database.
-    await waitFor(() => !$(root, ".custom-form") && pickRows(root).length > 0, "the form to close and the picker rows to come back");
+    await waitFor(() => !$(root, ".custom-form") && pickRows(root).length > 0 && $(root, '[data-region="exercise-list"][data-state="ready"]'), "the form to close and the picker rows to come back, fresh read finished");
   }, { prepare: pressWorkout(undefined), width: 375 });
 });
 
@@ -3732,7 +3733,8 @@ rule("picker menu: only the user's own rows have the three-dot button; opening i
     ctx.assert.equal(pickRows(root).length, 18); // the 16 seeds have none
     ctx.assert.equal(menuButton(root, FLY.id).getAttribute("aria-expanded"), "true");
     ctx.assert.equal($(root, '.pick-list [role="menu"]').querySelectorAll('[role="menuitem"]').length, 2);
-    await waitFor(() => document.activeElement === edit, "focus on Edit exercise");
+    // looked up again on every poll: the first Edit button seen can belong to a draw that the fresh read replaces
+    await waitFor(() => document.activeElement === $(root, `[data-action="edit-custom"][data-exercise-id="${FLY.id}"]`), "focus on Edit exercise");
     edit.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await waitFor(() => $(root, '[data-action="edit-custom"]') === null, "the menu closed");
     await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back on the three-dot button");
@@ -3776,13 +3778,123 @@ for (const width of [390, 320]) {
       ctx.assert.equal(showMore.height >= 44 ? "44+" : `${showMore.height}`, "44+");
       const add = action(root, "add-custom").getBoundingClientRect();
       const cancel = action(root, "cancel-picker").getBoundingClientRect();
-      ctx.assert.equal(add.top === cancel.top, true); // side by side
-      ctx.assert.equal(add.width > cancel.width, true); // about 60/40
+      const pair = action(root, "add-custom").parentElement.getBoundingClientRect();
+      ctx.assert.equal(add.top < cancel.top, true); // stacked: Add custom exercise over Cancel
+      ctx.assert.equal(add.left === cancel.left, true); // same left edge
+      ctx.assert.equal(Math.abs(add.width - pair.width) <= 1 && Math.abs(cancel.width - pair.width) <= 1, true); // both full width
+      ctx.assert.equal(add.height >= 44 && cancel.height >= 44, true);
       layoutMeasures.push(`Picker, ${width}px: Add custom exercise ${Math.round(add.width)} x ${Math.round(add.height)}, Cancel ${Math.round(cancel.width)} x ${Math.round(cancel.height)}, Show more ${Math.round(showMore.width)} x ${Math.round(showMore.height)}`);
       if (width === 390) ctx.assert.equal(add.height <= 46 ? "one line" : `${add.height}`, "one line");
     }, { prepare: addSynthetic, width });
   });
 }
+
+// ---- the picker keeps the page where it is when a tap inside it redraws the list ----
+
+const ROW = createExercise({ id: "c-row", name: "Pulley Row", primaryMuscles: ["lats"], isCustom: true });
+const addThree = async (store) => {
+  await useCurl(store);
+  await store.saveExercise(ROW);
+};
+const nap = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const pageY = (frame) => frame.contentWindow.scrollY;
+
+// Samples the page scroll right after `act()` (0 ms), at 100 and 500 ms, and on every frame in between.
+async function scrollAfter(frame, act) {
+  const samples = [];
+  const win = frame.contentWindow;
+  let watching = true;
+  const frames = () => {
+    samples.push(win.scrollY);
+    if (watching) win.requestAnimationFrame(frames);
+  };
+  win.requestAnimationFrame(frames);
+  // Also right after every change to the page, before it is painted: the list can be empty for less than a frame, and
+  // reading the scroll position there forces the layout in which the browser would clamp it.
+  const observer = new win.MutationObserver(() => samples.push(win.scrollY));
+  observer.observe(frame.contentDocument.body, { childList: true, subtree: true });
+  await act();
+  const timed = [pageY(frame)];
+  await nap(100);
+  timed.push(pageY(frame));
+  await nap(400);
+  timed.push(pageY(frame));
+  watching = false;
+  observer.disconnect();
+  return { timed, all: [...timed, ...samples] };
+}
+
+for (const what of ["opening the three-dot menu", "opening the remove question"]) {
+  rule(`picker menu, 390px, page scrolled: ${what} leaves the page scroll where it was (0, 100 and 500 ms)`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      await openPicker(root);
+      const button = await waitFor(() => menuButton(root, CURL.id), "the three-dot button");
+      button.scrollIntoView({ block: "center" });
+      await nap(50);
+      if (what === "opening the remove question") {
+        click(button);
+        await waitFor(() => $(root, `[data-action="remove-custom"][data-exercise-id="${CURL.id}"]`), "the open menu");
+        await nap(200);
+      }
+      const before = pageY(frame);
+      ctx.assert.equal(before > 0 ? "scrolled" : "not scrolled", "scrolled"); // the page really scrolls in this frame
+      const { timed, all } = await scrollAfter(frame, () => {
+        click(what === "opening the remove question" ? $(root, `[data-action="remove-custom"][data-exercise-id="${CURL.id}"]`) : button);
+      });
+      await waitFor(() => (what === "opening the remove question" ? region(root, "confirm-remove-custom") : $(root, `[data-action="edit-custom"][data-exercise-id="${CURL.id}"]`)), "the menu or question");
+      const worst = Math.max(...all.map((y) => Math.abs(y - before)));
+      ctx.assert.equal(worst <= 2 ? "within 2px" : `moved ${worst}px (before ${before}, then ${timed.join("/")})`, "within 2px");
+    }, { prepare: addThree, width: 390, height: 520 });
+  });
+}
+
+// The rows a redraw puts in a new list must never be ones the change just removed or renamed.
+for (const [label, setup, act, oldName] of [
+  ["Delete exercise", (root) => askRemove(root, FLY.id), (root) => click(action(root, "confirm-remove-custom")), FLY.name],
+  ["Hide exercise", (root) => askRemove(root, CURL.id), (root) => click(action(root, "confirm-remove-custom")), CURL.name],
+  ["Save changes after a rename", async (root) => {
+    click(await openMenu(root, FLY.id));
+    setValue(await waitFor(() => field(root, "custom-name"), "the edit form"), "Low Cable Fly");
+  }, (root) => click(action(root, "save-edit-custom")), FLY.name],
+]) {
+  rule(`picker menu: after ${label} the redrawn list never shows the old name "${oldName}"`, async (ctx) => {
+    await withApp(ctx, async ({ root }) => {
+      await setup(root);
+      const oldList = $(root, '[data-region="exercise-list"]');
+      const seen = [];
+      let watching = true;
+      const watch = () => {
+        const list = $(root, '[data-region="exercise-list"]');
+        const names = list === null ? [] : [...list.querySelectorAll(".pick-name")].map((el) => el.textContent);
+        if (list !== oldList && names.includes(oldName)) seen.push(names.length);
+        if (watching) requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+      act(root);
+      await nap(600);
+      watching = false;
+      const names = [...root.querySelectorAll(".pick-name")].map((el) => el.textContent);
+      ctx.assert.equal(names.includes(oldName), false); // still gone after it settles
+      ctx.assert.equal(seen.length === 0 ? "never shown" : `shown in ${seen.length} frames after the redraw`, "never shown");
+      if (label.startsWith("Save")) ctx.assert.equal(names.includes("Low Cable Fly"), true);
+    }, { prepare: useCurl });
+  });
+}
+
+rule("picker layout, 360px: Add custom exercise and Cancel are stacked, full width and at least 44px high", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    const add = action(root, "add-custom").getBoundingClientRect();
+    const cancel = action(root, "cancel-picker").getBoundingClientRect();
+    const row = action(root, "add-custom").parentElement.getBoundingClientRect();
+    ctx.assert.equal(add.bottom <= cancel.top, true); // one above the other
+    for (const [name, box] of [["Add custom exercise", add], ["Cancel", cancel]]) {
+      ctx.assert.equal(Math.abs(box.width - row.width) <= 1 ? "full width" : `${name} ${box.width} of ${row.width}`, "full width");
+      ctx.assert.equal(box.height >= 44 ? "44+" : `${name} ${box.height}`, "44+");
+    }
+    ctx.assert.equal(add.height <= 46 ? "one line" : `${add.height}`, "one line");
+  }, { prepare: addMine, width: 360 });
+});
 
 rule("picker menu: Edit opens a prefilled form with the notice and the catalog-only ids it already has; Save changes only those fields and focus returns to its button", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
@@ -3808,6 +3920,60 @@ rule("picker menu: Edit opens a prefilled form with the notice and the catalog-o
     click(await waitFor(() => action(root, "edit-custom"), "Edit exercise"));
     click(await waitFor(() => action(root, "cancel-edit-custom"), "Cancel"));
     await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back after Cancel");
+  }, { prepare: addMine });
+});
+
+// The picker's focus request (log.pickerFocus) is shared by every render. A render that is still reading when the next
+// tap comes (Edit then Cancel, or the menu then Escape, with almost no gap) must not take the request meant for the
+// newer one: focus has to end on the row's three-dot button and stay there. Run many times, since it is a race.
+const RACE_RUNS = 30;
+for (const gap of [0, 10]) {
+  rule(`picker menu: Edit then Cancel ${gap} ms apart, ${RACE_RUNS} times in a row, always ends with focus on the row's three-dot button and keeps it`, async (ctx) => {
+    await withApp(ctx, async ({ root }) => {
+      await openPicker(root);
+      for (let run = 1; run <= RACE_RUNS; run += 1) {
+        click(await waitFor(() => menuButton(root, FLY.id), `the button (run ${run})`));
+        click(await waitFor(() => action(root, "edit-custom"), `Edit exercise (run ${run})`));
+        const cancel = await waitFor(() => action(root, "cancel-edit-custom"), `Cancel (run ${run})`);
+        if (gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
+        click(cancel);
+        await waitFor(() => document.activeElement === menuButton(root, FLY.id), `focus back after Cancel (run ${run})`);
+        await new Promise((resolve) => setTimeout(resolve, 40)); // and it is not taken away by a late draw
+        ctx.assert.equal(document.activeElement === menuButton(root, FLY.id), true);
+      }
+    }, { prepare: addMine });
+  });
+  rule(`picker menu: opening the menu then Escape ${gap} ms apart, ${RACE_RUNS} times in a row, always ends with focus on the row's three-dot button and keeps it`, async (ctx) => {
+    await withApp(ctx, async ({ root }) => {
+      await openPicker(root);
+      for (let run = 1; run <= RACE_RUNS; run += 1) {
+        click(await waitFor(() => menuButton(root, FLY.id), `the button (run ${run})`));
+        await waitFor(() => action(root, "edit-custom"), `Edit exercise (run ${run})`);
+        if (gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
+        action(root, "edit-custom").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await waitFor(() => document.activeElement === menuButton(root, FLY.id), `focus back after Escape (run ${run})`);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        ctx.assert.equal(document.activeElement === menuButton(root, FLY.id), true);
+        ctx.assert.equal(action(root, "edit-custom"), null);
+      }
+    }, { prepare: addMine });
+  });
+}
+
+// Opening the menu asks for focus on Edit exercise (log.pickerFocus). If Edit is tapped before that render's list is
+// read, the Edit form asks for the name field instead, and the stale request must not pull focus to the search field.
+rule(`picker menu: opening the menu then Edit with no delay, ${RACE_RUNS} times in a row, always puts focus in the name field and keeps it there`, async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    for (let run = 1; run <= RACE_RUNS; run += 1) {
+      click(await waitFor(() => menuButton(root, FLY.id), `the button (run ${run})`));
+      click(await waitFor(() => action(root, "edit-custom"), `Edit exercise (run ${run})`));
+      await waitFor(() => document.activeElement === field(root, "custom-name"), `focus in the name field (run ${run})`);
+      await new Promise((resolve) => setTimeout(resolve, 40)); // and a late list read does not take it away
+      ctx.assert.equal(document.activeElement === field(root, "custom-name"), true);
+      click(await waitFor(() => action(root, "cancel-edit-custom"), `Cancel (run ${run})`));
+      await waitFor(() => document.activeElement === menuButton(root, FLY.id), `focus back after Cancel (run ${run})`);
+    }
   }, { prepare: addMine });
 });
 
@@ -3947,6 +4113,7 @@ rule("picker: adding a custom exercise with a hidden exercise's name offers Show
     await waitFor(() => !region(root, "custom-error").hidden, "the refusal");
     ctx.assert.equal(region(root, "custom-error").textContent, "name: an exercise with this name already exists");
     ctx.assert.equal(action(root, "restore-hidden-name"), null);
+    await waitFor(() => $(root, '[data-region="exercise-list"][data-state="ready"]'), "the picker's read to finish before teardown");
   }, { prepare: useCurl });
 });
 

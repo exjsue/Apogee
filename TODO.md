@@ -211,6 +211,13 @@
 - [ ] History detail: at 320px the Delete button wraps to a second row of the top bar (still right-aligned); accepted, review per screen (added 2026-10-31).
 - [ ] History detail toggle: test Enter and Space on the button and its visible focus outline; the tap test uses a hit test plus `click()` (the test page cannot send a real mouse event), so a real-pointer check on the phone is still open (added 2026-10-31).
 - [ ] History detail: the set rows inside an open card are 31 to 32px high; they are not buttons, but review if they ever become interactive (added 2026-10-31).
+- [ ] Picker focus: replace the shared `log.pickerFocus` with per-render focus requests when the bottom sheet is built (added 2026-11-01).
+- [ ] Picker: background redraws (the rest timer running while the picker is open) still draw an empty list briefly, because only taps inside the picker use the row cache (added 2026-11-01).
+- [ ] Picker: the list's own scrollTop resets on a redraw (added 2026-11-01).
+- [ ] Picker: whether filter changes, search typing and "Show 50 more" collapse the page height was not measured (added 2026-11-01).
+- [ ] Picker: timing of the redraw and of the focus race on a phone with the full 775-exercise library is unmeasured (added 2026-11-01).
+- [ ] Tests: the two 10 ms loop rules (Edit then Cancel, menu then Escape) are weak guards; they passed on code without the focus fix. Only the 0 ms loops catch it (added 2026-11-01).
+- [ ] Tests: consider a bounded retry on `deleteDatabase` in the browser runner if other rules end while a picker read is still running (blocked-delete failures at positions 369 and 440 had that cause; two rules now wait for the list's `data-state="ready"`) (added 2026-11-01).
 - [ ] The picker-menu "focus back after Cancel" flake: now 2 failures in about 10 full runs on 2026-10-31, both in no-preference mode. Investigate before the bottom sheet: run that single rule 30 times and report the rate, the full error text and what it waits on; read-only first (added 2026-10-31).
 - [ ] History detail toggle: tests for Enter and Space on the button and its focus outline (added 2026-10-31).
 - [ ] The picker-menu "focus back after Cancel" flake happened again on 2026-10-31 (first no-preference run of the card-header change; the next three runs passed); see the earlier flake entry (added 2026-10-31).

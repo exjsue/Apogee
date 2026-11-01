@@ -356,10 +356,9 @@ button.pick {
 .pick-list--rows .pick-row button.pick { padding-right: 12px; }
 .pick-list--rows .pick-row button.pick::after { content: none; }
 .pick-list--rows .pick-row button.menu-button { background: var(--surface); border-radius: var(--radius-card); }
-/* Add custom exercise and Cancel share the row about 60/40 (the longer label gets the room). */
-.picker--sheetlike > .actions > button { flex: 1 1 0; min-width: 0; }
-.picker--sheetlike > .actions > button[data-action="add-custom"] { flex-grow: 3; }
-.picker--sheetlike > .actions > button[data-action="cancel-picker"] { flex-grow: 2; }
+/* Add custom exercise over Cancel, each full width and at least 44px high, so neither label wraps on a narrow phone. */
+.picker--sheetlike > .actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+.picker--sheetlike > .actions > button { width: 100%; min-height: 44px; }
 /* "Showing N of M" on its own line over a full-width Show more button of the same 44px height as the pair above. */
 .picker--sheetlike .pick-more { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; }
 .picker--sheetlike .pick-more .muted { font-size: 0.8125rem; color: var(--text-secondary); }

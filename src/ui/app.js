@@ -194,6 +194,10 @@ export async function mountApp(root, services) {
       state,
       unit: state.unit,
       rerender: render,
+      isCurrent: () => mine === latest, // false once a newer render has started; a picker's late read checks it
+      seq: mine, // this render's number, and the newest one so far; a picker uses them to tell whose focus request it is
+      latestSeq: () => latest,
+      ownFocus: focus !== null, // this render has its own focus target (state.focus), so a picker must not move focus
       rerenderInBackground: renderInBackground,
       // The import itself already removed the planned sets and the running timer
       // (in its own transaction); this resets what the screens remember.

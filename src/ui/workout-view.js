@@ -27,6 +27,10 @@ export const freshLogState = () => ({
   editingCustom: null, // the custom exercise record being edited
   confirmRemove: null, // { exercise, usage }: the remove question, worded from the usage read when it opened
   pickerFocus: null, // a selector inside the picker's list, focused once refreshList has drawn the rows
+  pickerFocusAfter: 0, // the newest render number when pickerFocus was asked for: only a newer render's picker may use it
+  pickerCache: null, // { key, results, recent }: the rows last drawn, memory only, so a redraw is never an empty list
+  pickerReuse: false, // set by a tap inside the picker that changes no exercise; only then may the cache be drawn
+  pickerEpoch: 0, // raised whenever an exercise changes, so a read that started before it cannot fill the cache
   error: null,
   notice: null,
   restoreOffer: null, // { id, name }: the notice after a hide offers "Show it again"
@@ -46,7 +50,14 @@ export const freshLogState = () => ({
 });
 
 // What closing the picker resets: its menu, edit form, remove question and pending focus.
-const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null });
+const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null, pickerCache: null, pickerReuse: false });
+
+// Asks for focus inside the picker's list after the next drawing. The request is stamped with the newest render number,
+// so a picker from that render or an older one (a read still in flight) can never take it.
+const askPickerFocus = (ctx, selector) => Object.assign(ctx.state.log, { pickerFocus: selector, pickerFocusAfter: ctx.latestSeq() });
+
+// An exercise was added, edited, removed, hidden or restored: the cached rows are out of date.
+const dropPickerCache = (log) => Object.assign(log, { pickerCache: null, pickerReuse: false, pickerEpoch: log.pickerEpoch + 1 });
 
 const countSets = (workout) => workout.entries.reduce((total, entry) => total + entry.sets.length, 0);
 
@@ -473,6 +484,7 @@ function customForm(ctx, existing = null) {
     "data-action": "restore-hidden-name",
     onClick: () => perform(ctx, async () => {
       await logger.restoreCustomExercise(hidden.id);
+      dropPickerCache(log);
       close();
       if (editing) {
         log.notice = `"${hidden.name}" is back in the exercise list.`;
@@ -511,10 +523,13 @@ function customForm(ctx, existing = null) {
         try {
           if (editing) {
             const saved = await logger.updateCustomExercise(existing.id, fields());
+            dropPickerCache(log);
             close();
-            Object.assign(log, { notice: `Saved "${saved.name}".`, error: null, pickerFocus: menuButtonFor(saved.id) });
+            Object.assign(log, { notice: `Saved "${saved.name}".`, error: null });
+            askPickerFocus(ctx, menuButtonFor(saved.id));
           } else {
             const saved = await logger.addCustomExercise(fields());
+            dropPickerCache(log);
             await logger.addSet(saved.id);
             Object.assign(log, { pickerOpen: false, addingCustom: false, notice: `Added "${saved.name}".`, error: null });
           }
@@ -545,8 +560,9 @@ function customForm(ctx, existing = null) {
       button("Cancel", {
         "data-action": editing ? "cancel-edit-custom" : "cancel-custom",
         onClick: () => {
-          if (editing) log.pickerFocus = menuButtonFor(existing.id);
+          log.pickerReuse = true; // nothing was saved, so the rows on screen are still right
           close();
+          if (editing) askPickerFocus(ctx, menuButtonFor(existing.id));
           return ctx.rerender();
         },
       }),
@@ -586,6 +602,7 @@ function removeConfirm(ctx, exercise, usage) {
       onClick: () => perform(ctx, async () => {
         log.confirmRemove = null;
         const outcome = await logger.removeCustomExercise(exercise.id);
+        dropPickerCache(log);
         ctx.state.focus = '[data-field="search"]';
         if (outcome === "hidden") {
           log.restoreOffer = { id: exercise.id, name: exercise.name };
@@ -602,7 +619,8 @@ function removeConfirm(ctx, exercise, usage) {
     button("Keep exercise", {
       "data-action": "cancel-remove-custom",
       onClick: () => {
-        Object.assign(log, { confirmRemove: null, pickerFocus: menuButtonFor(exercise.id) });
+        Object.assign(log, { confirmRemove: null, pickerReuse: true });
+        askPickerFocus(ctx, menuButtonFor(exercise.id));
         return ctx.rerender();
       },
     }),
@@ -613,7 +631,8 @@ function removeConfirm(ctx, exercise, usage) {
 function customMenu(ctx, exercise) {
   const log = ctx.state.log;
   const closeMenu = () => {
-    Object.assign(log, { pickerMenuId: null, pickerFocus: menuButtonFor(exercise.id) });
+    Object.assign(log, { pickerMenuId: null, pickerReuse: true });
+    askPickerFocus(ctx, menuButtonFor(exercise.id));
     return ctx.rerender();
   };
   return h(
@@ -635,7 +654,7 @@ function customMenu(ctx, exercise) {
       "data-exercise-id": exercise.id,
       "aria-label": `Edit ${exercise.name}`,
       onClick: () => {
-        Object.assign(log, { pickerMenuId: null, confirmRemove: null, addingCustom: false, editingCustom: exercise });
+        Object.assign(log, { pickerMenuId: null, confirmRemove: null, addingCustom: false, editingCustom: exercise, pickerReuse: true });
         ctx.state.focus = '[data-field="custom-name"]';
         return ctx.rerender();
       },
@@ -648,7 +667,8 @@ function customMenu(ctx, exercise) {
       "aria-label": `Remove ${exercise.name}`,
       onClick: () => perform(ctx, async () => {
         const usage = await ctx.services.logger.getExerciseUsage(exercise.id);
-        Object.assign(log, { pickerMenuId: null, confirmRemove: { exercise, usage }, pickerFocus: '[data-action="cancel-remove-custom"]' });
+        Object.assign(log, { pickerMenuId: null, confirmRemove: { exercise, usage }, pickerReuse: true });
+        askPickerFocus(ctx, '[data-action="cancel-remove-custom"]');
       }),
     }),
   );
@@ -683,7 +703,8 @@ function picker(ctx) {
   };
   const muscle = filterSelect("Muscle", "filter-muscle", ALL_MUSCLES, log.muscle, narrow);
   const equipment = filterSelect("Equipment", "filter-equipment", ALL_EQUIPMENT, log.equipment, narrow);
-  const list = h("ul", { class: "pick-list pick-list--rows", "data-region": "exercise-list", "data-no-pull": "" });
+  // data-state is "loading" until refreshList has drawn the fresh rows ("ready"); a cached draw is still "loading".
+  const list = h("ul", { class: "pick-list pick-list--rows", "data-region": "exercise-list", "data-state": "loading", "data-no-pull": "" });
 
   // A custom row also gets the three-dot menu (the Log tab's pattern, see blockHeader in set-rows.js) and, when
   // asked, the remove question under it. Built-in and catalog rows have no menu.
@@ -702,8 +723,8 @@ function picker(ctx) {
         "aria-haspopup": "menu",
         "aria-expanded": String(open),
         onClick: () => {
-          Object.assign(log, { pickerMenuId: open ? null : exercise.id, confirmRemove: null });
-          if (!open) log.pickerFocus = `[data-action="edit-custom"][data-exercise-id="${exercise.id}"]`;
+          Object.assign(log, { pickerMenuId: open ? null : exercise.id, confirmRemove: null, pickerReuse: true });
+          if (!open) askPickerFocus(ctx, `[data-action="edit-custom"][data-exercise-id="${exercise.id}"]`);
           return ctx.rerender();
         },
       }),
@@ -759,15 +780,13 @@ function picker(ctx) {
   let recentRead = null;
   const readRecent = () => (recentRead ??= logger.findRecentExercises().catch(() => []));
 
-  let latest = 0;
-  async function refreshList() {
-    const mine = ++latest;
-    const filters = { muscle: muscle.value(), equipment: equipment.value() };
-    const plain = search.value.trim() === "" && !filters.muscle && !filters.equipment; // Recent only for the unfiltered list
-    const [results, recent] = await Promise.all([logger.findExercises(search.value, filters), plain ? readRecent() : []]);
-    if (mine !== latest) return; // a newer search is already on its way
-    Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
-    // Recent is its own group above the list, not part of the 50-row page; its exercises are not repeated below.
+  // The library note and the cache key both depend on this, so it is read before the first drawing.
+  const libraryStatus = ctx.services.catalog ? ctx.services.catalog.getStatus() : "ready";
+  // The cached rows are drawn only for the same query, filters, page size and library state.
+  const cacheKey = () => JSON.stringify([log.query, log.muscle, log.equipment, log.limit, libraryStatus]);
+
+  // Recent is its own group above the list, not part of the 50-row page; its exercises are not repeated below.
+  const drawRows = (results, recent) => {
     const recentIds = new Set(recent.map((exercise) => exercise.id));
     const rest = recent.length === 0 ? results : results.filter((exercise) => !recentIds.has(exercise.id));
     const shown = rest.slice(0, log.limit);
@@ -778,9 +797,32 @@ function picker(ctx) {
         ...shown.map(row),
         ...(rest.length > shown.length ? [moreRow(recent.length + shown.length, results.length)] : []),
       ]));
+  };
+
+  let latest = 0;
+  async function refreshList() {
+    const mine = ++latest;
+    list.dataset.state = "loading";
+    const epoch = log.pickerEpoch;
+    const filters = { muscle: muscle.value(), equipment: equipment.value() };
+    const plain = search.value.trim() === "" && !filters.muscle && !filters.equipment; // Recent only for the unfiltered list
+    const [results, recent] = await Promise.all([logger.findExercises(search.value, filters), plain ? readRecent() : []]);
+    if (mine !== latest) return; // a newer search is already on its way
+    // A newer render has started (its picker does not exist yet): this one is about to be replaced, and must
+    // not draw, cache, or take the focus request (log.pickerFocus) that the newer render is waiting to use.
+    if (!ctx.isCurrent()) return;
+    Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
+    drawRows(results, recent);
+    list.dataset.state = "ready";
+    // Kept for the next redraw only if no exercise changed since this read began.
+    log.pickerCache = epoch === log.pickerEpoch ? { key: cacheKey(), results, recent } : null;
+    log.pickerReuse = false;
     // Focus asked for inside the list (ctx.rerender cannot: the rows did not exist yet). A row that is no longer
     // drawn (an edited name that no longer matches the search, say) sends it to the search field.
-    if (log.pickerFocus !== null) {
+    // Only a render newer than the request may use it (askPickerFocus). A render with a focus target of its own
+    // (state.focus, the Edit form's name field) drops the request instead of moving focus away from that target.
+    if (log.pickerFocus !== null && ctx.seq > log.pickerFocusAfter && ctx.ownFocus) log.pickerFocus = null;
+    if (log.pickerFocus !== null && ctx.seq > log.pickerFocusAfter) {
       const target = list.querySelector(log.pickerFocus) ?? search;
       log.pickerFocus = null;
       if (list.isConnected) target.focus();
@@ -788,10 +830,14 @@ function picker(ctx) {
     }
   }
   search.addEventListener("input", narrow);
+  // A redraw caused by a tap inside the picker draws the rows it already had at once, so the page does not shrink
+  // (and scroll back up) while the fresh read is under way. Any other redraw reads first, as before.
+  const cached = log.pickerReuse && log.pickerCache?.key === cacheKey() ? log.pickerCache : null;
+  if (!log.pickerReuse) log.pickerCache = null;
+  if (cached !== null) drawRows(cached.results, cached.recent);
   refreshList();
 
   // Only if the app has a library service (src/ui/main.js passes one): a note while the library loads or if it could not load.
-  const libraryStatus = ctx.services.catalog ? ctx.services.catalog.getStatus() : "ready";
   const libraryNote = libraryStatus === "failed"
     ? h("p", { class: "muted", "data-region": "catalog-status" }, "The full exercise library could not be loaded. Apogee will try again the next time it opens.")
     : libraryStatus === "syncing"
@@ -818,7 +864,7 @@ function picker(ctx) {
       button("Add custom exercise", {
         "data-action": "add-custom",
         onClick: () => {
-          Object.assign(log, { addingCustom: true, pickerMenuId: null, confirmRemove: null });
+          Object.assign(log, { addingCustom: true, pickerMenuId: null, confirmRemove: null, pickerReuse: true });
           return ctx.rerender();
         },
       }),
