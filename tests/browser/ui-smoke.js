@@ -4124,3 +4124,82 @@ rule("ui: a timed set shows its time where reps go, no 0 kg at weight 0, and no 
     ctx.assert.ok(!root.textContent.includes("undefined"));
   }, { prepare: timedWorkout(14 * HOUR, false) });
 });
+
+// ---- the History detail: collapsible cards, the "Finished" line and the top bar ----
+
+const entryParts = (card) => ({
+  toggle: card.querySelector(".entry-toggle"),
+  sets: card.querySelector(".entry-sets"),
+  best: card.querySelector('[data-region="best-set"]'),
+});
+
+rule("history detail: each exercise card starts collapsed, the toggle opens and closes it, and an open card stays open when the delete question redraws the screen", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openWorkout(root, 0);
+    const cards = [...root.querySelectorAll(".entry")];
+    ctx.assert.equal(cards.length, 1);
+    const card = () => root.querySelector(".entry");
+    let { toggle, sets, best } = entryParts(card());
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    ctx.assert.equal(toggle.getAttribute("aria-controls"), sets.id);
+    ctx.assert.ok(sets.hidden && root.querySelector(".card.entry li") !== null, "the sets are in the page but hidden");
+    ctx.assert.ok(!best.hidden && best.textContent.startsWith("Best set: "), "the best set line shows while collapsed");
+
+    click(toggle);
+    ({ toggle, sets, best } = entryParts(card()));
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    ctx.assert.ok(!sets.hidden && best.hidden);
+
+    click(toggle);
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    ctx.assert.ok(sets.hidden && !best.hidden);
+
+    // open it again, then redraw the screen by asking the delete question: it is still open afterwards
+    click(toggle);
+    click(await waitFor(() => action(root, "delete-workout"), "the Delete workout button"));
+    await waitFor(() => region(root, "confirm-delete"), "the delete question");
+    ({ toggle, sets, best } = entryParts(card()));
+    ctx.assert.equal(toggle.getAttribute("aria-expanded"), "true", "still open after the redraw");
+    ctx.assert.ok(!sets.hidden && best.hidden);
+    click(action(root, "cancel-delete-workout"));
+    await waitFor(() => !region(root, "confirm-delete") && action(root, "delete-workout"), "the question to close");
+    ctx.assert.equal(entryParts(card()).toggle.getAttribute("aria-expanded"), "true");
+    ctx.assert.equal(root.querySelectorAll('[data-region="history-list"]').length, 0, "still in the workout");
+  }, { prepare: finishedWorkouts([[["5", "100"], ["3", "110"]]]) });
+});
+
+rule("history detail: the Finished line shows for an end at or after the start, and not for an end before it", async (ctx) => {
+  await withApp(ctx, async ({ root, adapter }) => {
+    await openWorkout(root, 0);
+    const line = () => [...root.querySelectorAll("section.view > p.muted")].find((p) => p.textContent.startsWith("Finished"));
+    ctx.assert.ok(line() !== undefined, "a normal workout shows it");
+    // an end before the start, written past the model's check (as the odd-unit rule does for a unit)
+    await adapter.transaction(["workouts"], "readwrite", async (tx) => {
+      const [workout] = await tx.getAll("workouts");
+      await tx.put("workouts", { ...workout, endedAt: new Date(Date.parse(workout.startedAt) - 60 * 1000).toISOString() });
+    });
+    click(action(root, "back-to-history"));
+    await waitFor(() => region(root, "history-list"), "the list");
+    click(action(root, "open-workout"));
+    await waitFor(() => action(root, "back-to-history"), "the detail");
+    ctx.assert.equal(line(), undefined, "no line for an end before the start");
+    ctx.assert.ok(root.querySelector("section.view h2") !== null && !root.textContent.includes("Invalid") && !root.textContent.includes("undefined"));
+  }, { prepare: finishedWorkouts([[["5", "100"]]]) });
+});
+
+for (const width of [390, 320]) {
+  rule(`styles: at ${width} px the History detail's top bar buttons are 44 px high, Delete workout is at the right end, and nothing scrolls sideways`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      await openWorkout(root, 0);
+      const bar = root.querySelector(".detail-bar");
+      const barBox = bar.getBoundingClientRect();
+      const buttons = [...bar.querySelectorAll("button")];
+      ctx.assert.deepEqual(buttons.map((b) => b.dataset.action), ["back-to-history", "edit-workout", "save-template", "delete-workout"]);
+      for (const b of buttons) ctx.assert.ok(b.getBoundingClientRect().height >= 44, `${b.dataset.action} is ${b.getBoundingClientRect().height} high`);
+      const del = buttons.at(-1).getBoundingClientRect();
+      ctx.assert.ok(Math.abs(del.right - barBox.right) <= 1, `Delete workout ends at ${del.right}, the bar at ${barBox.right}`);
+      const doc = frame.contentDocument.documentElement;
+      ctx.assert.ok(doc.scrollWidth <= doc.clientWidth, "no sideways scroll");
+    }, { prepare: finishedWorkouts([[["5", "100"]]]), width });
+  });
+}

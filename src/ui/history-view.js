@@ -191,22 +191,26 @@ function templateSection(ctx, workout) {
   );
 }
 
+// The Delete workout button, in the detail's top bar, right-aligned. It opens the question drawn by deleteSection at the
+// bottom of the detail, and is not drawn while that question is open (as before, the question took its place).
+function deleteButton(ctx) {
+  const history = ctx.state.history;
+  if (history.confirmDelete) return null;
+  return button("Delete", {
+    class: "danger-outline delete-workout",
+    "data-action": "delete-workout",
+    "aria-label": "Delete workout", // the visible word is short so the top bar fits one row on a phone
+    onClick: () => {
+      history.confirmDelete = true;
+      return ctx.rerender();
+    },
+  });
+}
+
+// The delete question, at the bottom of the detail; nothing while it has not been asked.
 function deleteSection(ctx, workout) {
   const history = ctx.state.history;
-  if (!history.confirmDelete) {
-    return h(
-      "div",
-      { class: "actions" },
-      button("Delete workout", {
-        class: "danger-outline",
-        "data-action": "delete-workout",
-        onClick: () => {
-          history.confirmDelete = true;
-          return ctx.rerender();
-        },
-      }),
-    );
-  }
+  if (!history.confirmDelete) return null;
   return h(
     "div",
     { class: "confirm", role: "alertdialog", "aria-label": "Confirm delete", "data-region": "confirm-delete", "data-enter": "confirm-delete" },
@@ -359,7 +363,7 @@ async function detail(ctx, id) {
     h(
       "div",
       { class: "actions detail-bar" },
-      button("Back to history", {
+      button("Back", {
         class: "small back-button",
         "data-action": "back-to-history",
         onClick: () => {
@@ -372,6 +376,7 @@ async function detail(ctx, id) {
       }),
       edit,
       history.savingTemplate ? null : template,
+      deleteButton(ctx),
     ),
     history.savingTemplate ? template : null,
     h("h2", {}, formatDateTime(workout.startedAt)),
@@ -381,7 +386,8 @@ async function detail(ctx, id) {
   if (rec?.ignored > 0) {
     view.append(h("p", { class: "muted", "data-region": "records-ignored" }, `${formatCount(rec.ignored, "set")} ${rec.ignored === 1 ? "was" : "were"} left out of records: missing exercise or unit`));
   }
-  view.append(deleteSection(ctx, workout));
+  const question = deleteSection(ctx, workout);
+  if (question !== null) view.append(question); // append(null) would write the word "null"
   return view;
 }
 

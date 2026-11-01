@@ -207,3 +207,5 @@
 - [ ] Browser tests for the "Finished" line rules: shown for a valid `endedAt` at or after `startedAt`, omitted otherwise (added 2026-10-31).
 - [ ] History detail: check the Back button chevron and how the top bar wraps on narrow screens (added 2026-10-31).
 - [ ] The Best set line in the non-preferred unit is long ("220.5 lb (entered 100 kg)"); consider a shorter form (added 2026-10-31).
+- [ ] Picker-area focus flakes in the browser suite: the Strong muscle-picker Cancel test failed about 4 times in 40 branch runs, and the custom-exercise menu test "Edit opens a prefilled form… Timed out waiting for focus back after Cancel" failed once on 2026-10-31 (it passed on every run after); look for a timing cause (added 2026-10-31).
+- [ ] History detail: at 320px the Delete button wraps to a second row of the top bar (still right-aligned); accepted, review per screen (added 2026-10-31).

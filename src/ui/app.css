@@ -320,7 +320,10 @@ button.pick {
 .history-list--rows .pick-name { font-weight: 500; }
 .history-list--rows .pick-meta { font-size: 0.8125rem; color: var(--text-secondary); }
 /* The History detail. The top bar's buttons are pills at the 44px touch size; Back has a small CSS chevron (no text). */
-.detail-bar button { min-height: 44px; padding: 8px 16px; border-radius: var(--radius-pill); }
+.detail-bar { gap: 6px; }
+.detail-bar button { min-height: 44px; padding: 8px 12px; font-size: 0.9375rem; border-radius: var(--radius-pill); }
+/* Delete is set apart at the right end of the bar (on the last row when the bar wraps). */
+.detail-bar .delete-workout { margin-left: auto; }
 .detail-bar .back-button::before {
   content: "";
   display: inline-block;
