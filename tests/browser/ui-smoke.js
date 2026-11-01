@@ -3848,6 +3848,104 @@ for (const what of ["opening the three-dot menu", "opening the remove question"]
   });
 }
 
+// ---- the picker's own list keeps its scrollTop when a tap inside it redraws the list ----
+
+// Custom exercises sort first, so 45 of them put one of them in the middle of the first page.
+const mine = (n) => createExercise({ id: `c-mid-${n}`, name: `Mine ${String(n).padStart(2, "0")}`, primaryMuscles: ["chest"], isCustom: true });
+const MINE = mine(20);
+const addMidList = async (store) => {
+  for (let n = 0; n < 45; n += 1) await store.saveExercise(mine(n));
+};
+const liveList = (frame) => frame.contentDocument.querySelector('[data-region="exercise-list"]');
+const listY = (frame) => liveList(frame).scrollTop;
+
+// Scrolls the list so the custom row sits at the top of its box, with its menu, form or remove question fully visible under
+// it: focus then has nothing to scroll into view (the remove question is taller than the room under a centred row).
+async function scrollListToCustomRow(frame, root) {
+  const rowButton = await waitFor(() => menuButton(root, MINE.id), "the custom row's three-dot button");
+  const list = liveList(frame);
+  const box = list.getBoundingClientRect();
+  const row = rowButton.getBoundingClientRect();
+  list.scrollTop += row.top - box.top - 4;
+  await nap(50);
+  return listY(frame);
+}
+
+// The list's scrollTop right after `act()` (0 ms), at 100 and 500 ms, on every frame and after every change to the page.
+async function listAfter(frame, act) {
+  const samples = [];
+  const win = frame.contentWindow;
+  let watching = true;
+  const frames = () => {
+    samples.push(listY(frame));
+    if (watching) win.requestAnimationFrame(frames);
+  };
+  win.requestAnimationFrame(frames);
+  const observer = new win.MutationObserver(() => samples.push(listY(frame)));
+  observer.observe(frame.contentDocument.body, { childList: true, subtree: true });
+  await act();
+  const timed = [listY(frame)];
+  await nap(100);
+  timed.push(listY(frame));
+  await nap(400);
+  timed.push(listY(frame));
+  watching = false;
+  observer.disconnect();
+  return [...timed, ...samples];
+}
+
+const heldWithin2 = (ctx, before, samples, what) => {
+  const worst = Math.max(...samples.map((y) => Math.abs(y - before)));
+  ctx.assert.equal(worst <= 2 ? "within 2px" : `${what}: moved ${worst}px (before ${before}, samples ${[...new Set(samples)].join("/")})`, "within 2px");
+};
+
+for (const [label, steps] of [
+  ["opening the three-dot menu", [{ open: false, act: (root) => click(menuButton(root, MINE.id)), until: (root) => $(root, `[data-action="edit-custom"]`) }]],
+  ["closing the menu with the three-dot button", [{ open: true, act: (root) => click(menuButton(root, MINE.id)), until: (root) => ($(root, `[data-action="edit-custom"]`) === null ? true : null) }]],
+  ["closing the menu with Escape", [{ open: true, act: (root) => action(root, "edit-custom").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })), until: (root) => ($(root, `[data-action="edit-custom"]`) === null ? true : null) }]],
+  ["Edit exercise, then Cancel", [
+    { open: true, act: (root) => click(action(root, "edit-custom")), until: (root) => action(root, "cancel-edit-custom") },
+    { open: false, act: (root) => click(action(root, "cancel-edit-custom")), until: (root) => (action(root, "cancel-edit-custom") === null ? true : null) },
+  ]],
+  ["Remove exercise, then Keep exercise", [
+    { open: true, act: (root) => click(action(root, "remove-custom")), until: (root) => region(root, "confirm-remove-custom") },
+    { open: false, act: (root) => click(action(root, "cancel-remove-custom")), until: (root) => (region(root, "confirm-remove-custom") === null ? true : null) },
+  ]],
+]) {
+  rule(`picker list, 390px, list scrolled: ${label} leaves the list's scrollTop where it was (0, 100 and 500 ms, every frame)`, async (ctx) => {
+    await withApp(ctx, async ({ root, frame }) => {
+      await openPicker(root);
+      ctx.assert.equal(pickRows(root).length >= 40 ? "40+ rows" : `${pickRows(root).length} rows`, "40+ rows");
+      let before = await scrollListToCustomRow(frame, root);
+      ctx.assert.equal(before >= 300 ? "scrolled" : `scrollTop ${before}`, "scrolled");
+      if (steps[0].open) {
+        click(menuButton(root, MINE.id));
+        await waitFor(() => action(root, "edit-custom"), "the open menu");
+        await nap(300);
+        before = listY(frame);
+      }
+      for (const step of steps) {
+        const samples = await listAfter(frame, () => step.act(root));
+        await waitFor(() => step.until(root), `${label}: the result`);
+        await nap(300);
+        heldWithin2(ctx, before, [...samples, listY(frame)], label);
+      }
+    }, { prepare: addMidList, width: 390 });
+  });
+}
+
+rule("picker list, 390px, list scrolled: typing in the search box puts the list back at the top", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await openPicker(root);
+    const before = await scrollListToCustomRow(frame, root);
+    ctx.assert.equal(before >= 300 ? "scrolled" : `scrollTop ${before}`, "scrolled");
+    const samples = await listAfter(frame, () => setValue(field(root, "search"), "Mine")); // still 45 rows, so no clamping to 0
+    await waitFor(() => pickRows(root).length === 45, "the 45 matching rows");
+    await nap(300);
+    ctx.assert.equal(Math.max(...samples, listY(frame)), 0);
+  }, { prepare: addMidList, width: 390 });
+});
+
 // The rows a redraw puts in a new list must never be ones the change just removed or renamed.
 for (const [label, setup, act, oldName] of [
   ["Delete exercise", (root) => askRemove(root, FLY.id), (root) => click(action(root, "confirm-remove-custom")), FLY.name],

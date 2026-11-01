@@ -30,6 +30,8 @@ export const freshLogState = () => ({
   pickerFocusAfter: 0, // the newest render number when pickerFocus was asked for: only a newer render's picker may use it
   pickerCache: null, // { key, results, recent }: the rows last drawn, memory only, so a redraw is never an empty list
   pickerReuse: false, // set by a tap inside the picker that changes no exercise; only then may the cache be drawn
+  pickerScroll: null, // the list's scrollTop remembered by the last cache-eligible tap, drawn once by the next picker (memory only)
+  pickerRemember: null, // set by the live picker: stores its list's scrollTop in pickerScroll
   pickerEpoch: 0, // raised whenever an exercise changes, so a read that started before it cannot fill the cache
   error: null,
   notice: null,
@@ -50,7 +52,14 @@ export const freshLogState = () => ({
 });
 
 // What closing the picker resets: its menu, edit form, remove question and pending focus.
-const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null, pickerCache: null, pickerReuse: false });
+const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null, pickerCache: null, pickerReuse: false, pickerScroll: null, pickerRemember: null });
+
+// A tap inside the picker that changes no exercise: the next picker may draw the cached rows, at the scroll position
+// the list has now. Returns true, for the pickerReuse field.
+const reusePicker = (log) => {
+  log.pickerRemember?.();
+  return true;
+};
 
 // Asks for focus inside the picker's list after the next drawing. The request is stamped with the newest render number,
 // so a picker from that render or an older one (a read still in flight) can never take it.
@@ -560,7 +569,7 @@ function customForm(ctx, existing = null) {
       button("Cancel", {
         "data-action": editing ? "cancel-edit-custom" : "cancel-custom",
         onClick: () => {
-          log.pickerReuse = true; // nothing was saved, so the rows on screen are still right
+          log.pickerReuse = reusePicker(log); // nothing was saved, so the rows on screen are still right
           close();
           if (editing) askPickerFocus(ctx, menuButtonFor(existing.id));
           return ctx.rerender();
@@ -619,7 +628,7 @@ function removeConfirm(ctx, exercise, usage) {
     button("Keep exercise", {
       "data-action": "cancel-remove-custom",
       onClick: () => {
-        Object.assign(log, { confirmRemove: null, pickerReuse: true });
+        Object.assign(log, { confirmRemove: null, pickerReuse: reusePicker(log) });
         askPickerFocus(ctx, menuButtonFor(exercise.id));
         return ctx.rerender();
       },
@@ -631,7 +640,7 @@ function removeConfirm(ctx, exercise, usage) {
 function customMenu(ctx, exercise) {
   const log = ctx.state.log;
   const closeMenu = () => {
-    Object.assign(log, { pickerMenuId: null, pickerReuse: true });
+    Object.assign(log, { pickerMenuId: null, pickerReuse: reusePicker(log) });
     askPickerFocus(ctx, menuButtonFor(exercise.id));
     return ctx.rerender();
   };
@@ -654,7 +663,7 @@ function customMenu(ctx, exercise) {
       "data-exercise-id": exercise.id,
       "aria-label": `Edit ${exercise.name}`,
       onClick: () => {
-        Object.assign(log, { pickerMenuId: null, confirmRemove: null, addingCustom: false, editingCustom: exercise, pickerReuse: true });
+        Object.assign(log, { pickerMenuId: null, confirmRemove: null, addingCustom: false, editingCustom: exercise, pickerReuse: reusePicker(log) });
         ctx.state.focus = '[data-field="custom-name"]';
         return ctx.rerender();
       },
@@ -667,7 +676,7 @@ function customMenu(ctx, exercise) {
       "aria-label": `Remove ${exercise.name}`,
       onClick: () => perform(ctx, async () => {
         const usage = await ctx.services.logger.getExerciseUsage(exercise.id);
-        Object.assign(log, { pickerMenuId: null, confirmRemove: { exercise, usage }, pickerReuse: true });
+        Object.assign(log, { pickerMenuId: null, confirmRemove: { exercise, usage }, pickerReuse: reusePicker(log) });
         askPickerFocus(ctx, '[data-action="cancel-remove-custom"]');
       }),
     }),
@@ -699,6 +708,7 @@ function picker(ctx) {
   // Anything that changes the results starts again from the first page.
   const narrow = () => {
     log.limit = PICKER_PAGE;
+    list.scrollTop = 0; // new results start at the top
     return refreshList();
   };
   const muscle = filterSelect("Muscle", "filter-muscle", ALL_MUSCLES, log.muscle, narrow);
@@ -723,7 +733,7 @@ function picker(ctx) {
         "aria-haspopup": "menu",
         "aria-expanded": String(open),
         onClick: () => {
-          Object.assign(log, { pickerMenuId: open ? null : exercise.id, confirmRemove: null, pickerReuse: true });
+          Object.assign(log, { pickerMenuId: open ? null : exercise.id, confirmRemove: null, pickerReuse: reusePicker(log) });
           if (!open) askPickerFocus(ctx, `[data-action="edit-custom"][data-exercise-id="${exercise.id}"]`);
           return ctx.rerender();
         },
@@ -799,6 +809,22 @@ function picker(ctx) {
       ]));
   };
 
+  // The scrollTop the last cache-eligible tap remembered. Taken now, so any other redraw (reuse false) or a changed
+  // cache key leaves nothing behind. It is applied once rows are drawn and the list is in the page: by app.js
+  // (afterAttach) for the cached draw, or by refreshList if it had to draw first. Later fresh draws keep the current one.
+  // A picker already superseded by a newer render touches nothing: the newer one takes the value.
+  const current = ctx.isCurrent();
+  const keptKey = log.pickerCache?.key;
+  let want = current && log.pickerReuse && (keptKey === undefined || keptKey === cacheKey()) ? log.pickerScroll : null;
+  if (current) log.pickerScroll = null;
+  const restoreScroll = () => {
+    if (want === null || !list.isConnected || list.childElementCount === 0) return;
+    list.scrollTop = want;
+    want = null;
+  };
+  if (current) log.pickerRemember = () => { if (list.isConnected) log.pickerScroll = list.scrollTop; };
+  ctx.afterAttach(restoreScroll);
+
   let latest = 0;
   async function refreshList() {
     const mine = ++latest;
@@ -813,6 +839,7 @@ function picker(ctx) {
     if (!ctx.isCurrent()) return;
     Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
     drawRows(results, recent);
+    restoreScroll();
     list.dataset.state = "ready";
     // Kept for the next redraw only if no exercise changed since this read began.
     log.pickerCache = epoch === log.pickerEpoch ? { key: cacheKey(), results, recent } : null;
@@ -864,7 +891,7 @@ function picker(ctx) {
       button("Add custom exercise", {
         "data-action": "add-custom",
         onClick: () => {
-          Object.assign(log, { addingCustom: true, pickerMenuId: null, confirmRemove: null, pickerReuse: true });
+          Object.assign(log, { addingCustom: true, pickerMenuId: null, confirmRemove: null, pickerReuse: reusePicker(log) });
           return ctx.rerender();
         },
       }),

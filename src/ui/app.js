@@ -189,7 +189,9 @@ export async function mountApp(root, services) {
     const focus = state.focus;
     state.focus = null;
     carriedFrom = 0;
+    const attached = []; // run right after this render's content is in the page; never run if a newer render takes over
     const context = {
+      afterAttach: (callback) => attached.push(callback),
       services,
       state,
       unit: state.unit,
@@ -234,6 +236,7 @@ export async function mountApp(root, services) {
       }
     }
     view.replaceChildren(content);
+    attached.forEach((callback) => callback());
     // A failed read only hides the reminder; it never blocks the tab.
     await refreshReminder().catch(() => { reminder.hidden = true; });
     tabBar.dataset.active = state.tab; // converge on state.tab even if a tap was superseded

@@ -213,7 +213,6 @@
 - [ ] History detail: the set rows inside an open card are 31 to 32px high; they are not buttons, but review if they ever become interactive (added 2026-10-31).
 - [ ] Picker focus: replace the shared `log.pickerFocus` with per-render focus requests when the bottom sheet is built (added 2026-11-01).
 - [ ] Picker: background redraws (the rest timer running while the picker is open) still draw an empty list briefly, because only taps inside the picker use the row cache (added 2026-11-01).
-- [ ] Picker: the list's own scrollTop resets on a redraw (added 2026-11-01).
 - [ ] Picker: whether filter changes, search typing and "Show 50 more" collapse the page height was not measured (added 2026-11-01).
 - [ ] Picker: timing of the redraw and of the focus race on a phone with the full 775-exercise library is unmeasured (added 2026-11-01).
 - [ ] Tests: the two 10 ms loop rules (Edit then Cancel, menu then Escape) are weak guards; they passed on code without the focus fix. Only the 0 ms loops catch it (added 2026-11-01).
