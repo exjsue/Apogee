@@ -342,7 +342,7 @@ async function list(ctx) {
   }
   view.append(h(
     "ul",
-    { class: "history-list", "data-region": "history-list" },
+    { class: "history-list history-list--rows", "data-region": "history-list" },
     workouts.map((workout) => h(
       "li",
       {},
