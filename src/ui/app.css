@@ -304,6 +304,60 @@ button.pick {
 .pick-name { font-weight: 600; }
 .pick-meta { font-size: 0.875rem; color: var(--muted); }
 
+/* The New tab's exercise picker only (.pick-list--rows, .picker--sheetlike): each exercise is a card row with an
+   equipment icon in a tile, the name over its muscles and equipment, and a CSS chevron at the right edge (no text). The
+   History edit list, the Templates list, the History list and the Strong muscle picker do not use these classes. */
+.pick-list--rows li { margin: 0 0 8px; }
+.pick-list--rows li.pick-group { margin: 12px 0 6px; font-size: 0.8125rem; color: var(--text-secondary); }
+.pick-list--rows li.pick-group:first-child { margin-top: 4px; }
+.pick-list--rows button.pick {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-content: center;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-height: 56px;
+  padding: 8px 44px 8px 12px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+}
+.pick-list--rows .pick-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+.pick-list--rows .pick-name { grid-column: 2; grid-row: 1; font-weight: 500; }
+.pick-list--rows .pick-meta { grid-column: 2; grid-row: 2; font-size: 0.8125rem; color: var(--text-secondary); }
+/* Pressed: the surface rises. No transform and no size change, so the tap area stays under the finger. */
+.pick-list--rows button.pick:not(:disabled):active { background: var(--surface-raised); transform: none; }
+.pick-list--rows button.pick::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  transform: translateY(-50%) rotate(45deg);
+}
+/* A custom row: the three-dot button is a separate card-like control to the right of the row button, so the row
+   button has no chevron (the two would collide). */
+.pick-list--rows .pick-row { align-items: stretch; }
+.pick-list--rows .pick-row button.pick { padding-right: 12px; }
+.pick-list--rows .pick-row button.pick::after { content: none; }
+.pick-list--rows .pick-row button.menu-button { background: var(--surface); border-radius: var(--radius-card); }
+.picker--sheetlike > .actions > button { flex: 1; }
+
 /* The History tab's list only (the Templates list on the New tab shares .history-list, .pick-name and .pick-meta and is
    left as it was): each workout is a card row with its date as the title, its counts under it and a chevron at the
    right edge. The chevron is drawn by the border of a pseudo-element, so it adds no text to the row. */
@@ -558,6 +612,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button.entry-toggle::after { transition: transform var(--motion-soft) var(--ease-motion); }
   .card.entry-card { transition: background-color var(--motion-quick) var(--ease-motion); }
   .history-list--rows button.pick { transition: transform var(--motion) ease-out, background-color var(--motion-quick) var(--ease-motion); }
+  .pick-list--rows button.pick { transition: background-color var(--motion-quick) var(--ease-motion); }
   button.check-toggle:not(:disabled):active { transform: scale(0.9); }
 
   /* Stage 3. Everything here is opacity, transform or a colour, so nothing moves the layout, and none of it is waited

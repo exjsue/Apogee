@@ -22,6 +22,7 @@ import { readImportContext, applyStrongPlan } from "../../src/importers/strong-a
 import { strongWorkoutId, strongExerciseId } from "../../src/importers/strong.js";
 import { prepareStrongUndo, checkStrongUndo, applyStrongUndo } from "../../src/importers/strong-undo.js";
 import { nameKey } from "../../src/domain/exercise-names.js";
+import { iconShape } from "../../src/ui/svg-icon.js";
 
 export const uiRules = [];
 const rule = (name, run) => uiRules.push({ name, run });
@@ -3737,6 +3738,28 @@ rule("picker menu: only the user's own rows have the three-dot button; opening i
     await waitFor(() => document.activeElement === menuButton(root, FLY.id), "focus back on the three-dot button");
     ctx.assert.equal(menuButton(root, FLY.id).getAttribute("aria-expanded"), "false");
   }, { prepare: addMine });
+});
+
+rule("picker rows: each row has an aria-hidden equipment icon and the same meta text; a custom row without equipment gets the fallback icon, and its menu button is a sibling of the row button", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    const bench = await waitFor(() => $(root, `[data-action="pick-exercise"][data-exercise-id="${BENCH}"]`), "the bench press row");
+    const icon = bench.querySelector("svg");
+    ctx.assert.equal(icon === null ? "no icon" : `${icon.getAttribute("aria-hidden")}|${icon.textContent}`, "true|"); // aria-hidden, no text
+    ctx.assert.equal(icon.querySelector("path").getAttribute("d"), iconShape("barbell"));
+    ctx.assert.equal(bench.querySelector(".pick-meta").textContent, "Chest · Barbell"); // the icon adds no text
+    const curl = await waitFor(() => $(root, `[data-action="pick-exercise"][data-exercise-id="${CURL.id}"]`), "the custom row");
+    ctx.assert.equal(curl.querySelector("svg path").getAttribute("d"), iconShape("fallback"));
+    ctx.assert.equal(curl.querySelector(".pick-meta").textContent, "Biceps · Custom");
+    ctx.assert.equal(menuButton(root, CURL.id).parentElement, curl.parentElement); // siblings, not nested
+    ctx.assert.equal(curl.contains(menuButton(root, CURL.id)), false);
+    const menuBox = menuButton(root, CURL.id).getBoundingClientRect();
+    ctx.assert.equal(menuBox.height >= 44 && menuBox.width >= 44 ? "44+" : `${menuBox.width} x ${menuBox.height}`, "44+");
+    // chevron-free custom row: the row button's ::after is off, the other rows keep theirs
+    const doc = curl.ownerDocument.defaultView;
+    ctx.assert.equal(doc.getComputedStyle(curl, "::after").content, "none");
+    ctx.assert.equal(doc.getComputedStyle(bench, "::after").content, '""');
+  }, { prepare: addMine, width: 390 }); // the real stylesheet is loaded, for the 44 px target and the chevron
 });
 
 rule("picker menu: Edit opens a prefilled form with the notice and the catalog-only ids it already has; Save changes only those fields and focus returns to its button", async (ctx) => {

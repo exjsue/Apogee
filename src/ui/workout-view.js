@@ -3,7 +3,7 @@
 // Parsing, validation and every decision happen in src/app and src/domain.
 
 import { h, button, exerciseHeading, setMark } from "./dom.js";
-import { svgIcon } from "./svg-icon.js";
+import { svgIcon, equipmentIcon } from "./svg-icon.js";
 import { setNumbers } from "../domain/workout-plan.js";
 import { ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount, formatSetLine } from "../domain/format.js";
@@ -683,7 +683,7 @@ function picker(ctx) {
   };
   const muscle = filterSelect("Muscle", "filter-muscle", ALL_MUSCLES, log.muscle, narrow);
   const equipment = filterSelect("Equipment", "filter-equipment", ALL_EQUIPMENT, log.equipment, narrow);
-  const list = h("ul", { class: "pick-list", "data-region": "exercise-list", "data-no-pull": "" });
+  const list = h("ul", { class: "pick-list pick-list--rows", "data-region": "exercise-list", "data-no-pull": "" });
 
   // A custom row also gets the three-dot menu (the Log tab's pattern, see blockHeader in set-rows.js) and, when
   // asked, the remove question under it. Built-in and catalog rows have no menu.
@@ -715,6 +715,7 @@ function picker(ctx) {
 
   const pickButton = (exercise) => button(
     [
+      h("span", { class: "pick-icon" }, svgIcon(equipmentIcon(exercise.equipment), { size: 24 })), // decoration, no text
       h("span", { class: "pick-name" }, exercise.name),
       h(
         "span",
@@ -799,7 +800,7 @@ function picker(ctx) {
 
   const panel = h(
     "section",
-    { class: "card", "aria-label": "Choose exercise" },
+    { class: "card picker--sheetlike", "aria-label": "Choose exercise" },
     h("h2", {}, "Choose exercise"),
     search,
     h("div", { class: "pick-filters" }, muscle.element, equipment.element),
