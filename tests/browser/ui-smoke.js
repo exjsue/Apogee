@@ -3762,6 +3762,28 @@ rule("picker rows: each row has an aria-hidden equipment icon and the same meta 
   }, { prepare: addMine, width: 390 }); // the real stylesheet is loaded, for the 44 px target and the chevron
 });
 
+for (const width of [390, 320]) {
+  rule(`picker layout, ${width}px: Showing text stacked over a full-width 44px Show more button with the same text, and the Add custom exercise / Cancel pair is measured (one line at 390)`, async (ctx) => {
+    await withApp(ctx, async ({ root }) => {
+      await openPicker(root);
+      const more = await waitFor(() => region(root, "pick-more"), "the Show more row");
+      ctx.assert.equal(more.textContent, "Showing 50 of 136. Search or filter to narrow it down.Show 50 more"); // no characters added
+      const text = more.querySelector(".muted").getBoundingClientRect();
+      const showMore = action(root, "pick-more").getBoundingClientRect();
+      const region_ = more.getBoundingClientRect();
+      ctx.assert.equal(text.bottom <= showMore.top, true); // the text is above the button, not beside it
+      ctx.assert.equal(Math.abs(showMore.width - region_.width) <= 1, true); // full width
+      ctx.assert.equal(showMore.height >= 44 ? "44+" : `${showMore.height}`, "44+");
+      const add = action(root, "add-custom").getBoundingClientRect();
+      const cancel = action(root, "cancel-picker").getBoundingClientRect();
+      ctx.assert.equal(add.top === cancel.top, true); // side by side
+      ctx.assert.equal(add.width > cancel.width, true); // about 60/40
+      layoutMeasures.push(`Picker, ${width}px: Add custom exercise ${Math.round(add.width)} x ${Math.round(add.height)}, Cancel ${Math.round(cancel.width)} x ${Math.round(cancel.height)}, Show more ${Math.round(showMore.width)} x ${Math.round(showMore.height)}`);
+      if (width === 390) ctx.assert.equal(add.height <= 46 ? "one line" : `${add.height}`, "one line");
+    }, { prepare: addSynthetic, width });
+  });
+}
+
 rule("picker menu: Edit opens a prefilled form with the notice and the catalog-only ids it already has; Save changes only those fields and focus returns to its button", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     click(await openMenu(root, FLY.id));

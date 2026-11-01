@@ -218,3 +218,4 @@
 - [ ] Header logo SVG: traced, with its own prompt (added 2026-10-31).
 - [ ] Custom exercises have no equipment, so they show the fallback icon; decide if that is right (added 2026-10-31).
 - [ ] Tests for the planned-but-unlogged variant of the empty state (exercises planned, no set logged: plain card, plain Add button) (added 2026-10-31).
+- [ ] The picker-menu "focus back after Cancel" flake: now 3 failures in about 15 full runs on 2026-10-31 (both motion modes); investigate before the bottom sheet (added 2026-10-31).
