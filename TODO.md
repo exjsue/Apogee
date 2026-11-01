@@ -196,3 +196,10 @@
 - [ ] Strong undo needs the same CSV file again, by design (option C: nothing extra is stored at import). Without the file there is no undo except restoring a Backup (added 2026-10-31).
 - [ ] Strong undo: a time-zone change between import and undo makes every workout read "edited" (startedAt is computed from the device's time zone), so nothing is deleted; untested (added 2026-10-31).
 - [ ] Strong undo: a hidden (retired) Strong custom exercise that nothing uses is deleted; untested (added 2026-10-31).
+- [ ] Make the browser test runner print assertion messages (`tests/browser/run.js` drops them, so a failure shows only "expected a truthy value, got false") (added 2026-10-31).
+- [ ] `button.small` is 36px high, under the 44px touch target; review it screen by screen (added 2026-10-31).
+- [ ] Logo SVG for the header: traced from the icon master, as its own prompt (added 2026-10-31).
+- [ ] Equipment icons and an `svgIcon` helper (`h()` cannot create SVG elements) (added 2026-10-31).
+- [ ] Bottom sheet exercise picker, with focus trap, scroll lock and Escape, and tests for each (the picker has none of them today) (added 2026-10-31).
+- [ ] Finish workout always confirms (added 2026-10-31).
+- [ ] The elapsed timer computed from `startedAt` (added 2026-10-31).

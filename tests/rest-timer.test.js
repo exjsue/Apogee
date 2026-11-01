@@ -117,7 +117,7 @@ function variables(block) {
   return Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)].map((match) => [match[1], match[2]]));
 }
 const light = variables(/:root\s*\{([^}]*)\}/.exec(css)[1]);
-const dark = { ...light, ...variables(/prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)[1]) };
+const dark = light; // the app is dark only: the single :root block is both
 
 function luminance(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)

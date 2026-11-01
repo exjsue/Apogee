@@ -10,12 +10,11 @@ const manifest = JSON.parse(read("manifest.webmanifest"));
 const html = read("index.html");
 const css = read("src", "ui", "app.css");
 
-// The light and dark values of a CSS variable, from the :root block and the dark media block.
+// The value of a CSS variable, from the :root block (the app is dark only, so there is one).
 function themeColor(name) {
-  const light = new RegExp(`:root\\s*\\{[^}]*--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css);
-  const dark = new RegExp(`prefers-color-scheme:\\s*dark\\)\\s*\\{\\s*:root\\s*\\{[^}]*--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css);
-  assert.ok(light && dark, `--${name} in both themes`);
-  return { light: light[1].toLowerCase(), dark: dark[1].toLowerCase() };
+  const found = new RegExp(`:root\\s*\\{[^}]*--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css);
+  assert.ok(found, `--${name} in :root`);
+  return found[1].toLowerCase();
 }
 
 // width and height of a PNG, from its header
@@ -35,9 +34,9 @@ test("manifest: name, standalone display, and a start URL and scope that are rel
   assert.equal(typeof manifest.description, "string");
 });
 
-test("manifest: the colors are the app's own: the page background and the accent from app.css", () => {
-  assert.equal(manifest.background_color, themeColor("bg").light);
-  assert.equal(manifest.theme_color, themeColor("accent").light);
+test("manifest: the colors are the app's own: the page background from app.css (the app is dark only, so it is both)", () => {
+  assert.equal(manifest.background_color, themeColor("bg"));
+  assert.equal(manifest.theme_color, themeColor("bg"));
 });
 
 test("manifest: every URL in it is relative (nothing starts with / or names a host)", () => {
@@ -63,12 +62,10 @@ test("index.html: links the manifest and a 180 px apple-touch-icon, both relativ
   assert.equal(pngSize(path.join(ROOT, touch[1])), "180x180");
 });
 
-test("index.html: theme-color for the light and the dark scheme, matching the app's CSS", () => {
-  const light = /<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: light\)">/.exec(html);
-  const dark = /<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: dark\)">/.exec(html);
-  assert.ok(light && dark, "both theme-color metas");
-  assert.equal(light[1], themeColor("bg").light);
-  assert.equal(dark[1], themeColor("bg").dark);
+test("index.html: theme-color matches the app's CSS page background", () => {
+  const found = /<meta name="theme-color" content="(#[0-9a-f]{6})">/.exec(html);
+  assert.ok(found, "the theme-color meta");
+  assert.equal(found[1], themeColor("bg"));
 });
 
 test("the server sends the manifest as application/manifest+json and the icons as image/png", () => {

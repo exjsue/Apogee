@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const css = fs.readFileSync(new URL("../src/ui/app.css", import.meta.url), "utf8");
-const dark = css.slice(css.indexOf("@media (prefers-color-scheme: dark)"));
-const light = css.slice(0, css.indexOf("@media (prefers-color-scheme: dark)"));
+const dark = css; // the app is dark only: one set of tokens in :root
+const light = css;
 const token = (block, name) => {
   const match = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block);
   assert.ok(match, `--${name} is defined`);
@@ -29,6 +29,7 @@ for (const [scheme, block] of [["light", light], ["dark", dark]]) {
   });
 }
 
-test("warm-up W: the two modes use different values", () => {
-  assert.notEqual(token(light, "warmup-bg"), token(dark, "warmup-bg"));
+// The old test here asserted that light and dark differ; with one scheme the same intent is that the W stands apart from the page.
+test("warm-up W: its background differs from the page background", () => {
+  assert.notEqual(token(dark, "warmup-bg"), token(dark, "bg"));
 });

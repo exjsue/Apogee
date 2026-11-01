@@ -1,27 +1,33 @@
 /* Apogee styles. One typeface (the system font), a restrained palette,
-   light and dark from the browser setting, and a layout that starts at phone
-   width. No external fonts or images. */
+   dark only, and a layout that starts at phone width. No external fonts or images.
+   The colour tokens are literal hex values on purpose: tests read them from this block. */
 
 :root {
-  color-scheme: light dark;
-  --bg: #f7f6f2;
-  --surface: #ffffff;
-  --text: #1c1c19;
-  --muted: #66655d;
-  --line: #d9d7cd;
-  --accent: #1f5f4a;
-  --accent-text: #ffffff;
-  --danger: #a4262c;
-  --warn-bg: #fff4d6;
-  --warn-line: #d8b45a;
-  --focus: #2b6fd6;
-  --warmup-bg: #d6eaff; /* the warm-up W: light blue; text on it 7.24:1 */
-  --warmup-text: #0a4a8a;
-  --figure-head-fill: #3a3a36; /* the Body diagram's head: dark in both modes, grey outline */
+  color-scheme: dark;
+  --bg: #0b0b0c; /* the page: near-black */
+  --surface: #141416; /* cards and panels */
+  --surface-raised: #1d1d20; /* buttons, rows and menus on a card */
+  --text: #ecebe4; /* primary text */
+  --text-secondary: #c6c6cc; /* labels */
+  --muted: #9a9aa2; /* muted text: 4.5:1 or more on the page and on both surfaces */
+  --line: #2e2e33; /* the subtle 1px border */
+  --line-strong: #6b6b72; /* the light border of the active tab */
+  --accent: #ffffff; /* primary buttons and the selected state */
+  --accent-text: #0b0b0c;
+  --danger: #ff5c63; /* destructive: red outline, red text, red fill for the confirm */
+  --warn-bg: #2b2413;
+  --warn-line: #7a6320;
+  --focus: #7ab0ff;
+  --warmup-bg: #123352; /* the warm-up W: dark blue; text on it 8.34:1 */
+  --warmup-text: #a8d4ff;
+  --figure-head-fill: #0d0d0f; /* the Body diagram's head: dark, grey outline */
   --figure-head-line: #8a8980;
-  --figure-pelvis-fill: #ffffff; /* the front view's pelvis: quiet, an outline only a little darker than the page, not a muscle */
-  --figure-pelvis-line: #a8a69b;
-  --radius: 8px;
+  --figure-pelvis-fill: #141416; /* the front view's pelvis: quiet, an outline only a little lighter than the page, not a muscle */
+  --figure-pelvis-line: #5f5e57;
+  --radius-card: 12px;
+  --radius-control: 10px; /* inputs and buttons */
+  --radius-pill: 999px;
+  --radius: var(--radius-control); /* the older rules that say plain "radius" are controls */
   --gutter: 16px;
   --motion: 200ms; /* the length of the Phase 1 motion below (panels, forms, notices, banners, button press) */
   --motion-tab: 250ms; /* the tab fade is longer than the other Phase 1 motion because John wanted it slower */
@@ -31,28 +37,6 @@
   --motion-form: 180ms; /* the exercise form and the picker menu */
   --motion-shade: 250ms; /* a muscle's shade on the Body diagram */
   --ease-motion: ease-out;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #000000;
-    --surface: #1d1d1a;
-    --text: #ecebe4;
-    --muted: #a3a298;
-    --line: #34332e;
-    --accent: #ffffff;
-    --accent-text: #000000;
-    --danger: #ff9196;
-    --warn-bg: #2b2413;
-    --warn-line: #7a6320;
-    --focus: #7ab0ff;
-    --warmup-bg: #123352; /* text on it 8.34:1 */
-    --warmup-text: #a8d4ff;
-    --figure-head-fill: #0d0d0b;
-    --figure-head-line: #8a8980;
-    --figure-pelvis-fill: #1d1d1a;
-    --figure-pelvis-line: #5f5e57;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -100,10 +84,10 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 .unit-button {
   min-width: 52px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--text);
   font: inherit;
-  min-height: 40px;
+  min-height: 44px;
 }
 .unit-button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .unit-button:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: 0; }
@@ -119,21 +103,23 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   position: relative;
   display: flex;
   gap: var(--tab-gap);
-  border-bottom: 1px solid var(--line);
   margin-bottom: 16px;
 }
 
-/* The active-tab bar: one indicator under the nav, placed by data-active (set by app.js). The offsets
-   assume exactly four equal-width tabs; change them if tabs are added or made unequal. */
+/* The active-tab pill: one indicator laid over the active tab (a 1px light border, no fill, so the label shows
+   through), placed by data-active (set by app.js). The offsets assume exactly four equal-width tabs; change them
+   if tabs are added or made unequal. */
 .tabs::after {
   content: "";
   position: absolute;
   left: 0;
+  top: 0;
   bottom: 0;
-  height: 3px;
   width: calc((100% - 3 * var(--tab-gap)) / 4);
-  background: var(--accent);
-  pointer-events: none; /* or it would swallow taps on the bottom 3 px of the tabs */
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  box-sizing: border-box; /* pseudo-elements do not get the global rule; or the border would widen the pill and its slide steps */
+  pointer-events: none; /* or it would swallow taps on the tab under it */
 }
 .tabs[data-active="history"]::after { transform: translateX(calc(100% + var(--tab-gap))); }
 .tabs[data-active="body"]::after { transform: translateX(calc(2 * (100% + var(--tab-gap)))); }
@@ -145,15 +131,14 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   padding: 8px 2px;
   overflow-wrap: anywhere;
   min-height: 44px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  border-radius: 0; /* the global button radius would curve the underline up at its ends */
+  border: 1px solid transparent; /* the same size as the pill's border, so the label sits centred in it */
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--muted);
   font: inherit;
   -webkit-tap-highlight-color: transparent;
 }
-.tab:focus-visible { outline-offset: -3px; } /* square, inside the tab: clear of its neighbours and the underline */
+.tab:focus-visible { outline-offset: -3px; } /* inside the tab: clear of its neighbours */
 .tab[aria-current="page"] {
   color: var(--text);
   font-weight: 600;
@@ -173,7 +158,7 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-card);
   padding: 14px var(--gutter);
   margin: 0 0 16px;
 }
@@ -194,9 +179,9 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 
 .notice, .error, .warning-text {
   padding: 10px 12px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-card);
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
 }
 .error { color: var(--danger); border-color: var(--danger); }
 .error[hidden] { display: none; }
@@ -218,22 +203,22 @@ button {
   min-height: 44px;
   padding: 8px 16px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
   color: var(--text);
   cursor: pointer;
 }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 button.danger { background: var(--danger); border-color: var(--danger); color: var(--bg); font-weight: 600; }
-button.danger-outline { border-color: var(--danger); color: var(--danger); }
+button.danger-outline { background: transparent; border-color: var(--danger); color: var(--danger); }
 button.small { min-height: 36px; padding: 4px 12px; }
 button.wide { width: 100%; }
 
 /* forms */
 
 .field { display: block; margin: 12px 0 0; }
-.field > span { display: block; font-size: 0.875rem; color: var(--muted); margin-bottom: 4px; }
+.field > span { display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 4px; }
 .field-row { display: flex; gap: 12px; }
 .field-row .field { flex: 1; }
 .field-row .field.narrow { flex: 0 0 96px; }
@@ -244,7 +229,7 @@ input[type="text"], input[type="search"], input[type="file"], input[type="date"]
   min-height: 44px;
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -261,9 +246,9 @@ fieldset.checks { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 fieldset.checks legend { width: 100%; }
 
 .check { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; margin: 4px 0; }
-.check input { width: 20px; height: 20px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 /* Custom exercise form: the weight of a ticked secondary muscle, on its own line under the muscle. The colours are
-   the tokens, so light and dark mode follow them. */
+   the tokens. */
 .weight-row { display: contents; }
 .weight-choice { display: flex; flex-wrap: wrap; flex-basis: 100%; margin: 0 0 8px; }
 .weight-button {
@@ -337,7 +322,7 @@ button.pick {
 
 .confirm {
   border: 1px solid var(--danger);
-  border-radius: var(--radius);
+  border-radius: var(--radius-card);
   padding: 8px 12px 12px;
   margin-top: 12px;
 }
@@ -379,9 +364,9 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
   gap: 8px 12px;
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
 }
 .banner > span:first-child { flex: 1 1 14rem; }
 .banner-error { flex-basis: 100%; color: var(--danger); }
@@ -508,7 +493,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   flex: 1;
   min-height: 44px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--text);
   font: inherit;
 }
@@ -585,7 +570,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
 .muscle-panel > :nth-child(9) { --i: 8; }
 .muscle-panel > :nth-child(10) { --i: 9; }
 .muscle-panel > :nth-child(n + 11) { --i: 10; }
-.pr-label { margin-left: 8px; padding: 0 4px; font-size: 0.75rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); }
+.pr-label { margin-left: 8px; padding: 0 4px; font-size: 0.75rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-pill); }
 /* Text for screen readers only: out of sight but still in the accessibility tree (not display: none). */
 .visually-hidden {
   position: absolute;
@@ -782,7 +767,7 @@ button.rest-time {
 
 .entry-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .entry-head h3 { margin: 12px 0 4px; }
-button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem; line-height: 1; }
+button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem; line-height: 1; border-radius: var(--radius-control); }
 .menu {
   position: absolute;
   top: 100%;
@@ -790,14 +775,14 @@ button.menu-button { flex: none; min-width: 44px; padding: 0; font-size: 1.25rem
   z-index: 1;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
   display: grid;
   gap: 4px;
   min-width: 12rem;
   max-width: calc(100vw - 32px);
 }
-button.menu-item { width: 100%; text-align: left; } /* 44 px high like every button; not .small */
+button.menu-item { width: 100%; text-align: left; background: transparent; border-color: transparent; } /* 44 px high like every button; not .small */
 
 /* reordering sets: a bar above the rows, and a line of two equal 44 px buttons under each row */
 .reorder-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 0.875rem; color: var(--muted); }
