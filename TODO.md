@@ -214,3 +214,7 @@
 - [ ] The picker-menu "focus back after Cancel" flake: now 2 failures in about 10 full runs on 2026-10-31, both in no-preference mode. Investigate before the bottom sheet: run that single rule 30 times and report the rate, the full error text and what it waits on; read-only first (added 2026-10-31).
 - [ ] History detail toggle: tests for Enter and Space on the button and its focus outline (added 2026-10-31).
 - [ ] The picker-menu "focus back after Cancel" flake happened again on 2026-10-31 (first no-preference run of the card-header change; the next three runs passed); see the earlier flake entry (added 2026-10-31).
+- [ ] Use `equipmentIcon` in the picker rows (added 2026-10-31).
+- [ ] Header logo SVG: traced, with its own prompt (added 2026-10-31).
+- [ ] Custom exercises have no equipment, so they show the fallback icon; decide if that is right (added 2026-10-31).
+- [ ] Tests for the planned-but-unlogged variant of the empty state (exercises planned, no set logged: plain card, plain Add button) (added 2026-10-31).

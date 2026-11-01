@@ -425,6 +425,33 @@ table.counts th:first-child, table.counts tbody th { text-align: left; font-weig
    digits are tabular), so it can never change the row; only the title gives way (shrinks or wraps). */
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .card-head h2 { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+
+/* The New tab with no workout: a centred card, then a full-width Choose exercise button with a plus and a chevron
+   drawn in CSS (no text characters). */
+.card.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 24px; padding-bottom: 20px; }
+.card.empty-state .card-head { justify-content: center; margin-bottom: 0; }
+.card.empty-state .card-head h2 { flex: 0 1 auto; }
+.empty-icon { color: var(--text-secondary); margin-bottom: 12px; }
+button.choose-empty { position: relative; padding-left: 44px; padding-right: 44px; }
+button.choose-empty::before,
+button.choose-empty::after { content: ""; position: absolute; top: 50%; pointer-events: none; }
+button.choose-empty::before {
+  left: 16px;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+}
+button.choose-empty::after {
+  right: 18px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  transform: translateY(-50%) rotate(45deg);
+}
 .elapsed {
   flex: none;
   min-width: 7ch;

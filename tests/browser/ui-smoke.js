@@ -199,6 +199,20 @@ rule("ui: the app mounts with the log screen and four tabs; the unit toggle is o
   });
 });
 
+rule("ui: the empty New tab keeps its pinned text, and the dumbbell icon is decoration (aria-hidden, no text)", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await waitFor(() => action(root, "choose-exercise"), "the Choose exercise button");
+    const card = $(root, ".card.empty-state");
+    ctx.assert.ok(card !== null, "the empty-state card is drawn");
+    ctx.assert.ok(card.textContent.includes("No workout in progress. Checking your first set starts one."));
+    const icon = card.querySelector("svg.empty-icon");
+    ctx.assert.ok(icon !== null && icon.getAttribute("aria-hidden") === "true" && icon.getAttribute("focusable") === "false");
+    ctx.assert.equal(icon.textContent, "");
+    ctx.assert.equal(action(root, "choose-exercise").textContent, "Choose exercise"); // the plus and chevron add no characters
+    ctx.assert.ok(region(root, "current-heading") !== null);
+  });
+});
+
 rule("ui: choosing an exercise adds an unchecked row; checking it logs the set in the current workout", async (ctx) => {
   await withApp(ctx, async ({ root, adapter }) => {
     await pickExercise(root, "bench", BENCH);

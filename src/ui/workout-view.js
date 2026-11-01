@@ -3,6 +3,7 @@
 // Parsing, validation and every decision happen in src/app and src/domain.
 
 import { h, button, exerciseHeading, setMark } from "./dom.js";
+import { svgIcon } from "./svg-icon.js";
 import { setNumbers } from "../domain/workout-plan.js";
 import { ALL_MUSCLES, ALL_EQUIPMENT, NAME_MAX_LENGTH } from "../domain/model.js";
 import { formatLabel, formatSetWeight, formatDateTime, formatCount, formatSetLine } from "../domain/format.js";
@@ -178,8 +179,10 @@ function staleCard(ctx, session) {
 function currentCard(ctx, session) {
   const log = ctx.state.log;
   const { logger } = ctx.services;
-  const card = h("section", { class: "card", "aria-label": "Current workout" });
   const started = session.status.kind !== "none";
+  const empty = !started && session.blocks.length === 0; // nothing open and nothing planned: the centred empty state
+  const card = h("section", { class: empty ? "card empty-state" : "card", "aria-label": "Current workout" });
+  if (empty) card.append(svgIcon("dumbbell", { size: 48, class: "empty-icon" })); // decoration only
   // The title row: with a workout open, the live elapsed time is at its right, an element of its own
   // with a reserved width, so a changing time cannot reflow the row.
   const elapsed = started ? elapsedElement(session.workout.startedAt) : null;
@@ -834,7 +837,7 @@ function addExerciseArea(ctx, session) {
   const log = ctx.state.log;
   if (log.pickerOpen) return picker(ctx);
   return button(session.blocks.length === 0 ? "Choose exercise" : "Add exercise", {
-    class: "primary wide",
+    class: session.status.kind === "none" && session.blocks.length === 0 ? "primary wide choose-empty" : "primary wide",
     "data-action": "choose-exercise",
     onClick: () => {
       log.pickerOpen = true;
