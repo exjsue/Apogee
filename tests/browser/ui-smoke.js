@@ -4203,3 +4203,40 @@ for (const width of [390, 320]) {
     }, { prepare: finishedWorkouts([[["5", "100"]]]), width });
   });
 }
+
+rule("history detail: a tap on the name, the Records line or the Best set line toggles the card, and a tap in the open set list does not", async (ctx) => {
+  await withApp(ctx, async ({ root, frame }) => {
+    await openWorkout(root, 0);
+    const doc = frame.contentDocument;
+    const card = () => root.querySelector(".entry");
+    const toggle = () => card().querySelector(".entry-toggle");
+    const open = () => toggle().getAttribute("aria-expanded") === "true";
+    // The page cannot send a real mouse event, so this does what the pointer does: finds what is under the middle of the
+    // element (the hit test, which includes the toggle's ::before) and clicks that.
+    const tap = (element) => {
+      const box = element.getBoundingClientRect();
+      const hit = doc.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      hit.click();
+      return hit;
+    };
+    // (the runner prints only an Error's message, so these throw one that names what was hit)
+    const describe = (element) => `${element.tagName.toLowerCase()}.${element.className}`;
+    const expectToggle = (element, what) => {
+      const hit = tap(element);
+      if (hit !== toggle()) throw new Error(`a tap on ${what} hit ${describe(hit)}, not the toggle`);
+    };
+    if (open()) throw new Error("the card should start collapsed");
+    expectToggle(card().querySelector('[data-region="best-set"]'), "the Best set line");
+    if (!open()) throw new Error("a tap on the Best set line should open the card");
+    expectToggle(card().querySelector("h3"), "the name");
+    if (open()) throw new Error("a tap on the name should close the card");
+    expectToggle(card().querySelector('[data-region="records"]'), "the Records line");
+    if (!open()) throw new Error("a tap on the Records line should open the card");
+    // in the open set list nothing toggles
+    for (const target of [card().querySelector(".entry-sets"), card().querySelector(".entry-sets li"), card().querySelector(".set-text")]) {
+      const hit = tap(target);
+      if (hit === toggle()) throw new Error(`a tap in the set list hit the toggle (${describe(target)})`);
+      if (!open()) throw new Error(`a tap in the set list (${describe(target)}) closed the card`);
+    }
+  }, { prepare: finishedWorkouts([[["5", "100"], ["3", "110"], ["8", "80"]]]), width: 390 });
+});

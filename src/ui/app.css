@@ -337,30 +337,45 @@ button.pick {
 .entry-top { display: flex; align-items: center; gap: 8px; }
 .entry-top h3 { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .entry-top .pr-label { flex: none; margin-left: 0; }
-.entry .best-set { margin: 4px 0 0; }
 .entry .entry-sets { margin-top: 4px; }
-/* The open/close button is a 44px target holding a chevron drawn by a border: down when closed, up when open. */
+/* The History detail's exercise cards, tighter than other cards: less padding, and less between the name, the Records
+   line and the Best set line (about a third less height collapsed). */
+.card.entry-card { padding-top: 9px; padding-bottom: 8px; }
+.entry-header { position: relative; } /* the toggle's ::before is placed against this */
+.entry-header > p { margin: 5px 0 0; font-size: 0.875rem; }
+/* The open/close button holds a chevron drawn by a border: down when closed, up when open. It is 44px wide and high,
+   its height pulled back by negative margins so it does not set the height of the name row. It is not positioned, so
+   its ::before is placed against .entry-header and covers the name, Records and Best set lines: a tap there toggles. */
 button.entry-toggle {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   width: 44px;
+  margin: -10px 0;
   padding: 0;
   border-color: transparent;
   background: transparent;
 }
-button.entry-toggle::after {
+button.entry-toggle::before {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 50%;
+  inset: -9px -16px 0 -16px; /* up and out over the card's padding; ends at the header's bottom, above the sets */
+  z-index: 1; /* above the Records line even while its fade-in runs (an animated element is painted as its own layer) */
+}
+button.entry-toggle::after {
+  content: "";
+  flex: none;
   width: 8px;
   height: 8px;
-  margin: -6px 0 0 -4px;
   border-right: 2px solid var(--muted);
   border-bottom: 2px solid var(--muted);
-  transform: rotate(45deg);
+  transform: translateY(-2px) rotate(45deg);
 }
-button.entry-toggle[aria-expanded="true"]::after { margin-top: -2px; transform: rotate(-135deg); }
+button.entry-toggle[aria-expanded="true"]::after { transform: translateY(2px) rotate(-135deg); }
+/* No press dip or press colour on the toggle: a transform would make the button the box its ::before is placed against
+   while it is pressed, shrinking the tap area under the finger. */
+.card.entry button.entry-toggle:not(:disabled):active { transform: none; background: transparent; }
 .history-list--rows button.pick::after {
   content: "";
   position: absolute;
@@ -510,7 +525,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button:not(:disabled):not(.check-toggle):active { transform: scale(0.97); }
   button.delete-button:not(:disabled):active { transform: scale(0.9); }
   button.check-toggle { transition: transform var(--motion) ease-out; }
-  button.entry-toggle::after { transition: transform var(--motion-soft) var(--ease-motion), margin-top var(--motion-soft) var(--ease-motion); }
+  button.entry-toggle::after { transition: transform var(--motion-soft) var(--ease-motion); }
   .history-list--rows button.pick { transition: transform var(--motion) ease-out, background-color var(--motion-quick) var(--ease-motion); }
   button.check-toggle:not(:disabled):active { transform: scale(0.9); }
 

@@ -209,3 +209,6 @@
 - [ ] The Best set line in the non-preferred unit is long ("220.5 lb (entered 100 kg)"); consider a shorter form (added 2026-10-31).
 - [ ] Picker-area focus flakes in the browser suite: the Strong muscle-picker Cancel test failed about 4 times in 40 branch runs, and the custom-exercise menu test "Edit opens a prefilled form… Timed out waiting for focus back after Cancel" failed once on 2026-10-31 (it passed on every run after); look for a timing cause (added 2026-10-31).
 - [ ] History detail: at 320px the Delete button wraps to a second row of the top bar (still right-aligned); accepted, review per screen (added 2026-10-31).
+- [ ] History detail toggle: test Enter and Space on the button and its visible focus outline; the tap test uses a hit test plus `click()` (the test page cannot send a real mouse event), so a real-pointer check on the phone is still open (added 2026-10-31).
+- [ ] History detail: the set rows inside an open card are 31 to 32px high; they are not buttons, but review if they ever become interactive (added 2026-10-31).
+- [ ] The picker-menu "focus back after Cancel" flake happened again on 2026-10-31 (first no-preference run of the card-header change; the next three runs passed); see the earlier flake entry (added 2026-10-31).

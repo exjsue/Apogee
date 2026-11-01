@@ -315,16 +315,23 @@ function entryCard(ctx, workout, entry, index, rec, prSets) {
   const hasPr = entry.sets.some((set) => !isWarmupSet(set) && prSets.has(set.id));
   return h(
     "div",
-    { class: "card entry", "data-enter": `detail:${workout.id}:${entry.exerciseId}` },
+    { class: "card entry entry-card", "data-enter": `detail:${workout.id}:${entry.exerciseId}` },
+    // The header: name, Records line and Best set line. The toggle button's ::before covers all of it (the button is not
+    // positioned, so the cover is placed against this div), and so a tap anywhere here opens or closes the card. The
+    // set list is outside it, so a tap in the sets does nothing.
     h(
       "div",
-      { class: "entry-top" },
-      exerciseHeading(entry.exerciseName, entry.markCustom),
-      hasPr ? h("span", { class: "pr-label", "data-region": "pr-summary" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "includes a personal record")) : null,
-      toggle,
+      { class: "entry-header" },
+      h(
+        "div",
+        { class: "entry-top" },
+        exerciseHeading(entry.exerciseName, entry.markCustom),
+        hasPr ? h("span", { class: "pr-label", "data-region": "pr-summary" }, h("span", { "aria-hidden": "true" }, "PR"), h("span", { class: "visually-hidden" }, "includes a personal record")) : null,
+        toggle,
+      ),
+      parts.length ? h("p", { class: "muted", "data-region": "records", "data-enter": `records:${workout.id}:${entry.exerciseId}` }, `Records: ${parts.join(" · ")}`) : null,
+      summary,
     ),
-    parts.length ? h("p", { class: "muted", "data-region": "records", "data-enter": `records:${workout.id}:${entry.exerciseId}` }, `Records: ${parts.join(" · ")}`) : null,
-    summary,
     sets,
   );
 }
