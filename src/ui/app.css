@@ -376,6 +376,9 @@ button.entry-toggle[aria-expanded="true"]::after { transform: translateY(2px) ro
 /* No press dip or press colour on the toggle: a transform would make the button the box its ::before is placed against
    while it is pressed, shrinking the tap area under the finger. */
 .card.entry button.entry-toggle:not(:disabled):active { transform: none; background: transparent; }
+/* The press shows on the card instead: its surface rises while the toggle (or its ::before, the whole header) is pressed.
+   Colour only, nothing that moves or resizes, so the tap area stays put. Without :has support there is no press colour. */
+.card.entry-card:has(button.entry-toggle:active) { background: var(--surface-raised); }
 .history-list--rows button.pick::after {
   content: "";
   position: absolute;
@@ -526,6 +529,7 @@ button.check-toggle[aria-pressed="true"]::after { opacity: 1; }
   button.delete-button:not(:disabled):active { transform: scale(0.9); }
   button.check-toggle { transition: transform var(--motion) ease-out; }
   button.entry-toggle::after { transition: transform var(--motion-soft) var(--ease-motion); }
+  .card.entry-card { transition: background-color var(--motion-quick) var(--ease-motion); }
   .history-list--rows button.pick { transition: transform var(--motion) ease-out, background-color var(--motion-quick) var(--ease-motion); }
   button.check-toggle:not(:disabled):active { transform: scale(0.9); }
 

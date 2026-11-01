@@ -211,4 +211,6 @@
 - [ ] History detail: at 320px the Delete button wraps to a second row of the top bar (still right-aligned); accepted, review per screen (added 2026-10-31).
 - [ ] History detail toggle: test Enter and Space on the button and its visible focus outline; the tap test uses a hit test plus `click()` (the test page cannot send a real mouse event), so a real-pointer check on the phone is still open (added 2026-10-31).
 - [ ] History detail: the set rows inside an open card are 31 to 32px high; they are not buttons, but review if they ever become interactive (added 2026-10-31).
+- [ ] The picker-menu "focus back after Cancel" flake: now 2 failures in about 10 full runs on 2026-10-31, both in no-preference mode. Investigate before the bottom sheet: run that single rule 30 times and report the rate, the full error text and what it waits on; read-only first (added 2026-10-31).
+- [ ] History detail toggle: tests for Enter and Space on the button and its focus outline (added 2026-10-31).
 - [ ] The picker-menu "focus back after Cancel" flake happened again on 2026-10-31 (first no-preference run of the card-header change; the next three runs passed); see the earlier flake entry (added 2026-10-31).
