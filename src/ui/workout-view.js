@@ -26,8 +26,6 @@ export const freshLogState = () => ({
   pickerMenuId: null, // the custom exercise whose three-dot menu is open in the picker
   editingCustom: null, // the custom exercise record being edited
   confirmRemove: null, // { exercise, usage }: the remove question, worded from the usage read when it opened
-  pickerFocus: null, // a selector inside the picker's list, focused once refreshList has drawn the rows
-  pickerFocusAfter: 0, // the newest render number when pickerFocus was asked for: only a newer render's picker may use it
   pickerCache: null, // { key, results, recent }: the rows last drawn, memory only, so a redraw is never an empty list
   pickerReuse: false, // set by a tap inside the picker that changes no exercise; only then may the cache be drawn
   pickerScroll: null, // the list's scrollTop remembered by the last cache-eligible tap, drawn once by the next picker (memory only)
@@ -51,8 +49,9 @@ export const freshLogState = () => ({
   stopElapsed: null, // stops the elapsed-time clock of the open workout
 });
 
-// What closing the picker resets: its menu, edit form, remove question and pending focus.
-const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerFocus: null, pickerCache: null, pickerReuse: false, pickerScroll: null, pickerRemember: null });
+// What closing the picker resets: its menu, edit form and remove question. Its pending focus is cancelled with
+// ctx.askPickerFocus(null) next to each use.
+const closedPicker = () => ({ pickerOpen: false, pickerMenuId: null, editingCustom: null, confirmRemove: null, pickerCache: null, pickerReuse: false, pickerScroll: null, pickerRemember: null });
 
 // A tap inside the picker that changes no exercise: the next picker may draw the cached rows, at the scroll position
 // the list has now. Returns true, for the pickerReuse field.
@@ -61,9 +60,9 @@ const reusePicker = (log) => {
   return true;
 };
 
-// Asks for focus inside the picker's list after the next drawing. The request is stamped with the newest render number,
-// so a picker from that render or an older one (a read still in flight) can never take it.
-const askPickerFocus = (ctx, selector) => Object.assign(ctx.state.log, { pickerFocus: selector, pickerFocusAfter: ctx.latestSeq() });
+// Asks for focus inside the picker's list after the next drawing. The request belongs to the next render (app.js),
+// so a picker from the current render or an older one (a read still in flight) can never take it.
+const askPickerFocus = (ctx, selector) => ctx.askPickerFocus(selector);
 
 // An exercise was added, edited, removed, hidden or restored: the cached rows are out of date.
 const dropPickerCache = (log) => Object.assign(log, { pickerCache: null, pickerReuse: false, pickerEpoch: log.pickerEpoch + 1 });
@@ -765,6 +764,7 @@ function picker(ctx) {
       onClick: () => perform(ctx, async () => {
         await logger.addSet(exercise.id); // the exercise joins the session with one unchecked row
         Object.assign(log, { ...closedPicker(), query: "", muscle: "", equipment: "", limit: PICKER_PAGE });
+        ctx.askPickerFocus(null);
       }),
     },
   );
@@ -835,7 +835,7 @@ function picker(ctx) {
     const [results, recent] = await Promise.all([logger.findExercises(search.value, filters), plain ? readRecent() : []]);
     if (mine !== latest) return; // a newer search is already on its way
     // A newer render has started (its picker does not exist yet): this one is about to be replaced, and must
-    // not draw, cache, or take the focus request (log.pickerFocus) that the newer render is waiting to use.
+    // not draw, cache, or take the focus request that the newer render now owns (ctx.takePickerFocus).
     if (!ctx.isCurrent()) return;
     Object.assign(log, { query: search.value, muscle: filters.muscle ?? "", equipment: filters.equipment ?? "" });
     drawRows(results, recent);
@@ -846,12 +846,11 @@ function picker(ctx) {
     log.pickerReuse = false;
     // Focus asked for inside the list (ctx.rerender cannot: the rows did not exist yet). A row that is no longer
     // drawn (an edited name that no longer matches the search, say) sends it to the search field.
-    // Only a render newer than the request may use it (askPickerFocus). A render with a focus target of its own
+    // Only the render that owns the request may use it (askPickerFocus). A render with a focus target of its own
     // (state.focus, the Edit form's name field) drops the request instead of moving focus away from that target.
-    if (log.pickerFocus !== null && ctx.seq > log.pickerFocusAfter && ctx.ownFocus) log.pickerFocus = null;
-    if (log.pickerFocus !== null && ctx.seq > log.pickerFocusAfter) {
-      const target = list.querySelector(log.pickerFocus) ?? search;
-      log.pickerFocus = null;
+    const focusSelector = ctx.takePickerFocus();
+    if (focusSelector !== null && !ctx.ownFocus) {
+      const target = list.querySelector(focusSelector) ?? search;
       if (list.isConnected) target.focus();
       else requestAnimationFrame(() => target.focus());
     }
@@ -899,6 +898,7 @@ function picker(ctx) {
         "data-action": "cancel-picker",
         onClick: () => {
           Object.assign(log, closedPicker());
+          ctx.askPickerFocus(null);
           return ctx.rerender();
         },
       }),

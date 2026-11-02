@@ -38,6 +38,7 @@ export async function mountApp(root, services) {
       state.log.seen = null; // a new screen: its rows do not animate one by one
       state.body.selected = null; // an open muscle panel is not kept when the Body tab is left
       state.enter = true; // the new tab fades in, once
+      askPickerFocus(null); // a picker focus request not used yet would otherwise fire on the way back (the picker stays open)
     }
     state.tab = id;
     tabBar.dataset.active = id; // the bar slides now, not when the render finishes
@@ -182,8 +183,22 @@ export async function mountApp(root, services) {
 
   let latest = 0;
   let carriedFrom = 0; // the superseded render that handed its focus request back to state.focus, for a newer render still in flight
+  // The picker's focus request: a selector inside its list, focused once its rows are drawn (state.focus cannot, the
+  // rows do not exist yet). Each render gets its own request object, holding what was asked for before it started or
+  // what the render it replaces had not used. Starting a render, or asking again, empties the older object, so a stale
+  // render can never move focus. askedPickerFocus is undefined while nothing was asked since the newest render started.
+  let pickerFocus = { selector: null };
+  let askedPickerFocus;
+  const askPickerFocus = (selector) => {
+    pickerFocus.selector = null;
+    askedPickerFocus = selector;
+  };
   async function renderNow() {
     const mine = ++latest;
+    const ownPickerFocus = { selector: askedPickerFocus === undefined ? pickerFocus.selector : askedPickerFocus };
+    pickerFocus.selector = null;
+    pickerFocus = ownPickerFocus;
+    askedPickerFocus = undefined;
     // A render owns the focus request that existed when it started. An older render still waiting on the
     // reminder must not take a request made after that (its view is about to be replaced).
     const focus = state.focus;
@@ -197,8 +212,13 @@ export async function mountApp(root, services) {
       unit: state.unit,
       rerender: render,
       isCurrent: () => mine === latest, // false once a newer render has started; a picker's late read checks it
-      seq: mine, // this render's number, and the newest one so far; a picker uses them to tell whose focus request it is
-      latestSeq: () => latest,
+      askPickerFocus, // for the next render's picker; null cancels any request not used yet
+      // This render's picker focus request, once: the selector, or null if there is none or a newer render has started.
+      takePickerFocus: () => {
+        const { selector } = ownPickerFocus;
+        ownPickerFocus.selector = null;
+        return mine === latest ? selector : null;
+      },
       ownFocus: focus !== null, // this render has its own focus target (state.focus), so a picker must not move focus
       rerenderInBackground: renderInBackground,
       // The import itself already removed the planned sets and the running timer
@@ -208,6 +228,7 @@ export async function mountApp(root, services) {
         if (typeof state.log.stopElapsed === "function") state.log.stopElapsed();
         state.log = freshLogState();
         state.history = freshHistoryState();
+        askPickerFocus(null); // the fresh log state had no focus request either
       },
     };
     let content;

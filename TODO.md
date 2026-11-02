@@ -200,7 +200,7 @@
 - [ ] `button.small` is 36px high, under the 44px touch target; review it screen by screen (added 2026-10-31).
 - [ ] Logo SVG for the header: traced from the icon master, as its own prompt (added 2026-10-31).
 - [ ] Equipment icons and an `svgIcon` helper (`h()` cannot create SVG elements) (added 2026-10-31).
-- [ ] Bottom sheet exercise picker, with focus trap, scroll lock and Escape, and tests for each (the picker has none of them today) (added 2026-10-31).
+- [ ] Bottom sheet exercise picker, with focus trap, scroll lock and Escape, and tests for each (the picker has none of them today) (added 2026-10-31). Swipe-to-dismiss is not required (2026-11-01).
 - [ ] Finish workout always confirms (added 2026-10-31).
 - [ ] The elapsed timer computed from `startedAt` (added 2026-10-31).
 - [ ] Browser tests for the History detail collapse toggle: cards start collapsed, a click expands and flips `aria-expanded` (and the Best set line hides), and a redraw keeps open cards open (added 2026-10-31).
@@ -211,7 +211,9 @@
 - [ ] History detail: at 320px the Delete button wraps to a second row of the top bar (still right-aligned); accepted, review per screen (added 2026-10-31).
 - [ ] History detail toggle: test Enter and Space on the button and its visible focus outline; the tap test uses a hit test plus `click()` (the test page cannot send a real mouse event), so a real-pointer check on the phone is still open (added 2026-10-31).
 - [ ] History detail: the set rows inside an open card are 31 to 32px high; they are not buttons, but review if they ever become interactive (added 2026-10-31).
-- [ ] Picker focus: replace the shared `log.pickerFocus` with per-render focus requests when the bottom sheet is built (added 2026-11-01).
+- [x] Picker focus: replace the shared `log.pickerFocus` with per-render focus requests when the bottom sheet is built (added 2026-11-01; done 2026-11-01, before the sheet).
+- [ ] Picker focus: a render without a picker that is not a tab change (a background redraw, say) still passes an unused focus request on, so it can fire on a later picker draw; a tab change cancels it (added 2026-11-01).
+- [ ] Picker focus: no test shows `resetAfterImport` cancelling a pending picker focus request; one needs a test hook in `src/`, because a tab change already cancels the request before Settings is shown (added 2026-11-01).
 - [ ] Picker: background redraws (the rest timer running while the picker is open) still draw an empty list briefly, because only taps inside the picker use the row cache (added 2026-11-01).
 - [ ] Picker: whether filter changes, search typing and "Show 50 more" collapse the page height was not measured (added 2026-11-01).
 - [ ] Picker: timing of the redraw and of the focus race on a phone with the full 775-exercise library is unmeasured (added 2026-11-01).

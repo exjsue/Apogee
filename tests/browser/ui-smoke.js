@@ -4021,7 +4021,8 @@ rule("picker menu: Edit opens a prefilled form with the notice and the catalog-o
   }, { prepare: addMine });
 });
 
-// The picker's focus request (log.pickerFocus) is shared by every render. A render that is still reading when the next
+// The picker's focus request belongs to one render (app.js: askPickerFocus, takePickerFocus); a newer render takes over
+// one that was not used, and an older render can no longer use it. A render that is still reading when the next
 // tap comes (Edit then Cancel, or the menu then Escape, with almost no gap) must not take the request meant for the
 // newer one: focus has to end on the row's three-dot button and stay there. Run many times, since it is a race.
 const RACE_RUNS = 30;
@@ -4058,7 +4059,7 @@ for (const gap of [0, 10]) {
   });
 }
 
-// Opening the menu asks for focus on Edit exercise (log.pickerFocus). If Edit is tapped before that render's list is
+// Opening the menu asks for focus on Edit exercise (a request owned by the next render). If Edit is tapped before that render's list is
 // read, the Edit form asks for the name field instead, and the stale request must not pull focus to the search field.
 rule(`picker menu: opening the menu then Edit with no delay, ${RACE_RUNS} times in a row, always puts focus in the name field and keeps it there`, async (ctx) => {
   await withApp(ctx, async ({ root }) => {
@@ -4072,6 +4073,22 @@ rule(`picker menu: opening the menu then Edit with no delay, ${RACE_RUNS} times 
       click(await waitFor(() => action(root, "cancel-edit-custom"), `Cancel (run ${run})`));
       await waitFor(() => document.activeElement === menuButton(root, FLY.id), `focus back after Cancel (run ${run})`);
     }
+  }, { prepare: addMine });
+});
+
+// Opening the menu asks for focus on Edit exercise. If the tab is switched in the same tick, before that render's
+// list is read, nobody takes the request; coming back to the New tab later must not move focus to Edit exercise.
+rule("picker menu: a focus request not taken before a tab switch does not move focus when the New tab comes back", async (ctx) => {
+  await withApp(ctx, async ({ root }) => {
+    await openPicker(root);
+    await waitFor(() => $(root, '[data-region="exercise-list"][data-state="ready"]'), "the first read to finish");
+    click(menuButton(root, FLY.id));
+    await goToTab(root, "settings"); // its click runs in the same tick as the menu tap
+    await goToTab(root, "log");
+    const edit = await waitFor(() => action(root, "edit-custom"), "the menu, still open");
+    await waitFor(() => $(root, '[data-region="exercise-list"][data-state="ready"]'), "the picker's read to finish");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    ctx.assert.equal(document.activeElement === (action(root, "edit-custom") ?? edit), false, "focus moved to Edit exercise");
   }, { prepare: addMine });
 });
 
